@@ -8,6 +8,7 @@ import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
 import { ToolDisclosure } from "../primitives/ToolDisclosure";
 import { Markdown } from "./Markdown";
+import { StreamingMarkdown } from "./StreamingMarkdown";
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
 }: { readonly snapshot: SessionSnapshot }) {
@@ -164,7 +165,15 @@ export function Transcript() {
                 Forge · 实时草稿
               </div>
               <div className="message-body">
-                <Markdown source={run.streamingText} />
+                {run.streamingTruncated && (
+                  <p className="wb-muted">
+                    实时草稿已达显示上限；完整已保存内容请查看会话记录。
+                  </p>
+                )}
+                <StreamingMarkdown
+                  key={`${sessionId}:${run.runId ?? "pending"}:${run.streamingTurn ?? 0}`}
+                  source={run.streamingText}
+                />
               </div>
             </article>
           )}

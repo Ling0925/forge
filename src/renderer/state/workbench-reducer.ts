@@ -10,11 +10,16 @@ import type {
   SessionStatus,
   SessionSummary,
 } from "../shared-types";
+// Draft-only ceiling. Stored snapshots are never sliced by this reducer.
+export const STREAMING_TEXT_LIMIT = 1000000;
+
 export interface ActiveRunState {
   readonly runId?: RunId | undefined;
   readonly sessionId: SessionId;
   readonly status: SessionStatus;
   readonly streamingText: string;
+  readonly streamingTruncated?: boolean;
+  readonly streamingTurn?: number;
   readonly accepted?: boolean;
   readonly approvalQueue?: readonly ApprovalRequest[];
   readonly pendingApproval?: ApprovalRequest | undefined;
@@ -230,9 +235,23 @@ export function workbenchReducer(
       if (event.type === "text_delta")
         next = {
           ...run,
-          streamingText: (run.streamingText + event.text).slice(-1000000),
+          streamingText:
+            run.streamingText +
+            event.text.slice(
+              0,
+              Math.max(0, STREAMING_TEXT_LIMIT - run.streamingText.length),
+            ),
+          streamingTruncated:
+            !!run.streamingTruncated ||
+            run.streamingText.length + event.text.length > STREAMING_TEXT_LIMIT,
         };
-      if (event.type === "tool_started") next = { ...run, streamingText: "" };
+      if (event.type === "tool_started")
+        next = {
+          ...run,
+          streamingText: "",
+          streamingTruncated: false,
+          streamingTurn: (run.streamingTurn ?? 0) + 1,
+        };
       if (event.type === "approval_requested")
         next = {
           ...run,
@@ -258,6 +277,7 @@ export function workbenchReducer(
           ...run,
           status: event.status,
           streamingText: "",
+          streamingTruncated: false,
           pendingApproval: undefined,
           approvalQueue: [],
           isCancelling: false,

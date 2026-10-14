@@ -1,56 +1,121 @@
-import ReactMarkdown from "react-markdown";
+import { Component, type ReactNode, memo, useMemo } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { externalUrlSchema } from "../../../shared/ipc";
 import { CodeBlock } from "../primitives/CodeBlock";
 
-/** Raw HTML is never interpreted; URLs use react-markdown's safe protocol filter. */
-export function Markdown({ source }: { readonly source: string }) {
+// Bound parsing work, not displayed content. Large messages remain complete,
+// selectable plain text; source and persisted transcript are never truncated.
+export const MARKDOWN_PARSE_LIMIT = 100000;
+const plugins = [remarkGfm];
+
+function PlainMarkdown({ source }: { readonly source: string }) {
+  return <pre className="message-body markdown-plain">{source}</pre>;
+}
+
+class MarkdownBoundary extends Component<
+  { readonly source: string; readonly children: ReactNode },
+  { readonly failed: boolean }
+> {
+  override state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  override componentDidUpdate(previous: { readonly source: string }) {
+    if (this.state.failed && previous.source !== this.props.source)
+      this.setState({ failed: false });
+  }
+  override render() {
+    return this.state.failed ? (
+      <PlainMarkdown source={this.props.source} />
+    ) : (
+      this.props.children
+    );
+  }
+}
+
+function components(highlight: boolean): Components {
+  return {
+    a: ({ children, href }) => {
+      const safe = externalUrlSchema.safeParse(href);
+      if (!safe.success) return <span>{children}</span>;
+      const open = (event: React.MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault();
+        if (event.type === "auxclick" && event.button !== 1) return;
+        void window.forge.openExternal(safe.data).catch(() => {
+          // The host remains authoritative and may refuse the URL.
+        });
+      };
+      return (
+        <a
+          href={safe.data}
+          onClick={open}
+          onAuxClick={open}
+          rel="noreferrer noopener"
+        >
+          {children}
+        </a>
+      );
+    },
+    // Never fetch model-supplied images; expose their description as text.
+    img: ({ alt }) => <span>{alt ? `[图片：${alt}]` : "[图片]"}</span>,
+    pre: ({ children, node }) => {
+      const codeNode = node?.children.find(
+        (child) => child.type === "element" && child.tagName === "code",
+      );
+      if (!codeNode || codeNode.type !== "element")
+        return <pre>{children}</pre>;
+      const code = codeNode.children
+        .map((child) => (child.type === "text" ? child.value : ""))
+        .join("")
+        .replace(/\n$/, "");
+      const classes = codeNode.properties.className;
+      const language =
+        /(?:^|\s)language-([^\s]+)/.exec(
+          Array.isArray(classes) ? classes.join(" ") : String(classes ?? ""),
+        )?.[1] ?? "text";
+      return (
+        <div className="markdown-code">
+          <CodeBlock code={code} language={language} highlight={highlight} />
+        </div>
+      );
+    },
+    code: ({ children }) => <code>{children}</code>,
+    table: ({ children }) => (
+      <div className="markdown-table-scroll">
+        <table>{children}</table>
+      </div>
+    ),
+  };
+}
+
+/** HTML is skipped, resources never fetched, and links use the validated host bridge. */
+export const Markdown = memo(function Markdown({
+  source,
+  highlight = true,
+}: {
+  readonly source: string;
+  readonly highlight?: boolean;
+}) {
+  const renderers = useMemo(() => components(highlight), [highlight]);
   return (
     <div className="markdown-content message-prose">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        skipHtml
-        components={{
-          a: ({ children, href }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer noopener"
-              onClick={(e) => {
-                if (href) {
-                  e.preventDefault();
-                  void window.forge.openExternal(href).catch(() => {
-                    /* host rejects unsafe URLs */
-                  });
-                }
-              }}
-            >
-              {children}
-            </a>
-          ),
-          pre: ({ children }) => (
-            <div className="markdown-code">{children}</div>
-          ),
-          code: ({ children, className, node }) => {
-            const code = String(children).replace(/\n$/, "");
-            const language = /language-([^\s]+)/.exec(className ?? "")?.[1];
-            const multiline =
-              (node?.position?.end.line ?? 0) >
-              (node?.position?.start.line ?? 0);
-            return language || multiline ? (
-              <CodeBlock code={code} language={language ?? "text"} />
-            ) : (
-              <code>{children}</code>
-            );
-          },
-          table: ({ children }) => (
-            <div className="markdown-table-scroll">
-              <table>{children}</table>
-            </div>
-          ),
-        }}
-      >
-        {source}
-      </ReactMarkdown>
+      <MarkdownBoundary source={source}>
+        {source.length > MARKDOWN_PARSE_LIMIT ? (
+          <>
+            <p className="wb-muted">长消息以纯文本显示，内容完整保留。</p>
+            <PlainMarkdown source={source} />
+          </>
+        ) : (
+          <ReactMarkdown
+            remarkPlugins={plugins}
+            skipHtml
+            components={renderers}
+          >
+            {source}
+          </ReactMarkdown>
+        )}
+      </MarkdownBoundary>
     </div>
   );
-}
+});

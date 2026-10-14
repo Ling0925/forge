@@ -127,3 +127,31 @@
 - G2 的性能影响为**代码推断**，未做 profiling。
 - 语法高亮方案（§6.2）的体积与效果**未实测**。
 - 未复核外部参考实现的具体行为，仅以本仓库代码为准。
+
+## 11 本轮实现与验证记录（2026-10-14）
+
+本节是上述调研基线之后的实现记录，不把部分验证视为全部验收通过。
+
+### 已实现
+
+- G1 / R-D3、R-D4：本地零新增依赖的轻量代码着色，支持 JS/TS、JSON、Python、Bash、CSS、HTML、diff 及常见别名。不是完整语法解析器，不保证复杂嵌套语言的着色精度。未知语言、超过 60000 UTF-16 code units 或超过 8000 token 时按纯文本显示。行号、语言标签与复制原文保留；不使用 innerHTML。
+- R-D3、R-D6：以 pre/code 结构识别块代码，覆盖单行、空块、未知语言、缩进代码与未闭合围栏；多行行内代码不会误判成代码块。
+- R-D5 / R-1～R-4：保留 skipHtml；链接复用 externalUrlSchema 校验，仅 HTTP(S) 无凭据 URL 可交给 openExternal，普通点击、中键与键盘 Enter 均阻止应用内导航。模型图片仅展示说明、不自动请求外部资源。主进程与 worker 校验没有放宽。
+- G2 / R-S1、R-S2：流式 Markdown 采用 80ms 尾沿节流，而非不断延后的 debounce；增量期间关闭代码高亮，已保存消息恢复完整渲染。按 session/run/tool-turn 隔离定时器；旧草稿卸载后取消待处理更新。
+- R-S3 / R-5：Markdown 超过 100000 UTF-16 code units 时显示完整可选择纯文本，不裁剪已保存消息；组件渲染异常由错误边界降级纯文本。实时草稿仍有 1000000 code units 上限，但从静默保留尾部改为保留前缀并明确提示；该限制不修改持久化消息，工具/结束事件重置草稿限制状态。
+- G3 / R-C1～R-C4：CLI 新增引用、水平线与基本管道表格；仍仅生成 RichLine/Span，沿用 ControlFilter。表格仅支持至少两列、表头/分隔行列数一致的简单形式；不自动对齐列宽。复杂转义/代码内管道及多余列降级为可读源文本，不丢弃额外内容。不声称与桌面完整 GFM 等价。plain/JSON 输出路径未改动。
+
+### 本次检查
+
+- 相关 Vitest：9 文件、80 项通过。范围：CLI render-v2、render-v2-boundaries、render-v2-markdown；桌面 markdown、markdown-mounted、code-highlight、streaming-limit、workbench-reducer、transcript-scroll。
+- 严格类型检查：node node_modules/typescript/bin/tsc --noEmit，退出码 0。
+- CLI 编译：node scripts/build-core.mjs，退出码 0，产出 dist/cli.mjs；重启 forge 后加载，无需安装。
+- 渲染端编译：node node_modules/vite/bin/vite.js build，退出码 0。JS 产物约 644.37 kB（gzip 185.05 kB）；有超过 500 kB 的 chunk 警告，未进行分包重构。
+- Chromium 组件级实测：11095 字符，300 次 delta，约 4ms 发送间隔；最后一次测量 16 次 DOM 更新，94 帧，帧间隔 P95 16.7ms / 最大 16.8ms；节流结束前后均保留 35 个标题。测试同时验证点击通道、复制原文、节流和切换会话/结算时不泄漏旧内容。
+
+### 尚未验收
+
+- AC-4 仅有真实 Chromium 的组件级测量，不包含完整 Electron 工作台、生产 CSS、历史超长会话、不同硬件的掉帧和视觉验收；不可据此声称完整桌面性能已经验收。
+- AC-5 未运行全量 pnpm test；文档基线提及的 terminal-v2-xterm resize 回归本轮未复测。聚焦测试通过不等于全量通过。
+- AC-6 已验证 Vite 产出，但没有执行 Electron 打包、安装或正式发布；也未覆盖实际操作系统外部浏览器启动。
+- 没有新增依赖，package.json / pnpm-lock.yaml 无需改动。

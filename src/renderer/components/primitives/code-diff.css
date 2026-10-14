@@ -81,6 +81,45 @@
   color: var(--text-primary);
 }
 
+.code-token {
+  color: inherit;
+}
+
+.code-token-comment {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.code-token-keyword,
+.code-token-tag {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.code-token-string,
+.code-token-attribute {
+  color: var(--success);
+}
+
+.code-token-number,
+.code-token-property,
+.code-token-meta {
+  color: var(--warning);
+}
+
+.code-token-operator,
+.code-token-punctuation {
+  color: var(--text-secondary);
+}
+
+.code-token-inserted {
+  color: var(--success);
+}
+
+.code-token-deleted {
+  color: var(--error);
+}
+
 @media (max-width: 640px) {
   .code-line-content {
     white-space: pre-wrap;

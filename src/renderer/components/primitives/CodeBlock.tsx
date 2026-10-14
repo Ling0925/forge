@@ -1,5 +1,10 @@
 import { Check, Copy } from "@phosphor-icons/react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  type CodeHighlightToken,
+  highlightCode,
+  splitHighlightTokensIntoLines,
+} from "../../state/code-highlight";
 import { Button } from "./Button";
 import "./code-diff.css";
 
@@ -8,14 +13,16 @@ export interface CodeBlockProps {
   readonly language?: string;
   readonly fileName?: string;
   readonly showLineNumbers?: boolean;
+  readonly highlight?: boolean;
   readonly className?: string;
 }
 
 export function CodeBlock({
   code,
-  language = "typescript",
+  language = "text",
   fileName,
   showLineNumbers = true,
+  highlight = true,
   className = "",
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
@@ -30,7 +37,16 @@ export function CodeBlock({
     }
   }, [code]);
 
-  const lines = code.split("\n");
+  const lines = useMemo(() => {
+    if (!highlight) {
+      return code
+        .split("\n")
+        .map((line): readonly CodeHighlightToken[] =>
+          line ? [{ kind: "plain", text: line }] : [],
+        );
+    }
+    return splitHighlightTokensIntoLines(highlightCode(code, language).tokens);
+  }, [code, language, highlight]);
 
   return (
     <section
@@ -67,7 +83,9 @@ export function CodeBlock({
                 {showLineNumbers && (
                   <span className="code-line-number">{lineNum}</span>
                 )}
-                <span className="code-line-content">{line || " "}</span>
+                <span className="code-line-content">
+                  {line.length > 0 ? renderHighlightedLine(line) : " "}
+                </span>
               </div>
             );
           })}
@@ -75,4 +93,17 @@ export function CodeBlock({
       </div>
     </section>
   );
+}
+
+function renderHighlightedLine(line: readonly CodeHighlightToken[]) {
+  let offset = 0;
+  return line.map((token) => {
+    const key = `${offset}:${token.kind}`;
+    offset += token.text.length;
+    return (
+      <span key={key} className={`code-token code-token-${token.kind}`}>
+        {token.text}
+      </span>
+    );
+  });
 }
