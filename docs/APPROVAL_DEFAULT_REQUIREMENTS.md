@@ -130,3 +130,11 @@
 ## 11 实施状态（2026-10-14）
 
 阻塞：与 APPROVAL_MODE_REQUIREMENTS R-S4/AC-5 的 manual 默认拒绝矛盾，需明确最终默认策略与高危工具范围。本轮未改 `[y/N]`、fresh/tainted、abort/EOF/non-TTY 和只读边界。不可仅改提示/正则：现有 tainted、Escape 等路径以空串表示拒绝，直接让空串批准会造成授权漏洞，落地前须分离拒绝与新鲜空回车。
+
+## 最终决策与实施（2026-10-14，取代上文冲突/阻塞描述）
+
+需求方已直接确认：默认 full access；切到 manual 后空回车默认确认。此决策覆盖此前 manual 默认拒绝的要求和未决 Q0。实现于交互 CLI：full-access 自动回答所有权限内审批（含 MCP/浏览器/子代理），auto 保留根会话命令范围；manual/ask 为逐次 [Y/n]。模式只在本 CLI 进程保留，/new、/resume 保持用户选择，重启默认 full-access。桌面仍为原按钮交互，非交互 run/resume 的 --yes/unrestricted 约束不变。
+
+安全实现：Esc/Ctrl+C/粘贴或历史污染/Shift+Enter 以明确 no 拒绝，不再用空串表达拒绝；fresh 清队列、独立编辑器与 paste provenance 保留；await 后再次检查 abort/关闭；其他非空输入（包括纯空白）拒绝。plan/readonly 不调用批准 UI。默认及切换有非沙箱风险提示，自动请求逐项回显并每轮汇总；记录过滤常见 token/密码参数，不保证识别任意未知秘密。
+
+本轮验证：12 个 CLI 聚焦测试文件、193 项用例通过；`tsc --noEmit`、`node scripts/build-core.mjs`、临时 FORGE_HOME 的 --help 启动检查通过。未运行全量测试、真实命令/MCP/浏览器副作用验收或桌面打包；不会因测试而使用真实密钥。
