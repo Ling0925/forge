@@ -120,3 +120,9 @@
 - **各终端是否发送 Shift+Tab** 未实测（不同终端/复用器行为可能不同）。
 - 配色对比度**未实测**，仅引用 DESIGN.md 既有阈值。
 - 桌面端当前**没有**前导箭头，故"箭头变色"在桌面属**新增功能**而非改动，本文未假设其已存在。
+
+## 11 本轮实施记录（2026-10-14）
+
+已实现 CLI CSI Z 解码、共享 `/mode` 状态、即时 tone 重绘；桌面普通 Composer 新增主题 token 箭头、aria-live、共享下拉状态并撤销 unrestricted consent。plan 权限选择显示 readonly。忙时切换只影响下一轮，当前运行审批使用捕获的 mode/permission。模态打开时不劫持（包括新建任务对话框，此处仍用模式下拉），审批/picker/CLI 选区/粘贴均不切换。
+
+聚焦测试覆盖 split CSI、草稿保留、忙时 scope、picker/审批/粘贴保护，以及 Chromium mounted 输入焦点、下拉、readonly、模态及原生反向导航。未完成各真实终端/主题对比度与 Electron 视觉矩阵，不宣称全部 AC 验收。

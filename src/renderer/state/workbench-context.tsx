@@ -109,6 +109,7 @@ function useController() {
       fail(new Error("桌面 IPC 不可用。请从 Forge 桌面程序打开工作台。"));
       return;
     }
+    const titleRefreshes = new Map<string, ReturnType<typeof setTimeout>>();
     const off = window.forge.onEvent((event) => {
       dispatch({ type: "RUN_EVENT_RECEIVED", event });
       if (
@@ -129,6 +130,14 @@ function useController() {
       }
       if (event.event.type === "run_finished") {
         starting.current.delete(event.event.sessionId);
+        // One bounded follow-up read for asynchronous title metadata; no polling.
+        const id = event.event.sessionId;
+        clearTimeout(titleRefreshes.get(id));
+        titleRefreshes.set(id, setTimeout(() => {
+          titleRefreshes.delete(id);
+          void loadSessions();
+          if (current.current.activeSessionId === id) void refreshSession(id);
+        }, 2500));
         void refreshSession(event.event.sessionId);
         void loadSessions();
       }
@@ -138,6 +147,7 @@ function useController() {
     return () => {
       alive.current = false;
       off();
+      for (const timer of titleRefreshes.values()) clearTimeout(timer);
     };
   }, [dispatch, fail, loadSettings, loadSessions, refreshSession]);
   useEffect(() => {

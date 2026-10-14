@@ -136,6 +136,10 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const running =
     !isNew &&
     (run?.status === "running" || run?.status === "awaiting_approval");
+  const changeMode = (next: "build" | "plan") => {
+    setMode(next);
+    revokeUnrestrictedConsent();
+  };
   const isConfigured = state.settings?.isConfigured === true;
   const configurationHint = "请先在设置中配置 API，再创建或运行任务。";
   const submit = async () => {
@@ -169,7 +173,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       const snapshot = await createSession({
         workspace: parsed.data.workspace,
         model: parsed.data.model,
-        title: parsed.data.prompt.slice(0, 80),
       });
       id = snapshot?.id ?? null;
     }
@@ -294,6 +297,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       >
         {isNew ? "新任务描述" : "继续任务"}
       </label>
+      <span className={`composer-mode-arrow is-${mode}`} aria-hidden="true">❯</span>
+      <span className="visually-hidden" aria-live="polite">{`Mode: ${mode}${running || busy ? "；仅影响下一次运行，当前运行模式不变" : ""}`}</span>
       <textarea
         id={promptId}
         className="composer-textarea"
@@ -306,6 +311,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         }}
         placeholder="描述要完成的工作…"
         onKeyDown={(e) => {
+          if (e.key === "Tab" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing && !document.querySelector("dialog[open]")) {
+            e.preventDefault();
+            changeMode(mode === "build" ? "plan" : "build");
+            return;
+          }
           if (
             (e.ctrlKey || e.metaKey) &&
             e.key === "Enter" &&
@@ -360,8 +370,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                   id="new-mode"
                   value={mode}
                   onChange={(e) => {
-                    setMode(z.enum(["build", "plan"]).parse(e.target.value));
-                    revokeUnrestrictedConsent();
+                    changeMode(z.enum(["build", "plan"]).parse(e.target.value));
                   }}
                   options={[
                     { value: "build", label: "Build · 执行与修改" },
@@ -372,7 +381,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               <Field id="new-permission" label="权限">
                 <Select
                   id="new-permission"
-                  value={permission}
+                  value={mode === "plan" ? "readonly" : permission}
                   disabled={mode === "plan"}
                   onChange={(e) => {
                     permissionTouched.current = true;
@@ -469,8 +478,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 aria-label="模式"
                 value={mode}
                 onChange={(e) => {
-                  setMode(z.enum(["build", "plan"]).parse(e.target.value));
-                  revokeUnrestrictedConsent();
+                  changeMode(z.enum(["build", "plan"]).parse(e.target.value));
                 }}
                 options={[
                   { value: "build", label: "Build" },
@@ -489,7 +497,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 id="run-permission"
                 className="composer-compact-select"
                 aria-label="权限"
-                value={permission}
+                value={mode === "plan" ? "readonly" : permission}
                 disabled={mode === "plan"}
                 onChange={(e) => {
                   permissionTouched.current = true;

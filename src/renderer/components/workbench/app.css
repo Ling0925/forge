@@ -1249,3 +1249,9 @@
     padding: var(--space-4);
   }
 }
+
+/* Mode is also announced as text; the arrow is only a secondary cue. */
+.composer-prompt { position: relative; }
+.composer-prompt .composer-textarea { padding-left: 24px; }
+.composer-mode-arrow { position: absolute; left: 2px; bottom: 18px; color: var(--accent-sage); pointer-events: none; }
+.composer-mode-arrow.is-plan { color: var(--warning); }
