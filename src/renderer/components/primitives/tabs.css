@@ -1,0 +1,74 @@
+.tabs-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.tablist {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-bottom: none;
+  padding: 0 var(--space-2);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  min-height: var(--control-height);
+}
+
+@media (max-width: 768px) {
+  .tab-btn {
+    min-height: var(--touch-min-target);
+  }
+}
+
+.tab-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--hover-bg);
+}
+
+.tab-btn.is-active {
+  color: var(--text-primary);
+  background: var(--surface-selected);
+  font-weight: 600;
+}
+
+.tab-btn:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.tabpanel {
+  padding: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Author display rules must not override the native hidden contract. */
+.tabpanel[hidden] {
+  display: none;
+}

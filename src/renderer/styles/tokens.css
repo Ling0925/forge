@@ -1,0 +1,175 @@
+@import "@fontsource-variable/geist/index.css";
+@import "@fontsource-variable/geist-mono/index.css";
+
+:root {
+  /* Typography */
+  --font-sans: "Geist Variable", "Geist", "PingFang SC", "Microsoft YaHei",
+    "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", "SFMono-Regular",
+    "Cascadia Mono", "PingFang SC", "Microsoft YaHei", monospace;
+
+  /* Font sizes and line heights */
+  --text-xs: 12px;
+  --leading-xs: 18px;
+  --text-sm: 13px;
+  --leading-sm: 20px;
+  --text-base: 14px;
+  --leading-base: 22px;
+  --text-md: 16px;
+  --leading-md: 24px;
+  --text-lg: 18px;
+  --leading-lg: 26px;
+  --text-xl: 20px;
+  --leading-xl: 28px;
+
+  /* Narrow touch prose overrides */
+  --text-touch: 17px;
+  --leading-touch: 26px;
+
+  /* Spacing 4px scale */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Dense half steps for compact rows and table cells */
+  --space-1-5: 6px;
+  --space-2-5: 10px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-card: 12px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+
+  /* Focus ring offset */
+  --focus-ring-offset: 2px;
+
+  /* Controls */
+  --control-height: 36px;
+  --touch-min-target: 44px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+}
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --canvas-bg: #fdfdfb;
+  --sidebar-bg: #f6f6f2;
+  --surface-elevated: #fff;
+  --surface-soft: #f1f2eb;
+  --surface-selected: #e9ede3;
+  --surface-hover: #eef0ea;
+  --surface-active: #e2e6dc;
+  --text-primary: #242a22;
+  --text-secondary: #5c6357;
+  --text-muted: #697064;
+  --text-disabled: #697064;
+  --border-subtle: #e4e6de;
+  --border-control: #a0a897;
+  --accent-sage: #55684d;
+  --accent-sage-soft: #eaf0e6;
+  --success: #226d40;
+  --success-bg: #edf7ef;
+  --warning: #975a06;
+  --warning-bg: #fef7e9;
+  --error: #b82420;
+  --error-bg: #fef3f2;
+  --run-bg: #242a22;
+  --run-ink: #fff;
+  --run-hover: #384035;
+  --run-active: #1a1f18;
+  --shadow-sm: 0 1px 3px rgb(36 42 34 / 5%);
+  --shadow-composer: 0 4px 20px rgb(36 42 34 / 6%);
+  --shadow-overlay: 0 12px 36px rgb(36 42 34 / 12%);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas-bg: #161915;
+  --sidebar-bg: #1c201b;
+  --surface-elevated: #232822;
+  --surface-soft: #20251f;
+  --surface-selected: #2d352b;
+  --surface-hover: #282e26;
+  --surface-active: #333b31;
+  --text-primary: #f1f3ed;
+  --text-secondary: #a4aca0;
+  --text-muted: #a4aca0;
+  --text-disabled: #a4aca0;
+  --border-subtle: #2f362d;
+  --border-control: #74816d;
+  --accent-sage: #8fad82;
+  --accent-sage-soft: #253121;
+  --success: #7ed99e;
+  --success-bg: #152c1e;
+  --warning: #f0be65;
+  --warning-bg: #332510;
+  --error: #ff8f85;
+  --error-bg: #351a18;
+  --run-bg: #f1f3ed;
+  --run-ink: #161915;
+  --run-hover: #dbe0d7;
+  --run-active: #c7ccc3;
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 25%);
+  --shadow-composer: 0 4px 24px rgb(0 0 0 / 24%);
+  --shadow-overlay: 0 12px 40px rgb(0 0 0 / 45%);
+}
+:root,
+[data-theme] {
+  --surface-shell: var(--sidebar-bg);
+  --surface-body: var(--canvas-bg);
+  --surface-panel: var(--surface-soft);
+  --surface-control: var(--surface-elevated);
+  --neutral-0: var(--surface-elevated);
+  --neutral-1: var(--sidebar-bg);
+  --neutral-2: var(--surface-soft);
+  --neutral-3: var(--surface-hover);
+  --neutral-4: var(--border-subtle);
+  --neutral-5: var(--text-secondary);
+  --neutral-6: var(--text-secondary);
+  --neutral-7: var(--text-primary);
+  --neutral-8: var(--text-primary);
+  --hover-bg: var(--surface-hover);
+  --active-bg: var(--surface-active);
+  --selection-bg: var(--surface-selected);
+  --focus-ring: var(--accent-sage);
+  --accent: var(--accent-sage);
+  --info: var(--accent-sage);
+  --info-bg: var(--accent-sage-soft);
+  --link: var(--accent-sage);
+  --text-tertiary: var(--text-muted);
+  --inset-highlight: transparent;
+  --reading-measure: 760px;
+  --prose-size: 16px;
+  --prose-leading: 1.8;
+}
+
+:root {
+  --rail-width: 256px;
+  --header-height: 64px;
+  --inspector-width: 360px;
+  --radius-user: 18px;
+  --radius-composer: 24px;
+  --prose-size-narrow: 17px;
+  --prose-leading-narrow: 1.75;
+  --user-inset: 16px 22px;
+  --content-inset: 32px 48px;
+  --composer-inset: 16px 40px 24px;
+}
+
+:root {
+  --icon-size: 36px;
+  --icon-size-touch: 44px;
+  --radius-quiet: 10px;
+  --heading-size: 18px;
+  --type-small: 13px;
+  --type-meta: 11px;
+}

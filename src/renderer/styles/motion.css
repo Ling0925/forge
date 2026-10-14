@@ -1,0 +1,281 @@
+/**
+ * Purposeful motion design system for Forge desktop UI.
+ * Lightweight native CSS keyframes and transitions honoring:
+ * - Warm light-first aesthetic (MiMo-inspired, quiet, non-flashy)
+ * - Strict fixed-position popover geometry at 390px (zero ancestor transforms)
+ * - Accessibility (complete prefers-reduced-motion override)
+ */
+
+:root {
+  /* Motion Durations */
+  --motion-duration-fast: 120ms;
+  --motion-duration-sm: 160ms;
+  --motion-duration-base: 180ms;
+  --motion-duration-md: 200ms;
+  --motion-duration-dialog: 180ms;
+
+  /* Motion Easings */
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-ease-dialog: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Motion Distances */
+  --motion-distance-xs: 4px;
+  --motion-distance-sm: 6px;
+  --motion-distance-md: 12px;
+  --motion-distance-lg: 16px;
+}
+
+/* 1. Narrow sidebar opening & wide on-demand inspector reveal */
+@media (max-width: 1000px) {
+  .wb-app .workbench-sidebar.is-open {
+    animation: sidebar-slide-in var(--motion-duration-md) var(--motion-ease-out);
+  }
+}
+
+@keyframes sidebar-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--motion-distance-lg)));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (min-width: 1001px) {
+  .wb-app:not(.inspector-collapsed) .workbench-inspector {
+    animation: inspector-reveal var(--motion-duration-md) var(--motion-ease-out);
+  }
+}
+
+@keyframes inspector-reveal {
+  from {
+    opacity: 0;
+    transform: translateX(var(--motion-distance-md));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 2. Native dialog entrance & backdrop soft fade */
+.native-dialog[open],
+.modal-card:not(.composer-model-panel) {
+  animation: dialog-enter var(--motion-duration-dialog)
+    var(--motion-ease-dialog);
+}
+
+.native-dialog::backdrop,
+.modal-backdrop {
+  animation: backdrop-fade var(--motion-duration-dialog) var(--motion-ease-out);
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance-sm)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 3. Tool disclosure expansion & chevron rotation */
+.tool-disclosure {
+  transition: background-color var(--motion-duration-fast) ease;
+}
+
+.tool-disclosure-header {
+  transition: background-color var(--motion-duration-fast) ease;
+}
+
+.tool-disclosure-chevron {
+  transition: transform var(--motion-duration-sm) var(--motion-ease-out);
+}
+
+.tool-disclosure-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.tool-disclosure-body {
+  animation: tool-body-enter var(--motion-duration-sm) var(--motion-ease-out);
+}
+
+@keyframes tool-body-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--motion-distance-xs)));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 4. New arrival animation for last assistant message & last tool disclosure */
+.conversation-inner > .message-assistant:last-child:not(.message-streaming),
+.conversation-inner > .tool-disclosure:last-child {
+  animation: message-arrival var(--motion-duration-base) var(--motion-ease-out);
+}
+
+@keyframes message-arrival {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance-sm));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 5. Interactive controls hover/pressed feedback & composer focus-within */
+.btn:not(:disabled),
+.wb-icon-btn:not(:disabled) {
+  transition:
+    background-color var(--motion-duration-fast) ease,
+    border-color var(--motion-duration-fast) ease,
+    color var(--motion-duration-fast) ease,
+    box-shadow var(--motion-duration-fast) ease,
+    transform var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+.btn:active:not(:disabled),
+.wb-icon-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.composer-run:not(:disabled) {
+  transition: background-color var(--motion-duration-fast) ease, box-shadow
+    var(--motion-duration-fast) ease, transform var(--motion-duration-fast)
+    var(--motion-ease-out);
+}
+
+.composer-run:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.session-item {
+  transition: background-color var(--motion-duration-fast) ease, transform
+    var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+.session-item:active {
+  transform: scale(0.99);
+}
+
+.tab-btn:not(:disabled) {
+  transition: color var(--motion-duration-fast) ease, background-color
+    var(--motion-duration-fast) ease, transform var(--motion-duration-fast)
+    var(--motion-ease-out);
+}
+
+.tab-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Composer focus-within: soft shadow and accent transition (NO transform to protect fixed popover) */
+.composer-surface {
+  transition: border-color var(--motion-duration-base) ease, box-shadow
+    var(--motion-duration-base) ease;
+}
+
+.composer-surface:focus-within {
+  border-color: var(--accent-sage);
+  box-shadow: var(--shadow-composer), 0 0 0 1px var(--accent-sage);
+}
+
+/* Continuing model popover fade (pure opacity, preserving fixed bounding geometry) */
+.composer-model-panel {
+  animation: popover-fade var(--motion-duration-sm) var(--motion-ease-out);
+}
+
+@keyframes popover-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Empty state gentle entrance */
+.empty-state {
+  animation: empty-state-fade var(--motion-duration-md) var(--motion-ease-out);
+}
+
+@keyframes empty-state-fade {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance-xs));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Running status gentle pulse */
+@keyframes status-running-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.tool-disclosure-status[data-status="running"] {
+  animation: status-running-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Central prefers-reduced-motion override */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0.01ms;
+    --motion-duration-sm: 0.01ms;
+    --motion-duration-base: 0.01ms;
+    --motion-duration-md: 0.01ms;
+    --motion-duration-dialog: 0.01ms;
+  }
+
+  .wb-app .workbench-sidebar.is-open,
+  .wb-app:not(.inspector-collapsed) .workbench-inspector,
+  .native-dialog[open],
+  .modal-card,
+  .native-dialog::backdrop,
+  .modal-backdrop,
+  .tool-disclosure-body,
+  .conversation-inner > .message-assistant:last-child:not(.message-streaming),
+  .conversation-inner > .tool-disclosure:last-child,
+  .composer-model-panel,
+  .empty-state,
+  .tool-disclosure-status[data-status="running"] {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
+
+  .btn:active:not(:disabled),
+  .wb-icon-btn:active:not(:disabled),
+  .composer-run:active:not(:disabled),
+  .session-item:active,
+  .tab-btn:active:not(:disabled) {
+    transform: none !important;
+  }
+}

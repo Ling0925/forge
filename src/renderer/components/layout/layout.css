@@ -1,0 +1,152 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--surface-shell);
+}
+
+.shell-header {
+  height: var(--header-height);
+  min-height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  background-color: var(--surface-shell);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  z-index: 10;
+}
+
+.shell-header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.shell-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shell-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Panel Split */
+.panel-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Sidebar / Left pane */
+.panel-sidebar {
+  width: var(--rail-width);
+  min-width: 200px;
+  max-width: 280px;
+  background-color: var(--surface-shell);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+}
+
+/* Main Task / Center pane */
+.panel-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--surface-body);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 32px;
+}
+
+.prose-container {
+  max-width: var(--reading-measure);
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Supporting / Inspector Right pane */
+.panel-inspector {
+  width: var(--inspector-width);
+  min-width: 320px;
+  max-width: 420px;
+  background-color: var(--surface-panel);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  padding: var(--space-4);
+  gap: var(--space-4);
+}
+
+/* 1920px+ wide layout */
+@media (min-width: 1920px) {
+  .panel-inspector {
+    width: 400px;
+  }
+}
+
+/* 1024px layout */
+@media (max-width: 1024px) {
+  .panel-sidebar {
+    width: 208px;
+  }
+  .panel-inspector {
+    width: 320px;
+  }
+}
+
+/* 768px layout */
+@media (max-width: 768px) {
+  .panel-split {
+    flex-direction: column;
+  }
+  .panel-sidebar {
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    max-height: 200px;
+  }
+  .panel-inspector {
+    width: 100%;
+    max-width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .panel-main {
+    padding: var(--space-4);
+  }
+}
+
+/* 390px narrow layout */
+@media (max-width: 480px) {
+  .panel-main {
+    padding: var(--space-3);
+    font-size: var(--text-touch);
+    line-height: var(--leading-touch);
+  }
+}

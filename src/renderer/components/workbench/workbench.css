@@ -1,0 +1,294 @@
+/* Desktop Workbench Layout Styles */
+
+.workbench-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--surface-shell);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* Sidebar (Left Column) */
+.workbench-sidebar {
+  width: var(--rail-width);
+  min-width: var(--rail-width);
+  max-width: var(--rail-width);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--border-subtle);
+  user-select: none;
+  z-index: 20;
+}
+
+.sidebar-header {
+  padding: var(--space-5) var(--space-4) var(--space-3) var(--space-4);
+  border-bottom: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.sidebar-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  padding: 0 2px;
+}
+
+.sidebar-brand .btn,
+.sidebar-brand .btn-primary {
+  width: 100%;
+  min-height: var(--control-height);
+  height: var(--control-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-soft);
+  color: var(--text-primary);
+  border: 1px solid transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color
+    var(--transition-fast);
+}
+
+.sidebar-brand .btn:hover:not(:disabled),
+.sidebar-brand .btn-primary:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+.sidebar-brand .btn:active:not(:disabled),
+.sidebar-brand .btn-primary:active:not(:disabled) {
+  background-color: var(--surface-active);
+}
+
+.sidebar-workspace-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1-5);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.wb-workspace-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sidebar-workspace-path {
+  font-family: var(--font-sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  user-select: text;
+}
+
+.sidebar-sessions-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1-5) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.session-item {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 40px;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2-5);
+  border-radius: var(--radius-quiet);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.session-item:hover {
+  background-color: var(--hover-bg);
+}
+
+.session-item.is-active {
+  background-color: var(--surface-selected);
+  border-color: transparent;
+}
+
+.session-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.session-item-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  padding-right: var(--space-6);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.session-item-title {
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.session-item-meta {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.session-item-meta > summary {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-item-meta > summary::-webkit-details-marker {
+  display: none;
+}
+
+.session-item-meta > summary:hover {
+  background: var(--hover-bg);
+}
+
+.session-item-meta[open] > summary {
+  top: var(--space-3);
+  transform: none;
+}
+
+.session-item-meta[open] .wb-disclosure-body {
+  padding: var(--space-2) 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-badge-pending {
+  background-color: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.sidebar-footer {
+  padding: 14px var(--space-4);
+  border-top: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+}
+
+/* Modal Dialog Overlays */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgb(20 25 18 / 30%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 1000;
+}
+
+.modal-card {
+  background-color: var(--surface-body);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: var(--space-5);
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-content {
+  padding: var(--space-5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.modal-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  background-color: transparent;
+}

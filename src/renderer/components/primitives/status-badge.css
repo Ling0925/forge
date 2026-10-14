@@ -1,0 +1,68 @@
+.status-badge {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  user-select: none;
+  border: none;
+}
+
+.status-badge-running {
+  background-color: var(--neutral-2);
+  color: var(--text-primary);
+}
+
+.status-badge-running .status-spin {
+  animation: badge-spin 1.2s linear infinite;
+}
+
+@keyframes badge-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status-badge-awaiting_approval {
+  background-color: var(--warning-bg);
+  color: var(--warning);
+}
+
+.status-badge-completed {
+  background-color: var(--success-bg);
+  color: var(--success);
+}
+
+.status-badge-failed {
+  background-color: var(--error-bg);
+  color: var(--error);
+}
+
+.status-badge-cancelled {
+  background-color: var(--neutral-2);
+  color: var(--text-secondary);
+}
+
+.status-badge-interrupted {
+  background-color: var(--warning-bg);
+  color: var(--warning);
+}
+
+.status-badge-idle,
+.status-badge-queued {
+  background-color: var(--neutral-2);
+  color: var(--text-secondary);
+}
+
+.status-badge-unknown {
+  background-color: var(--neutral-2);
+  color: var(--text-disabled);
+}

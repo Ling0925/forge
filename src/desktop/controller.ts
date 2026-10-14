@@ -1,0 +1,384 @@
+import { randomUUID } from "node:crypto";
+import type { HarnessService } from "../shared/contracts";
+import { ForgeError, toErrorInfo } from "../shared/errors";
+import {
+  type RpcRequest,
+  type RunId,
+  type WorkerMessage,
+  projectContextDtoSchema,
+  runIdSchema,
+  workerMessageSchema,
+  workerRequestSchema,
+} from "../shared/ipc";
+import {
+  type AgentEvent,
+  type ApprovalRequest,
+  type ErrorInfo,
+  type RunInput,
+  approvalRequestSchema,
+} from "../shared/schemas";
+
+export const safeError = {
+  code: "internal",
+  message: "The operation could not be completed.",
+  retryable: false,
+} as const;
+type Approval = {
+  request: ApprovalRequest;
+  answer?: boolean;
+  resolve?: (answer: boolean) => void;
+  consumed: boolean;
+  claimed: boolean;
+};
+
+export function createWorkerController(
+  service: HarnessService,
+  send: (message: WorkerMessage) => void,
+) {
+  const runs = new Map<
+    RunId,
+    {
+      input: RunInput;
+      abort: AbortController;
+      approvals: Map<string, Approval>;
+      finished: boolean;
+    }
+  >();
+  const pending = new Map<string, RpcRequest>();
+  const operations = new Set<Promise<unknown>>();
+  const seen = new Set<string>();
+  let disposed = false;
+  let closing: Promise<void> | undefined;
+  const emit = (message: WorkerMessage): void => {
+    send(workerMessageSchema.parse(message));
+  };
+  const respond = (
+    request: RpcRequest,
+    result: unknown,
+    error?: ErrorInfo,
+  ): void => {
+    if (!pending.delete(request.id)) return;
+    const parsed = workerMessageSchema.safeParse({
+      kind: "response",
+      response: error
+        ? { id: request.id, method: request.method, ok: false, error }
+        : { id: request.id, method: request.method, ok: true, result },
+    });
+    emit(
+      parsed.success
+        ? parsed.data
+        : {
+            kind: "response",
+            response: {
+              id: request.id,
+              method: request.method,
+              ok: false,
+              error: safeError,
+            },
+          },
+    );
+  };
+  const event = (runId: RunId, value: AgentEvent): void => {
+    const run = runs.get(runId);
+    if (
+      !run ||
+      run.finished ||
+      disposed ||
+      value.sessionId !== run.input.sessionId
+    )
+      return;
+    if (value.type === "approval_requested") {
+      const approval = approvalRequestSchema.parse(value.request);
+      if (
+        approval.sessionId !== run.input.sessionId ||
+        run.approvals.has(approval.id)
+      )
+        throw new ForgeError("invalid_input", "Invalid approval request.");
+      run.approvals.set(approval.id, {
+        request: approval,
+        consumed: false,
+        claimed: false,
+      });
+    }
+    const parsed = workerMessageSchema.parse({
+      kind: "event",
+      data: { runId, event: value },
+    });
+    if (value.type === "run_finished") {
+      run.finished = true;
+      for (const approval of run.approvals.values()) approval.resolve?.(false);
+    }
+    emit(parsed);
+  };
+  const finish = (runId: RunId, error?: ErrorInfo): void => {
+    const run = runs.get(runId);
+    if (!run) return;
+    const base = {
+      sessionId: run.input.sessionId,
+      timestamp: new Date().toISOString(),
+    };
+    if (error && !run.abort.signal.aborted)
+      event(runId, { ...base, type: "error", error });
+    event(runId, {
+      ...base,
+      type: "run_finished",
+      status: run.abort.signal.aborted
+        ? "cancelled"
+        : error
+          ? "failed"
+          : "completed",
+      turns: 0,
+      toolCalls: 0,
+    });
+    for (const approval of run.approvals.values()) approval.resolve?.(false);
+    runs.delete(runId);
+  };
+  const handle = async (raw: unknown): Promise<void> => {
+    const parsed = workerRequestSchema.safeParse(raw);
+    if (!parsed.success) return;
+    const request = parsed.data;
+    if (seen.has(request.id)) return;
+    seen.add(request.id);
+    pending.set(request.id, request);
+    if (disposed) {
+      respond(request, null, safeError);
+      return;
+    }
+    try {
+      switch (request.method) {
+        case "getSettings":
+          respond(request, await service.getSettings());
+          break;
+        case "updateSettings":
+          respond(request, await service.updateSettings(request.input));
+          break;
+        case "listModels":
+          respond(request, await service.listModels());
+          break;
+        case "listSessions":
+          respond(request, await service.listSessions());
+          break;
+        case "createSession":
+          respond(request, await service.createSession(request.input));
+          break;
+        case "getSession":
+          respond(request, await service.getSession(request.sessionId));
+          break;
+        case "getProjectContext": {
+          const catalog = await service.getProjectContext(request.sessionId);
+          respond(
+            request,
+            projectContextDtoSchema.parse({
+              ...catalog,
+              instructionSources: catalog.instructionSources.map(
+                ({ path, order, bytes }) => ({ path, order, bytes }),
+              ),
+            }),
+          );
+          break;
+        }
+        case "listMcpServers":
+          respond(request, await service.listMcpServers());
+          break;
+        case "registerMcpServer":
+          respond(request, await service.registerMcpServer(request.input));
+          break;
+        case "setMcpEnabled":
+          await service.setMcpEnabled(request.serverId, request.enabled);
+          respond(request, null);
+          break;
+        case "removeMcpServer":
+          await service.removeMcpServer(request.serverId);
+          respond(request, null);
+          break;
+        case "getMcpHealth": {
+          const health = await service.getMcpHealth(request.serverId);
+          respond(request, {
+            ...health,
+            negotiatedProtocolVersion: health.negotiatedProtocolVersion ?? null,
+            lastError: health.lastError ?? null,
+          });
+          break;
+        }
+        case "listCheckpoints":
+          respond(request, await service.listCheckpoints(request.sessionId));
+          break;
+        case "getCheckpointDiff":
+          respond(
+            request,
+            await service.getCheckpointDiff(
+              request.sessionId,
+              request.checkpointId,
+            ),
+          );
+          break;
+        case "restoreCheckpoint":
+          respond(
+            request,
+            await service.restoreCheckpoint(
+              request.sessionId,
+              request.checkpointId,
+            ),
+          );
+          break;
+        case "cancelSession":
+          respond(request, await service.cancelSession(request.sessionId));
+          break;
+        case "compactSession":
+          respond(request, await service.compactSession(request.sessionId));
+          break;
+        case "forkSession":
+          respond(
+            request,
+            await service.forkSession(request.sessionId, request.boundary),
+          );
+          break;
+        case "renameSession":
+          respond(
+            request,
+            await service.renameSession(request.sessionId, request.title),
+          );
+          break;
+        case "archiveSession":
+          respond(
+            request,
+            await service.archiveSession(request.sessionId, request.archived),
+          );
+          break;
+        case "getDiagnostics":
+          respond(request, await service.getDiagnostics(request.sessionId));
+          break;
+        case "startRun": {
+          if (
+            [...runs.values()].some(
+              (run) => run.input.sessionId === request.input.sessionId,
+            )
+          )
+            throw new ForgeError(
+              "busy",
+              "This session already has an active run.",
+              true,
+            );
+          const runId = runIdSchema.parse(randomUUID());
+          const run = {
+            input: request.input,
+            abort: new AbortController(),
+            approvals: new Map<string, Approval>(),
+            finished: false,
+          };
+          runs.set(runId, run);
+          respond(request, { runId, sessionId: request.input.sessionId });
+          // The response is posted before even synchronous service callbacks execute.
+          const operation = Promise.resolve()
+            .then(() =>
+              service.run(
+                request.input,
+                (value) => event(runId, value),
+                (rawApproval, signal) => {
+                  const approval = approvalRequestSchema.parse(rawApproval);
+                  if (
+                    signal.aborted ||
+                    run.abort.signal.aborted ||
+                    disposed ||
+                    run.finished
+                  )
+                    return Promise.resolve(false);
+                  const entry = run.approvals.get(approval.id);
+                  if (
+                    !entry ||
+                    JSON.stringify(entry.request) !==
+                      JSON.stringify(approval) ||
+                    entry.claimed
+                  )
+                    throw new ForgeError(
+                      "invalid_input",
+                      "Approval does not match the pending action.",
+                    );
+                  entry.claimed = true;
+                  if (entry.consumed)
+                    return Promise.resolve(entry.answer === true);
+                  return new Promise<boolean>((resolve) => {
+                    const settle = (answer: boolean): void => {
+                      entry.consumed = true;
+                      entry.answer = answer;
+                      signal.removeEventListener("abort", abort);
+                      run.abort.signal.removeEventListener("abort", abort);
+                      resolve(answer);
+                    };
+                    const abort = (): void => settle(false);
+                    entry.resolve = settle;
+                    signal.addEventListener("abort", abort, { once: true });
+                    run.abort.signal.addEventListener("abort", abort, {
+                      once: true,
+                    });
+                  });
+                },
+                run.abort.signal,
+              ),
+            )
+            .then(
+              () => finish(runId),
+              (error) => finish(runId, toErrorInfo(error)),
+            );
+          operations.add(operation);
+          void operation.finally(() => operations.delete(operation));
+          break;
+        }
+        case "cancelRun": {
+          const run = runs.get(request.runId);
+          if (!run)
+            throw new ForgeError(
+              "not_found",
+              "The run or approval is no longer active.",
+            );
+          run.abort.abort();
+          respond(request, null);
+          break;
+        }
+        case "answerApproval": {
+          const run = runs.get(request.runId);
+          const answer = run?.approvals.get(request.approvalId);
+          if (
+            !answer ||
+            answer.consumed ||
+            run?.abort.signal.aborted ||
+            run?.finished
+          )
+            throw new ForgeError(
+              "not_found",
+              "The run or approval is no longer active.",
+            );
+          answer.consumed = true;
+          answer.answer = request.approved;
+          answer.resolve?.(request.approved);
+          respond(request, null);
+          break;
+        }
+      }
+    } catch (error) {
+      respond(request, null, toErrorInfo(error));
+    }
+  };
+  const dispose = (): Promise<void> => {
+    if (closing) return closing;
+    disposed = true;
+    for (const run of runs.values()) run.abort.abort();
+    for (const request of pending.values()) respond(request, null, safeError);
+    closing = Promise.resolve().then(async () => {
+      try {
+        await service.dispose();
+      } finally {
+        await Promise.allSettled([...operations]);
+        runs.clear();
+      }
+    });
+    return closing;
+  };
+  const dispatch = (raw: unknown): Promise<void> => {
+    const operation = handle(raw);
+    operations.add(operation);
+    void operation.finally(() => operations.delete(operation));
+    return operation;
+  };
+  return { handle: dispatch, dispose };
+}
