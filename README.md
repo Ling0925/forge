@@ -1,93 +1,223 @@
-# Forge
+<div align="center">
 
-Forge 是本地 Linux 桌面应用与 Node 22 CLI，共用**同一**代理运行时、设置和持久化会话。
-可向自选的兼容接口发送任务，逐步查看模型回复与本地文件、命令、MCP 工具调用，并检查/恢复
-文件 checkpoint。**不是云托管代理，也不是 OS 沙箱。**用户可以自行审查权限与外部服务。
+# ⚒️ Forge
 
-> 原创说明：Forge 未导入、fork 或依赖任何既有 harness 源码；参考仅用于设计研究，见
-> [docs/REFERENCE_DESIGN.md](docs/REFERENCE_DESIGN.md)。
+**面向 Linux 的本地桌面应用与 Node 22 CLI · 原创共享代理运行时**
 
-## 安装与开始
+[![Node Version](https://img.shields.io/badge/Node-%3E%3D22.23.1%20%3C23-339933?style=flat-square&logo=node.js&logoColor=white)](package.json)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20x64-FCC624?style=flat-square&logo=linux&logoColor=black)](docs/DELIVERY.md)
+[![Desktop Engine](https://img.shields.io/badge/Desktop-Electron%2044%20%2B%20React%2019-47848F?style=flat-square&logo=electron&logoColor=white)](package.json)
+[![Original Architecture](https://img.shields.io/badge/Architecture-Original%20Harness-55684D?style=flat-square)](docs/AUTHORSHIP.md)
+[![License](https://img.shields.io/badge/License-Internal%20%2F%20Proprietary-lightgrey?style=flat-square)](#)
 
-- 平台：**仅 Linux x64**。
-- CLI 需要系统安装 Node `>=22.23.1 <23`。
-- 桌面包内含 Electron（构建时锁定为 Electron 44）；无需单独安装 Electron。
-- 浏览器工具需要本机可用的 Chromium 与图形依赖；浏览器二进制**不随包分发**（见下）。
+<p align="center">
+  <a href="#-核心特性">核心特性</a> •
+  <a href="#-系统架构">系统架构</a> •
+  <a href="#-安装与开始">安装与开始</a> •
+  <a href="#-权限与安全模型">权限与安全模型</a> •
+  <a href="#-工作流与命令速查">工作流与速查</a> •
+  <a href="#-文档导航">文档导航</a>
+</p>
 
-发布产物、校验与回滚步骤见 **[docs/DELIVERY.md](docs/DELIVERY.md)**。安装后目录形如
-`~/.local/share/forge-harness/releases/<build-id>/`，其中 CLI 在 `cli/`、桌面在 `desktop/`；
-`cli` 是 Node 脚本，**不是**独立二进制。文档随发布树一起分发，README 的相对 `docs/` 链接在抽包后仍可用。
+</div>
 
-安装后常用命令（把示例值替换为你**自行授权**的真实值）：
+---
 
-```sh
-forge config show
-forge config set --base-url https://example.invalid/v1 --model example-model
-# 密钥只经标准输入，不进入 argv / 历史 / 文档：
-printf '%s' "$MY_PROVIDER_KEY" | forge config set --api-key-stdin
-forge models
-forge run '请先列出项目文件' --workspace /absolute/path --permission readonly
-forge sessions
-forge resume <session-uuid> # 恢复交互会话
-forge run --session <session-uuid> '继续处理' # 单次续跑
+> 💡 **原创声明与设计定位**  
+> Forge 是一款从零构建的本地编码与任务代理工具，**未导入、Fork 或依赖任何既有代理 Harness 源码**（设计调研见 [docs/REFERENCE_DESIGN.md](docs/REFERENCE_DESIGN.md)）。  
+> 无论是终端 CLI 还是 Linux 桌面工作台，均由**同一套核心运行时**驱动，共享状态模型、工具管道、会话存储与文件安全检查点。**Forge 不是云托管代理，也不是 OS 沙箱**，用户对本地文件、命令调用及模型交互拥有完全的可见性与审查权。
+
+---
+
+## ✨ 核心特性
+
+| 特性 | 描述 |
+| :--- | :--- |
+| 🖥️ ↔️ 💻 **双端一体，共享核心** | 桌面端与终端 CLI 共享同一运行时、配置与持久化存储。桌面创建的会话可随时在终端通过 `forge resume <uuid>` 接续，反之亦然。 |
+| 🛡️ **分级权限与交互审批** | 提供 `readonly`、`workspace`、`unrestricted` 三级权限模式。拒绝黑盒盲跑，命令执行与文件改动支持逐项用户审查。 |
+| ⏪ **直接文件检查点 (Checkpoint)** | 对代理的每次直接文件写入与编辑（`write_file` / `edit_file`）生成安全快照，支持单文件差异核对与带冲突保护的回滚。 |
+| 🤖 **受限多代理协作 (Sub-Agents)** | 原生提供 `spawn_agent` 工具，支持最大深度 1、并发 ≤4 的独立子任务调度；子代理**严格继承父级权限上限**，失败优雅收敛。 |
+| 🔌 **原生 Git 工具与 stdio MCP** | 内置 10 个本地文件/系统工具及 3 个原生只读 Git 观测工具（`git_status` / `git_diff` / `git_log`）；支持基于标准 stdio 的 MCP 工具扩展。 |
+| 🎯 **动态精确模型发现** | 原生 `list_models` 工具实时列出当前兼容 Provider 的精确可用模型 ID，支持按子串过滤与分页，避免虚构模型。 |
+| 🎨 **Warm Light-First 工作台** | 桌面端采用温暖浅色优先的美学语法，去边框化、横向静默工具行（Quiet Tool Rows）与一体化圆润输入舱，打造沉稳专注的交互体验。 |
+
+---
+
+## 🏛️ 系统架构
+
+```
+                     ┌──────────────────────────────────────────────┐
+                     │              用户操作界面 (Entrypoints)          │
+                     ├──────────────────────┬───────────────────────┤
+                     │   🖥️  Linux 桌面端    │     💻  终端 CLI      │
+                     │  (Electron 44 / React)│    (Node 22 Commander)│
+                     └──────────┬───────────┴───────────┬───────────┘
+                                │                       │
+                                └───────────┬───────────┘
+                                            ▼
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                           Forge 共享代理运行时 (Shared Core)                         │
+├────────────────────────────────┬──────────────────────────────────────────────────┤
+│  🧭 模式控制                    │  🔄 会话生命周期                                  │
+│  • Plan Mode (强制只读规划)     │  • 任务状态机 & 事件总线                           │
+│  • Build Mode (标准构建执行)    │  • 语义压缩 (/compact) & 分支衍生 (/fork)         │
+├────────────────────────────────┼──────────────────────────────────────────────────┤
+│  🛡️ 权限与安全策略引擎         │  💾 持久化状态与快照                              │
+│  • Readonly / Workspace / Unres│  • 会话文件存储 (~/.local/share/forge-harness)   │
+│  • 交互式审批流 (Per-call)     │  • 文件级 Checkpoint 存储与冲突保护               │
+├────────────────────────────────┴──────────────────────────────────────────────────┤
+│                              ⚙️ 原生工具箱 (Tooling Bus)                          │
+│  ┌──────────────────────┬──────────────────────┬───────────────────────────────┐  │
+│  │  📁 文件与系统工具    │  🔍 原生 Git 观察    │  🧩 扩展协议 & 子代理         │  │
+│  │  • read_file         │  • git_status        │  • stdio MCP Client           │  │
+│  │  • write_file / edit │  • git_diff          │  • spawn_agent (depth 1, ≤4) │  │
+│  │  • run_command       │  • git_log           │  • browser_tools (Playwright) │  │
+│  └──────────────────────┴──────────────────────┴───────────────────────────────┘  │
+└───────────────────────────────────────────┬───────────────────────────────────────┘
+                                            ▼
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                          模型服务适配层 (Provider Adapters)                        │
+│            • OpenAI Chat Completions 协议  • OpenAI Responses 协议                 │
+└───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-示例 URL 与模型均为占位符，请替换为你自行授权的真实配置。完整的端到端工作流、plan/build、
-子代理、checkpoint、MCP 注册、桌面↔CLI 续跑与桌面界面使用速览见 **[docs/WORKFLOWS.md](docs/WORKFLOWS.md)**。
+---
 
-### 在源码检出中构建（仅开发）
+## 🚀 安装与开始
 
-以下命令**只适用于源码检出**，不出现在安装后的发布树里；发布树中的 `scripts/` 不存在。
+### 环境依赖
+
+- **操作系统**：**仅支持 Linux x64**。
+- **CLI 运行环境**：系统需安装 Node.js `>=22.23.1 <23`。
+- **桌面工作台**：发布包内已内置 Electron 44，无需额外单独安装。
+- **浏览器扩展工具（可选）**：需要本机已安装匹配的 Chromium 与图形依赖（二进制不随安装包分发）。
+
+> 📦 **发布包安装与校验**：详细打包规范、安装路径及回滚机制见 **[docs/DELIVERY.md](docs/DELIVERY.md)**。  
+> 标准安装路径位于 `~/.local/share/forge-harness/releases/<build-id>/`。
+
+### 快速配置与运行
 
 ```sh
+# 1. 查看当前设置（脱敏显示）
+forge config show
+
+# 2. 设置兼容 Provider 的 Endpoint 与模型名称
+forge config set --base-url https://example.invalid/v1 --model example-model
+
+# 3. 安全注入 API 密钥（经 stdin 传入，避免泄漏到 argv / 历史记录）
+printf '%s' "$MY_PROVIDER_KEY" | forge config set --api-key-stdin
+
+# 4. 查询当前 Endpoint 支持的模型列表
+forge models
+
+# 5. 执行只读分析任务（适合代码审阅或项目摸底）
+forge run '请梳理本项目的目录结构与入口文件' --workspace /absolute/path/to/project --permission readonly
+
+# 6. 执行交互式构建任务（默认 build 模式）
+forge run '修复 tests/math.test.ts 中失败的单测用例' --workspace /absolute/path/to/project --permission workspace
+
+# 7. 查看历史会话并恢复交互
+forge sessions
+forge resume <session-uuid>
+```
+
+### 源码开发（仅限源码检出仓库）
+
+如需在本机基于源码开发或调试，请执行以下命令：
+
+```sh
+# 安装依赖
 pnpm install
+
+# 编译共享核心与前端产物
 pnpm build
+
+# 运行全量单元测试与类型检查
 pnpm test
 pnpm typecheck
+
+# 启动桌面端调试
+pnpm dev
 ```
 
-## 关键操作面
+---
 
-- **双入口共享会话**：桌面创建的会话可在 CLI 用其 UUID `forge resume` 继续，反之亦然。
-- **plan/build**：`--mode plan` 强制只读；`--mode build`（默认）按权限执行。
-- **子代理**：原生工具 `spawn_agent` 启动深度 1、并发≤4 的独立子会话，**继承权限上限**
-  （永不超出父权限），可使用真实指定模型；子任务失败会进入父的收敛流程，父运行终态变为失败。
-- **模型发现**：原生工具 `list_models` 只读地列出所配置 provider 目录中的**精确**模型 ID，
-  支持子串过滤与分页；目录存在**不**代表实时配额或可用性。
-- **语义摘要与分支**：`/compact` 与 `forge compact`、`/fork` 与 `forge fork` 生成语义摘要或
-  仅复制历史，**不重放**被复制的副作用；可对活动运行发出取消（`cancel_agent` / 界面取消 / Ctrl-C）。
-- **checkpoint**：对直接文件写入/编辑（`write_file`/`edit_file`）做可恢复备份，按单个文件、
-  带冲突保护的恢复；`run_command` 副作用**不是** checkpoint。
-- **stdio MCP**：注册现有示例 `examples/mcp/echo-server.mjs` 需**一次显式注册并启用**动作；
-  仅 stdio，无远端/OAuth。
-- **原生 git 工具**：`git_status`/`git_diff`/`git_log` 是已注册的只读本地工具（本地文件/命令
-  工具共 10 个）；Git 观察**不是** checkpoint。
+## 🔒 权限与安全模型
 
-CLI 命令清单见 **[docs/CLI.md](docs/CLI.md)**；项目指令与技能见 **[docs/CONTEXT.md](docs/CONTEXT.md)**；
-provider 协议与显式 Completions/Responses 见 **[docs/PROVIDERS.md](docs/PROVIDERS.md)**；
-架构见 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**；出处与作者边界见 **[docs/AUTHORSHIP.md](docs/AUTHORSHIP.md)**。
+Forge 秉持**零黑盒、强可见、诚实报告**的设计准则：
 
-## 权限与安全
+### 权限等级概览
 
-`readonly` 限制本地写入/执行（但读取和加载网页也可能有远程副作用）；`workspace` 将本地操作
-约束于工作区并对高风险操作请求审批；`unrestricted` 放宽策略，**不是 OS 沙箱**。仅当明确同时
-给出 `--permission unrestricted --yes` 时 CLI 才自动批准，否则按审批交互。工具结果与网页内容
-均不可信。浏览器工具需可用的 Playwright Chromium 及运行时配置的**精确 origin**（无通配），
-详见 [docs/BROWSER_TOOLS.md](docs/BROWSER_TOOLS.md)。
+| 模式 | 描述 | 本地文件读 | 本地文件写 | 命令执行 | 适用场景 |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| `readonly` | **纯只读模式** | ✅ | ❌ | ❌ | 代码审阅、架构分析、排查定位 |
+| `workspace` | **工作区约束模式** *(推荐)* | ✅ | ✅ *(仅工作区内)* | ⚠️ *(高危动作逐项审批)* | 常规功能开发与本地编码重构 |
+| `unrestricted` | **完全放宽策略** | ✅ | ✅ | ⚠️ *(除非指定 `--yes` 否则仍交互审批)* | 自动化批处理脚本、受信任环境 |
 
-只有服务端返回**可观测**缓存用量时才展示真实指标；无命中数据时不得推断缓存命中。请求成本、
-模型能力、Chromium/图形依赖与外部服务可用性是环境相关的。不要把真实 endpoint、密钥或用户数据
-打进发布包。
+### ⚠️ 使用边界与安全声明（诚实说明）
 
-## 使用边界（诚实说明）
+1. **非操作系统沙箱**：`run_command` 不是 OS 级容器沙箱。一旦批准命令执行，该进程以宿主当前用户权限运行，具有访问工作区之外网络与文件的能力。
+2. **Checkpoint 保护范围**：Checkpoint 快照**仅自动覆盖由 `write_file` 和 `edit_file` 发起的直接文件变动**，不捕获 `run_command` 生成的副作用（如 `git reset`、编译器输出或脚本执行产生的改动）。
+3. **MCP 仅支持标准输入输出**：MCP 服务仅支持 `stdio` 传输模式，不支持远程 HTTP/SSE/OAuth。注册后默认保持禁用状态，必须显式调用 `enable` 启用，且每次调用仍需确认。
+4. **浏览器运行时需外部提供**：浏览器工具依赖 Playwright 与外部 Chromium 实例，必须在配置中严格指定具体的 Origin 白名单（不允许通配符）。
+5. **真实指标保证**：仅当服务端在协议中返回可观测的真实 Token 统计与缓存指标时，工作台才如实展示；绝不推断、伪造或估计缓存命中率。
 
-- 仅 **Linux x64**；CLI 需要系统 Node 22；桌面包内含 Electron。
-- **MCP 仅支持 stdio**：无远端 HTTP/SSE/OAuth。注册后默认禁用；需显式 `enable` 才可启动，
-  per-call 仍需授权。
-- **`run_command` 不是 OS 沙箱**：已批准命令可访问工作区之外或网络。
-- **checkpoint 只覆盖直接文件写入/编辑**：不覆盖命令副作用，也不是目录级反转或 `git reset`。
-- **浏览器二进制不随包分发**：需本机安装匹配版本的 Chromium，或通过
-  `FORGE_BROWSER_EXECUTABLE` 指定兼容浏览器。
+---
 
-安装、校验与回滚的完整步骤见 **[docs/DELIVERY.md](docs/DELIVERY.md)**。发布负责人应在分发前
-按该文档核验实际产物；分发前的最终核验状态以发布流程实际执行为准，本文档不替代该核验。
+## ⌨️ 工作流与命令速查
+
+### CLI 常用操作
+
+```sh
+# ------------------------------
+# 模式与运行
+# ------------------------------
+forge run --mode plan "审查鉴权逻辑并拟定重构方案" --workspace . --permission readonly  # 强制只读规划
+forge run --mode build "执行重构并验证单测" --workspace . --permission workspace          # 执行构建模式
+
+# ------------------------------
+# 会话控制与语义压缩
+# ------------------------------
+forge sessions                                     # 查看会话列表与状态
+forge resume <session-uuid>                        # 恢复并继续已有会话
+forge fork <session-uuid>                          # 分支克隆当前历史（不重放副作用）
+forge compact <session-uuid>                       # 生成语义紧凑摘要，减少上下文消耗
+
+# ------------------------------
+# MCP 工具管理 (stdio)
+# ------------------------------
+forge mcp list                                     # 查看已注册的 MCP 服务
+forge mcp add <name> -- /path/to/server.mjs        # 注册新的 stdio 服务（默认禁用）
+forge mcp enable <name>                            # 显式启用该服务
+```
+
+### 快捷交互（交互会话中）
+
+- `/plan` / `/build`：实时切换规划与构建模式。
+- `/compact`：触发当前会话历史的语义压缩。
+- `/fork`：以当前上下文为基础分裂出全新分支。
+- `Ctrl + C` 或取消按钮：即时取消活动模型调用与正在执行的子任务。
+
+---
+
+## 📚 文档导航
+
+详细的设计规格、接口协议与使用指南分类如下：
+
+| 文档分类 | 关键文档 | 主要内容 |
+| :--- | :--- | :--- |
+| **🚀 进阶工作流** | **[docs/WORKFLOWS.md](docs/WORKFLOWS.md)** | 端到端全流程运行示例、桌面与终端联动实战 |
+| **💻 命令行参考** | **[docs/CLI.md](docs/CLI.md)** | 完整命令、参数标志、输入流及环境变量定义 |
+| **🏛️ 架构与设计** | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**<br>**[DESIGN.md](DESIGN.md)** | 核心运行时架构分解、桌面端视觉语素与交互规范 |
+| **🌐 模型与协议** | **[docs/PROVIDERS.md](docs/PROVIDERS.md)** | Chat Completions 与 Responses 协议支持、断点续传语义 |
+| **🧩 扩展与集成** | **[docs/CONTEXT.md](docs/CONTEXT.md)**<br>**[docs/MCP.md](docs/MCP.md)**<br>**[docs/BROWSER_TOOLS.md](docs/BROWSER_TOOLS.md)** | 项目指令 (AGENTS.md) 与技能包发现、stdio MCP 服务、Playwright 浏览器工具 |
+| **📦 发布与交付** | **[docs/DELIVERY.md](docs/DELIVERY.md)** | Linux 打包产物结构、发布流水线、安装核验与回滚步骤 |
+| **⚖️ 设计溯源** | **[docs/AUTHORSHIP.md](docs/AUTHORSHIP.md)**<br>**[docs/REFERENCE_DESIGN.md](docs/REFERENCE_DESIGN.md)** | 原创性界定、参考调研来源与版权边界声明 |
+
+---
+
+<div align="center">
+
+Forge · Built for engineers demanding full local control, transparency, and crafted ergonomics.
+
+</div>
