@@ -21,6 +21,7 @@ await build({
   entryPoints: ["src/cli/index.ts"],
   outfile: "dist/cli.mjs",
   format: "esm",
+  external: [...common.external, "ink", "react"],
   banner: {
     js: '#!/usr/bin/env node\nimport { createRequire as forgeCreateRequire } from "node:module"; const require = forgeCreateRequire(import.meta.url);',
   },
