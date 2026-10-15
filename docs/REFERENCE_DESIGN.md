@@ -37,6 +37,12 @@
 7. **stdio MCP 优先**（参考 pi `mcp.md` 与 MCP stdio 规范）：Forge 先完成 **stdio 完整生命周期**，在做出任何远端/HTTP/SSE/OAuth 声明之前不声称支持它们。
 8. **显式协议选择**（参考 pi provider `types.ts`）：Completions 与 Responses 通过显式 `apiMode` 选择，**不是** URL 替换或自动探测。
 
+## 本地 CometixCode diff 研究
+
+本轮参考 `references/CometixCode` 中 `src/tools/file_edit_tool/{mod.rs,ui.rs}`、`src/tools/file_write_tool/{mod.rs,ui.rs}`、`src/components/structured_diff.rs` 与 `structured_diff_list.rs` 的数据分层和展示行为：工具执行时生成结构化 patch、编辑与覆写共用组件、带行号和行内强调、新文件单独预览。参考仓库 LICENSE 为 AGPL-3.0；未复制其 Rust 源码或引入其依赖。
+
+Forge 独立实现 `src/shared/diff.ts`，将本仓库已有的有界 Myers 算法移到共享层，保留原文比较、明确区分计算失败和保存截断，继续限制持久化预览大小；CLI 消费记录而非重新读盘。采用本仓库字素宽度/终端过滤器及语义 Tone，不移植参考项目的色彩/语法解析栈，不承诺逐像素一致或全屏 diff 功能对等。
+
 ## 明确不声称的事项
 
 - 不声称复制了任何参考实现，或与其达到功能对等。
