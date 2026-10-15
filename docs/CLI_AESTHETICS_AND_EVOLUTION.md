@@ -1,5 +1,7 @@
 # Forge CLI 美学风格评估与进阶演进提案
 
+> 历史提案：以下手写屏幕/选区实现不再是生产 CLI。当前 Ink 架构、阅读与复制行为以 [TUI_MIGRATION.md](TUI_MIGRATION.md)、[CLI.md](CLI.md) 为准。
+
 本文档对 Forge CLI 的终端美学、界面风格架构及交互质感进行系统性复盘，并记录面向下一阶段的视觉与体验进阶优化提案。
 
 - 关联契约：[DESIGN.md](../DESIGN.md)（设计最高契约）、[CLI.md](CLI.md)（CLI 使用手册）、[CLI_UI_IMPROVEMENTS.md](CLI_UI_IMPROVEMENTS.md)（前期架构与优化记录）

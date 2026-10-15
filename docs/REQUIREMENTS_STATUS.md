@@ -2,6 +2,8 @@
 
 本表区分“已实现”与“全部验收”。源码实现不代表真实模型、所有终端或 Electron 正式发布已验收。
 
+**TUI 后续更新**：默认终端已迁移 Ink，旧手写全屏/鼠标选区只保留测试 fixture；当前功能、冻结阅读、原生复制及验收范围见 [TUI_MIGRATION.md](TUI_MIGRATION.md)。
+
 **后续更新**：用户要求 CLI 停止手写 Markdown，现已换成 `marked` + `marked-terminal` + `cli-highlight`。下表原“CLI 子集/轻量词法高亮”是上一批记录；当前语法、依赖、流式及验证范围以 `MARKDOWN_REQUIREMENTS.md` §12 为准（83 项聚焦用例 + 1 项编译产物隔离启动检查通过）。
 
 | 需求 | 已实现 | 边界 / 仍未验证 |

@@ -1,5 +1,7 @@
 # Forge CLI 界面实现分析与优化方案
 
+> 历史分析：手写 Screen/Controller 已退出生产路径，仅留测试 fixture。当前 Ink 组件、阅读缓存和终端原生复制以 [TUI_MIGRATION.md](TUI_MIGRATION.md)、[CLI.md](CLI.md) 为准。
+
 本文档对当前 Forge CLI（终端 TUI / 交互界面）的实现架构进行系统性分析，记录经源码核对的现状、设计优势、体验缺口与具体的优化改进方案。
 
 - 适用范围：`src/cli/terminal/**`、`src/cli/render/**`、`src/cli/**`

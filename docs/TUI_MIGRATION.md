@@ -1,91 +1,73 @@
-# TUI → Ink 迁移清单
+# TUI → Ink 迁移与验收记录
 
-## 目标与边界
+## 当前架构
 
-使用第三方 TUI 框架 **Ink 6.6.0（React + Yoga）** 替换自写屏幕引擎，逐步迁移，而不是一次同时重写会话、运行和终端协议。该版本兼容仓库现有 Node 22 / React 19；版本与传递依赖固定在 lockfile。
+- 框架：Ink 6.6.0 / React / Yoga。生产入口为 `node-io → TerminalReader → InkController → InkApp → InkView`。
+- 输入：唯一 `InputDecoder` 保留 UTF-8、跨 chunk 按键和 bracketed-paste 来源；不可变编辑状态和焦点 reducer 由 `InputStore` 管理，React `useSyncExternalStore` 订阅。
+- 展示：Composer、ApprovalInput、Picker、SlashSuggestions、RichRow 独立组件；`dockLayout` 按实际终端高度统一分配预算，不再固定 20 行。
+- 完成输出经 Ink `useStdout().write` 提交，框架负责清除/恢复动态区域；不再使用会不断累积历史字节的 Ink Static。应用不自行发送光标移动/鼠标/备用屏幕序列。
+- 普通 run / JSON / 管道采用最小 PlainController；不加载 Ink，不依赖旧手写 Screen。旧引擎已从 `src` 搬到 `tests/cli/legacy`，仅作历史行为 fixture，不进入 CLI 包。
+- 模型、会话、权限、工具执行与存储协议不变。本机仍只编译 CLI，不安装、不更改启动器。
 
-默认 rich TTY 入口：`node-io.ts → TerminalReader → InkController → InkApp → InkView`。输入链路为 `InputDecoder → InputStore → focus reducer`，React 通过订阅获取不可变快照。
+## 功能清单
 
-- Ink `Box` / `Text` / `Static` 负责组件、布局、终端输出和差异刷新。
-- `TerminalUI`、`interactive.ts`、事件渲染器及 core/store 不改业务语义。
-- 输入只有一个 stream 所有者：`InputDecoder` 保留 UTF-8/按键/paste 来源；reader 保留输入队列与 fresh approval 生命周期。Ink 已不再依赖旧可变 `Editor`，改用不可变编辑状态、按焦点分派的 reducer 和 `InputStore`。
-- React `InkApp` 用 `useSyncExternalStore` 订阅输入；`Composer`、`ApprovalInput`、`Picker`、`SlashSuggestions` 分组件展示。一次只挂载当前焦点的输入组件，不叠加 Ink `useInput` 的第二个 stdin 监听。
-- 不再启用备用屏幕或鼠标捕获。已完成输出进入终端原生 scrollback，使用终端自身的滚动、选择、复制；旧的应用内鼠标选区、OSC52 自动复制和 Ctrl+G 复制模式不再是新界面的路径。
-- 运行中的 tail 仅显示有界预览，完成后完整内容进入 `Static`。不把预览裁切写回会话。
-- 普通 `run` / JSON / 管道模式不加载 Ink；单次运行的审批仍保留普通文本输入路径。
-- 构建将 Ink/React 保留为运行时依赖，不把其可选 DevTools、Yoga 加载器强行塞进 CLI 单文件。只执行本机 CLI 编译，不重装、不更改启动器。
+| 功能 | 当前状态 |
+| --- | --- |
+| chat、resume、惰性创建、历史、会话命令 | 保留既有业务逻辑；新 Ink 默认入口 |
+| 中文/emoji、多行、词/行编辑、历史、Slash 补全 | 不可变编辑函数；独立 React 输入组件 |
+| 单一焦点、审批抢占、草稿/光标恢复 | 已实现；旧 picker 取消按 ID 隔离 |
+| 粘贴防误确认、跨 chunk、FIFO、溢出 | 保留薄解码层；新增纯文本和 rich 回归 |
+| Enter 排队、Alt/Shift+Enter 插话、模式/权限 | 既有语义保留 |
+| 模型/思考/会话/任务选择器、刷新与停止确认 | Ink 组件；高窗口中保留少量实时 tail |
+| Markdown、代码、表格、diff、工具/子代理卡片 | 保留 RichLine 生产者与控制清洗 |
+| 状态、上下文、计划、待发预览 | 响应式预算；极矮窗口优先输入 |
+| 未完成长回答阅读 | PgUp 冻结近期历史+当前 tail 快照，PgUp/PgDn 翻页，End/Esc 返回；后台继续运行 |
+| 原生选择/复制 | 不捕获鼠标、不发 OSC52；阅读冻结期间不因后台输出破坏选区 |
+| 长历史性能 | 近期阅读缓存 2000 行 / 1 MB；冻结快照 2000 物理行；延迟输出 2 MB，超限明确提示，存储不裁剪 |
+| 输出唯一性 | 完成批次序号防重复交付；不把未完成快照追加为历史 |
+| light/dark/system | COLORFGBG + 一次有截止时间的 OSC11 探测；迟到响应不改主题 |
+| NO_COLOR / TERM=dumb / 非TTY | 颜色禁用或纯文本降级 |
+| 读屏模式 | INK_SCREEN_READER=true 接入 Ink 无障碍路径；关闭 timer-only 动画与 partial tail，完成输出保留 |
+| 退出、EOF、SIGHUP/SIGTERM、取消 | 清理监听、查询/动画定时器、恢复 raw/paste；异常清理 finally 保证执行 |
+| 输入历史、MCP、context、skills、checkpoints | 原业务保留 |
 
-## 现有功能基线与迁移验收
+## 输入框架评估结论
 
-“保留”表示继续由现有业务/渲染模块提供，不等于全部已经做过真实终端验收。
+检查已安装 Ink 6.6 `hooks/use-input.js`：它按输入 chunk 调用 `parseKeypress`，对外暴露 input/key，但没有 bracketed-paste 来源字段；hook 还会管理 raw mode 和输入事件监听。直接替换会丢失审批所需的粘贴来源，并与现有唯一 decoder 争夺输入。因此**保留薄解码层是明确设计决策，不再把“全部交给 useInput”列作迁移完成条件**。编辑/焦点规则是应用逻辑，渲染/布局/差异刷新由第三方 Ink 承担。
 
-| 功能域 | 现有功能 | 当前实现 / 验收依据 |
-| --- | --- | --- |
-| 入口与会话 | 默认 chat、`chat --session`、`resume`；惰性建会话；历史展示 | 保留 interactive，默认 rich 适配器切换 Ink；`interactive.test.ts` |
-| 会话命令 | `/sessions /resume /new /fork /rename /archive /compact /diagnostics /export` | 保留命令路由；选择器用 Ink 展示 |
-| 输入编辑 | 中文/emoji 字素、左右/词移动、Home/End、删除、Ctrl+U/K/W、历史上下键 | 不可变编辑函数 + React Composer；`ink-input.test.ts / ink-terminal.test.ts` |
-| 多行与粘贴 | 行尾反斜杠换行、bracketed paste、跨 chunk UTF-8、CRLF、粘贴不提交 | 暂复用解码器；专项覆盖多行、分段粘贴 |
-| Slash 菜单 | 输入过滤、上下选择、Tab 补全、Enter 提交、Esc 保留草稿 | Ink 菜单 + 现有命令目录；专项覆盖 |
-| 运行控制 | Enter 排队、Alt/Shift+Enter 插话、`/steer /queue`、失败暂停队列 | 保留 run queue；专项验证一次提交；`run-input.test.ts / run-controls.test.ts` |
-| 模式与权限 | `/mode`、Shift+Tab、`/permission`、`/approval full-access / auto / manual` | 业务逻辑保留；Ink mode 标记与快捷键桥 |
-| 模型与思考 | `/model`、`/reasoning`、`/thinking`、启动 thinking 参数 | 保留配置和事件生产者；选择器用 Ink |
-| 回复呈现 | Markdown、代码高亮、表格、链接、流式文本、折叠/展开思考 | 保留安全 RichLine 生产者，Ink Text 显示语义样式 |
-| 工具与子任务 | 工具卡片、参数/结果、耗时、diff/词级高亮、子代理进度；`/tools` | 保留 tool transcript；Ink span 颜色与背景映射 |
-| 状态栏 | spinner、耗时、生成 token、工具数、取消提示 | Ink 状态组件；观察会话不显示伪造运行指标 |
-| 上下文与计划 | 模型/思考强度/会话名、上下文计量、缓存命中；`/plan` | 复用纯 footer 格式化，Ink 当前计划步/页脚；窄屏降级 |
-| 通用选择器 | 搜索、默认选中项、详情、空列表、取消、活动标记 | Ink 组件；刷新按 value 保留选择；专项覆盖 |
-| 任务面板 | `/tasks` 子代理/后台命令、分页、结果、轮询刷新、停止确认 | 保留 tasks service；补通 `updatePicker`；`tasks-integration.test.ts` |
-| 审批 | 父/子任务来源、argv；新鲜 Enter/y、拒绝、Esc/Ctrl+C、草稿恢复 | fresh reader 保留；粘贴/历史输入不得变成许可；专项覆盖 |
-| 输入历史 | `/history on / off / clear / status`，工作区隔离、默认关闭、敏感模式过滤 | 保留 prompt-history store；输入桥继续调用原回调 |
-| 项目辅助 | `/context /skills /checkpoints /mcp /help /quit /exit` | 保留原命令，不新增执行能力 |
-| 终端生命周期 | resize、Ctrl+C、Ctrl+D、EOF/error、重复 dispose、输入溢出 | Ink 释放渲染，reader 释放监听/队列，桥恢复 raw/paste；专项覆盖 |
-| 滚动/复制 | 原自写历史滚动、鼠标选区、OSC52、Ctrl+G | 改为终端原生 scrollback/选择复制；不再劫持鼠标 |
-| 主题与安全 | light/dark/system、NO_COLOR、ANSI/OSC 控制清洗 | Ink span 边界仍清洗；系统主题探测和终端兼容性列入后续验收 |
-| 非交互协议 | stdout/stderr 分离、JSON、显式 stdin、退出码 | 保留原路径；`machine-golden-v2.test.ts`；独立 HOME 编译产物检查 |
+## 完成情况
 
-## 分阶段路线
+- [x] Ink 默认入口与展示组件。
+- [x] 输入/焦点独立 store、React 订阅、审批/选择器组件化。
+- [x] 实际高度布局、未完成输出阅读、阅读期间暂停绘制。
+- [x] 去除无限 Static 历史及每次追加复制整个历史的路径；有界缓存与布局复用。
+- [x] 最小纯文本控制器，生产依赖移除旧手写屏幕。
+- [x] 系统主题探测、读屏模式、终端模式生命周期与断线信号清理。
+- [x] 当前 CLI/选择复制文档统一；旧 UI 演进文档保留历史性质。
+- [x] 新 Ink Chromium/xterm、真实 PTY、状态/输入/性能上限回归。
 
-### 阶段 1：框架与显示层（已完成）
+### 环境验收边界（不能用自动测试冒充）
 
-- [x] 引入 Ink，隔离其渲染实例与生命周期。
-- [x] 默认 rich CLI 改用新适配器；非 TTY 保持旧纯文本路径。
-- [x] 实现 transcript/tail、composer、选择器、slash 菜单、状态、计划、上下文和 pending preview。
-- [x] 不接管备用屏幕和鼠标，恢复终端原生滚动/复制。
-- [x] 新增输入、审批、刷新、清理专项回归测试。
-- [x] 编译产物 PTY 启动检查、模式恢复检查与非交互输出检查。
+- 本机 Chromium/xterm 和 Linux PTY 已覆盖；SSH 远端连接、tmux 多版本、macOS/Windows 终端和真实读屏软件仍需对应环境人工验收。
+- 没有用真实密钥发模型请求；持续流式行为使用合成 renderer 输入。没有做桌面构建、安装或正式发布验收。
+- 原生复制依赖终端自身快捷键与剪贴板设置，Forge 不承诺跨所有宿主组合的 OS 剪贴板结果。
 
-### 阶段 2：输入组件与交互状态
+## 测试与历史基线
 
-- [x] 将输入拆为 React 组件、不可变编辑函数、焦点 reducer；Ink 路径移除旧 `Editor` 和可变 `SlashMenu` 依赖。
-- [x] 保留显式 paste provenance；不启用第二个 stdin owner，批量输入同步处理、React 通知合并。
-- [x] 组件化选择器、审批与聊天焦点；取消/替换使用 picker ID 隔离，保留任务刷新、草稿/光标/历史恢复。
-- [ ] 后续评估第三方输入组件能否覆盖多行/CJK/跨 chunk 粘贴来源；本轮未新增输入依赖，不宣称全部输入逻辑由 Ink 提供。
-- [ ] 验收屏幕阅读器、系统主题探测和各平台快捷键差异。
+当前验证命令：
 
-### 阶段 3：清理与兼容性验收
+```sh
+node scripts/build-core.mjs
+pnpm exec vitest run tests/cli
+node --check dist/cli.mjs
+```
 
-- [ ] 将旧 Controller/Screen/view/selection 专属测试替换为新实现的行为测试，再删除无用路径；旧纯文本 reader 拆分为最小实现。
-- [ ] xterm/SSH/tmux 与不同终端的缩放、原生滚动选择、超长历史、大粘贴人工验收。
-- [ ] 对长会话 Static 保留量、帧率、启动时间做有界性能检查。
-- [ ] 清理旧 UI 文档的过时快捷键，统一新交互文档。
+限定严格类型检查覆盖新 Ink controller/reader 及新增测试，开启 strict、exactOptionalPropertyTypes、noUncheckedIndexedAccess；不把全仓 typecheck/lint 作为本机编译前置。
 
-## 验证记录
+新增/扩展：`ink-transcript.test.ts`（10000 行缓存与延迟输出上限）、`ink-xterm.test.ts`（完成历史唯一、未完成阅读、选区冻结、缩放、混合宽字符草稿）、`ink-modes.test.ts`、`plain-controller.test.ts`、`ink-terminal.test.ts`（读屏/断线/审批抢占）。PTY 测试始终使用临时 HOME/FORGE_HOME 并清理。
 
-### 阶段 2：输入/焦点拆分
+旧测试迁到 legacy fixture 后保留断言。旧 `terminal-v2-xterm.test.ts` 同时要求 inline scrollback 与后来已改为 alternate 的默认引擎，且在 inline 模式末段混合宽字符缩放仍失败；已完整归档为 `tests/cli/legacy/inline-xterm.scenario.ts`（不是通过的验收）。它被新 `ink-xterm.test.ts` 的实际 Ink 场景替代，没有把失败改成跳过后声称旧引擎已修复。
 
-- `pnpm exec vitest run tests/cli/ink-input.test.ts tests/cli/ink-app.test.ts tests/cli/ink-terminal.test.ts tests/cli/ink-view.test.ts tests/cli/interactive.test.ts tests/cli/terminal.test.ts tests/cli/run-input.test.ts tests/cli/run-controls.test.ts tests/cli/approval-policy.test.ts tests/cli/tasks-integration.test.ts tests/cli/prompt-history.test.ts tests/cli/machine-golden-v2.test.ts tests/cli/resumed-session.test.ts tests/cli/terminal-v2.test.ts`：14 文件 **183 项通过**。
-- `pnpm exec vitest run tests/cli/ink-bundle.test.ts`：2 项通过；本轮总计 **185 项**。编译与语法检查同下。
-- `pnpm exec tsc --noEmit --strict --skipLibCheck --target ES2023 --module ESNext --moduleResolution Bundler --jsx react-jsx --esModuleInterop --exactOptionalPropertyTypes --noUncheckedIndexedAccess src/cli/ink/controller.ts src/cli/terminal.ts tests/cli/ink-input.test.ts tests/cli/ink-app.test.ts tests/cli/ink-terminal.test.ts tests/cli/ink-view.test.ts`：通过。
-- 新增 16 项纯编辑/焦点测试、1 项独立 React 订阅测试、2 项 reader 集成测试：旧 picker 迟到取消、审批抢占、草稿/光标恢复、确认粘贴标记保留、同步回调不覆盖新焦点、批量通知与连续提交、输入溢出、订阅不新增流监听。
-- 本轮未改变快捷键、流式历史裁切和原生复制策略。旧纯文本 Controller 只补输入操作接口；清理旧实现仍是后续阶段。
+本轮最终：`pnpm exec vitest run tests/cli` **65 文件 / 643 项通过**（包含新 Ink xterm 和隔离 HOME 的 PTY 启动退出）；CLI 编译、产物语法和限定严格类型检查均通过。没有运行桌面或整个仓库测试。
 
-### 阶段 1：显示层基线
-
-- 聚焦回归：`pnpm exec vitest run tests/cli/ink-terminal.test.ts tests/cli/ink-view.test.ts tests/cli/ink-bundle.test.ts tests/cli/interactive.test.ts tests/cli/terminal.test.ts tests/cli/run-input.test.ts tests/cli/run-controls.test.ts tests/cli/approval-policy.test.ts tests/cli/tasks-integration.test.ts tests/cli/prompt-history.test.ts tests/cli/machine-golden-v2.test.ts tests/cli/resumed-session.test.ts`。
-- 上述 12 个文件共 **154 项通过**。其中新增 Ink 输入/生命周期 14 项、展示组件 8 项、编译产物 2 项；组件覆盖 80×24、24×8、8×4、2×2 的动态区域边界。
-- 编译：`node scripts/build-core.mjs`；语法：`node --check dist/cli.mjs`。
-- 类型检查限定到 `src/cli/ink/controller.ts` 和三个新增测试入口，启用 strict、exactOptionalPropertyTypes、noUncheckedIndexedAccess；未执行全仓库 typecheck/lint/打包。
-- PTY 检查使用 Linux `script` / `stty`，临时 HOME/FORGE_HOME，启动编译后的 chat 并发送 `/quit`；确认不进入备用屏幕/鼠标捕获、不清 scrollback、退出恢复 paste/cursor。测试结束清理临时目录，不读取真实会话或密钥。
-- `pnpm peers check` 仍报告原有 Vite 8 / esbuild 0.25 的版本要求不匹配（不是 Ink peer）；本轮不升级无关构建依赖。
-
-未验证：真实模型长时间流式交互、SSH/tmux、各终端原生选择体验、屏幕阅读器。system 主题先使用 COLORFGBG，未知背景保留终端默认前景；OSC 背景探测待下一阶段。现有旧终端单元测试仍是迁移基线，不应拿它们通过来声称新 Ink 界面全部验收完成。
+此前阶段基线：阶段1 154项；阶段2 185项。
