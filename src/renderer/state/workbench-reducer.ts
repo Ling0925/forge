@@ -285,7 +285,8 @@ export function workbenchReducer(
         };
       if (event.type === "error") next = { ...run, error: event.error };
       const result = putRun(state, next);
-      if (event.type === "text_delta") return result; // transient text never copies the stored transcript
+      if (event.type === "text_delta" || event.type === "reasoning_delta")
+        return result; // transient text never copies the stored transcript
       const snapshot = state.activeSnapshot;
       return {
         ...result,
