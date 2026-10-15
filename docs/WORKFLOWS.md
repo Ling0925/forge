@@ -89,8 +89,11 @@ forge sessions --json
 forge show <session-uuid>
 forge show <session-uuid> --json
 
-# 在 CLI 续跑桌面会话（resume 使用会话自身 workspace，不接受 --session）
-forge resume <session-uuid> '继续之前的工作' --permission readonly
+# 在 CLI 交互恢复桌面会话（无需 prompt，使用会话自身 workspace）
+forge resume <session-uuid>
+
+# 单次续跑 / 脚本调用使用 run --session
+forge run --session <session-uuid> '继续之前的工作' --permission readonly
 
 # 交互式 chat 打开指定 workspace/session
 forge chat --workspace /absolute/path/to/project --session <session-uuid>
@@ -99,7 +102,8 @@ forge chat --workspace /absolute/path/to/project --session <session-uuid>
 恢复语义（诚实边界）：
 
 - 崩溃/中断时，处于 `running`/`awaiting_approval` 的会话在下次运行中被恢复为 `interrupted`，保留待定工具的**不确定性**；**不会**自动重放不确定的副作用。
-- 会话的持久化模型是权威：`resume` 沿用会话已选模型；`--model` 覆盖只在成功获得会话锁、加载/恢复状态并确定可以开始之后生效。
+- `forge resume UUID` 与 `forge chat --session UUID` 共用交互入口，加载历史后等待新输入，不创建新会话，也不自动执行。仅接受一个完整 UUID，可附加 `--approval`、`--thinking` / `--expand-thinking`；不接受提示词或 run 专用选项，非 TTY 明确拒绝。
+- 会话的持久化模型是权威：`resume` 沿用会话已选模型，交互中可用 `/model` 更改。单次 `run --session UUID --model MODEL` 的覆盖只在成功获得会话锁、加载/恢复状态并确定可以开始之后生效。
 - 同一会话同一时刻只有一个活动运行；并发运行以 `busy` 失败，不会静默交错。
 
 ### 3.1 桌面界面使用速览

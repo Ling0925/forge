@@ -28,7 +28,8 @@ printf '%s' "$MY_PROVIDER_KEY" | forge config set --api-key-stdin
 forge models
 forge run '请先列出项目文件' --workspace /absolute/path --permission readonly
 forge sessions
-forge resume <session-uuid> '继续处理'
+forge resume <session-uuid> # 恢复交互会话
+forge run --session <session-uuid> '继续处理' # 单次续跑
 ```
 
 示例 URL 与模型均为占位符，请替换为你自行授权的真实配置。完整的端到端工作流、plan/build、
