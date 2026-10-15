@@ -52,6 +52,16 @@
 - 没有用真实密钥发模型请求；持续流式行为使用合成 renderer 输入。没有做桌面构建、安装或正式发布验收。
 - 原生复制依赖终端自身快捷键与剪贴板设置，Forge 不承诺跨所有宿主组合的 OS 剪贴板结果。
 
+## 配色迁移补齐
+
+- `src/cli/palette.ts` 是 CLI 唯一颜色 token 源，`theme.ts` 与 Ink `RichRow` 共用；不再存在实时/历史两套 diff 和上下文色板。
+- 保留 DESIGN.md 亮暗鼠尾草、灰阶、成功/警告/错误色，以及原 CLI 256 色 diff 底色/词级强调。普通正文和画布仍由用户终端决定。
+- 颜色能力从实际 UI 输出流读取，支持 24-bit/256/16 色；未知背景采用终端原生 ANSI 语义色。NO_COLOR、dumb 和单色模式不输出 SGR。
+- 审批输入缓存按 warning tone 构建；无色/单色输入点保持可见。第三方 Ink 继续负责布局和屏幕刷新，只有清洗后的文字与可信主题 SGR 进入 Text。
+- 新增 `palette.test.ts` 与 `ink-colors.test.ts`，在真实 Chromium/xterm 逐格对比前景/背景/粗体/反色：light/dark/system × 16/256/真彩 × 彩色/无色共 18 组；另验默认主题探测超时、选择器和审批。
+- 编译产物 PTY 测试扩展为无色、亮色、暗色三个启动场景，用临时 HOME/FORGE_HOME，直接断言真实鼠尾草 SGR，不仅断言文案。
+- 本次配色验证：`pnpm exec vitest run tests/cli/palette.test.ts tests/cli/ink-colors.test.ts tests/cli/theme-v2.test.ts tests/cli/diff-theme.test.ts tests/cli/ink-bundle.test.ts tests/cli/ink-view.test.ts tests/cli/ink-terminal.test.ts tests/cli/ink-xterm.test.ts tests/cli/format.test.ts tests/cli/tool-cards.test.ts tests/cli/context-footer.test.ts tests/cli/diff-accuracy.test.ts`：12 文件 / **118 项通过**；原主题对比度测试仍通过。限定严格类型检查、CLI 编译和产物语法检查通过，未执行全仓库测试。
+
 ## 测试与历史基线
 
 当前验证命令：
@@ -68,6 +78,6 @@ node --check dist/cli.mjs
 
 旧测试迁到 legacy fixture 后保留断言。旧 `terminal-v2-xterm.test.ts` 同时要求 inline scrollback 与后来已改为 alternate 的默认引擎，且在 inline 模式末段混合宽字符缩放仍失败；已完整归档为 `tests/cli/legacy/inline-xterm.scenario.ts`（不是通过的验收）。它被新 `ink-xterm.test.ts` 的实际 Ink 场景替代，没有把失败改成跳过后声称旧引擎已修复。
 
-本轮最终：`pnpm exec vitest run tests/cli` **65 文件 / 643 项通过**（包含新 Ink xterm 和隔离 HOME 的 PTY 启动退出）；CLI 编译、产物语法和限定严格类型检查均通过。没有运行桌面或整个仓库测试。
+上一轮迁移基线：`pnpm exec vitest run tests/cli` **65 文件 / 643 项通过**（包含新 Ink xterm 和隔离 HOME 的 PTY 启动退出）；CLI 编译、产物语法和限定严格类型检查均通过。没有运行桌面或整个仓库测试。
 
 此前阶段基线：阶段1 154项；阶段2 185项。
