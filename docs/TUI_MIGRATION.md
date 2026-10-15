@@ -4,11 +4,12 @@
 
 使用第三方 TUI 框架 **Ink 6.6.0（React + Yoga）** 替换自写屏幕引擎，逐步迁移，而不是一次同时重写会话、运行和终端协议。该版本兼容仓库现有 Node 22 / React 19；版本与传递依赖固定在 lockfile。
 
-默认 rich TTY 入口：`node-io.ts → TerminalReader → InkController → InkView`。
+默认 rich TTY 入口：`node-io.ts → TerminalReader → InkController → InkApp → InkView`。输入链路为 `InputDecoder → InputStore → focus reducer`，React 通过订阅获取不可变快照。
 
 - Ink `Box` / `Text` / `Static` 负责组件、布局、终端输出和差异刷新。
 - `TerminalUI`、`interactive.ts`、事件渲染器及 core/store 不改业务语义。
-- 第一阶段仍复用 `InputDecoder`、`Editor`、输入队列和 fresh approval 生命周期；输入只有一个所有者，不能同时启用另一套输入监听。
+- 输入只有一个 stream 所有者：`InputDecoder` 保留 UTF-8/按键/paste 来源；reader 保留输入队列与 fresh approval 生命周期。Ink 已不再依赖旧可变 `Editor`，改用不可变编辑状态、按焦点分派的 reducer 和 `InputStore`。
+- React `InkApp` 用 `useSyncExternalStore` 订阅输入；`Composer`、`ApprovalInput`、`Picker`、`SlashSuggestions` 分组件展示。一次只挂载当前焦点的输入组件，不叠加 Ink `useInput` 的第二个 stdin 监听。
 - 不再启用备用屏幕或鼠标捕获。已完成输出进入终端原生 scrollback，使用终端自身的滚动、选择、复制；旧的应用内鼠标选区、OSC52 自动复制和 Ctrl+G 复制模式不再是新界面的路径。
 - 运行中的 tail 仅显示有界预览，完成后完整内容进入 `Static`。不把预览裁切写回会话。
 - 普通 `run` / JSON / 管道模式不加载 Ink；单次运行的审批仍保留普通文本输入路径。
@@ -18,11 +19,11 @@
 
 “保留”表示继续由现有业务/渲染模块提供，不等于全部已经做过真实终端验收。
 
-| 功能域 | 现有功能 | 第一阶段实现 / 验收依据 |
+| 功能域 | 现有功能 | 当前实现 / 验收依据 |
 | --- | --- | --- |
 | 入口与会话 | 默认 chat、`chat --session`、`resume`；惰性建会话；历史展示 | 保留 interactive，默认 rich 适配器切换 Ink；`interactive.test.ts` |
 | 会话命令 | `/sessions /resume /new /fork /rename /archive /compact /diagnostics /export` | 保留命令路由；选择器用 Ink 展示 |
-| 输入编辑 | 中文/emoji 字素、左右/词移动、Home/End、删除、Ctrl+U/K/W、历史上下键 | 暂复用 Editor，Ink 绘制草稿与插入点；`ink-terminal.test.ts` |
+| 输入编辑 | 中文/emoji 字素、左右/词移动、Home/End、删除、Ctrl+U/K/W、历史上下键 | 不可变编辑函数 + React Composer；`ink-input.test.ts / ink-terminal.test.ts` |
 | 多行与粘贴 | 行尾反斜杠换行、bracketed paste、跨 chunk UTF-8、CRLF、粘贴不提交 | 暂复用解码器；专项覆盖多行、分段粘贴 |
 | Slash 菜单 | 输入过滤、上下选择、Tab 补全、Enter 提交、Esc 保留草稿 | Ink 菜单 + 现有命令目录；专项覆盖 |
 | 运行控制 | Enter 排队、Alt/Shift+Enter 插话、`/steer /queue`、失败暂停队列 | 保留 run queue；专项验证一次提交；`run-input.test.ts / run-controls.test.ts` |
@@ -44,7 +45,7 @@
 
 ## 分阶段路线
 
-### 阶段 1：框架与显示层（本轮）
+### 阶段 1：框架与显示层（已完成）
 
 - [x] 引入 Ink，隔离其渲染实例与生命周期。
 - [x] 默认 rich CLI 改用新适配器；非 TTY 保持旧纯文本路径。
@@ -55,9 +56,10 @@
 
 ### 阶段 2：输入组件与交互状态
 
-- [ ] 把 Editor/快捷键桥迁为可独立测试的 React 输入组件，评估成熟输入组件的多行/CJK/粘贴能力。
-- [ ] 保留显式 paste provenance；不能因使用框架通用 `useInput` 丢失审批防误触能力。
-- [ ] 组件化选择器的输入/焦点状态，保留业务层取消、任务刷新和草稿恢复。
+- [x] 将输入拆为 React 组件、不可变编辑函数、焦点 reducer；Ink 路径移除旧 `Editor` 和可变 `SlashMenu` 依赖。
+- [x] 保留显式 paste provenance；不启用第二个 stdin owner，批量输入同步处理、React 通知合并。
+- [x] 组件化选择器、审批与聊天焦点；取消/替换使用 picker ID 隔离，保留任务刷新、草稿/光标/历史恢复。
+- [ ] 后续评估第三方输入组件能否覆盖多行/CJK/跨 chunk 粘贴来源；本轮未新增输入依赖，不宣称全部输入逻辑由 Ink 提供。
 - [ ] 验收屏幕阅读器、系统主题探测和各平台快捷键差异。
 
 ### 阶段 3：清理与兼容性验收
@@ -68,6 +70,16 @@
 - [ ] 清理旧 UI 文档的过时快捷键，统一新交互文档。
 
 ## 验证记录
+
+### 阶段 2：输入/焦点拆分
+
+- `pnpm exec vitest run tests/cli/ink-input.test.ts tests/cli/ink-app.test.ts tests/cli/ink-terminal.test.ts tests/cli/ink-view.test.ts tests/cli/interactive.test.ts tests/cli/terminal.test.ts tests/cli/run-input.test.ts tests/cli/run-controls.test.ts tests/cli/approval-policy.test.ts tests/cli/tasks-integration.test.ts tests/cli/prompt-history.test.ts tests/cli/machine-golden-v2.test.ts tests/cli/resumed-session.test.ts tests/cli/terminal-v2.test.ts`：14 文件 **183 项通过**。
+- `pnpm exec vitest run tests/cli/ink-bundle.test.ts`：2 项通过；本轮总计 **185 项**。编译与语法检查同下。
+- `pnpm exec tsc --noEmit --strict --skipLibCheck --target ES2023 --module ESNext --moduleResolution Bundler --jsx react-jsx --esModuleInterop --exactOptionalPropertyTypes --noUncheckedIndexedAccess src/cli/ink/controller.ts src/cli/terminal.ts tests/cli/ink-input.test.ts tests/cli/ink-app.test.ts tests/cli/ink-terminal.test.ts tests/cli/ink-view.test.ts`：通过。
+- 新增 16 项纯编辑/焦点测试、1 项独立 React 订阅测试、2 项 reader 集成测试：旧 picker 迟到取消、审批抢占、草稿/光标恢复、确认粘贴标记保留、同步回调不覆盖新焦点、批量通知与连续提交、输入溢出、订阅不新增流监听。
+- 本轮未改变快捷键、流式历史裁切和原生复制策略。旧纯文本 Controller 只补输入操作接口；清理旧实现仍是后续阶段。
+
+### 阶段 1：显示层基线
 
 - 聚焦回归：`pnpm exec vitest run tests/cli/ink-terminal.test.ts tests/cli/ink-view.test.ts tests/cli/ink-bundle.test.ts tests/cli/interactive.test.ts tests/cli/terminal.test.ts tests/cli/run-input.test.ts tests/cli/run-controls.test.ts tests/cli/approval-policy.test.ts tests/cli/tasks-integration.test.ts tests/cli/prompt-history.test.ts tests/cli/machine-golden-v2.test.ts tests/cli/resumed-session.test.ts`。
 - 上述 12 个文件共 **154 项通过**。其中新增 Ink 输入/生命周期 14 项、展示组件 8 项、编译产物 2 项；组件覆盖 80×24、24×8、8×4、2×2 的动态区域边界。
