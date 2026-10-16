@@ -19,6 +19,7 @@ import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
 import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
+import { UsagePopover } from "./UsagePopover";
 import { useAutosizePrompt } from "./useAutosizePrompt";
 
 const taskSchema = z.object({
@@ -529,6 +530,13 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </select>
           </div>
           <div className="composer-toolbar-end">
+            <UsagePopover
+              events={
+                !isNew && state.activeSnapshot?.id === state.activeSessionId
+                  ? state.activeSnapshot.events
+                  : []
+              }
+            />
             <ModelPicker
               value={model}
               models={[state.settings?.model ?? "", ...availableModels]}
