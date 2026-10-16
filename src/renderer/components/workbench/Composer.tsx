@@ -344,8 +344,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           )}
         </div>
       )}
-      <div className="composer-inner composer-surface">
-        <div className="composer-prompt is-quiet">
+      <div className="composer-inner composer-split">
+        <div className="composer-prompt composer-surface is-quiet">
           <label htmlFor={promptId} className="visually-hidden">
             {isNew ? "新会话消息" : "继续任务"}
           </label>
@@ -362,7 +362,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             ref={promptRef}
             className="composer-textarea"
             value={prompt}
-            rows={isNew ? 4 : 2}
+            rows={1}
             placeholder={
               isNew
                 ? "想让 Forge 做点什么？输入任务描述或提问…"

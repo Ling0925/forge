@@ -183,7 +183,8 @@
   border-radius: var(--radius-composer);
   border-color: var(--border-control);
   box-shadow: var(--shadow-composer);
-  padding: var(--space-2-5);
+  padding: var(--space-1-5) var(--space-2-5);
+  gap: 0;
 }
 .wb-app .composer-surface:focus-within {
   border-color: var(--border-hover);
@@ -192,10 +193,16 @@
 .wb-app .composer-surface:has(.composer-textarea:focus-visible) {
   border-color: var(--focus-ring);
 }
-.wb-app .composer-fresh .composer-textarea {
-  min-height: var(--touch-min-target);
-  height: var(--touch-min-target);
+.wb-app .composer-split .composer-textarea {
+  min-height: 36px;
+  height: 36px;
   font-size: var(--text-base);
+}
+.wb-app .composer-split {
+  gap: var(--space-1);
+}
+.wb-app .composer-split .composer-toolbar {
+  padding: 0 var(--space-1);
 }
 .wb-app .composer-dropdown-trigger {
   background: transparent;

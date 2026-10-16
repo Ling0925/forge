@@ -167,7 +167,10 @@ Forge retains its own name, controls, session data and permission semantics.
   420px. Greeting: 22px / 1.4, weight 500. Main gutter: 32px, mobile: 16px.
   Desktop controls: 28px; small controls: 24px. Touch controls retain 44px.
   Overview is a flat two-column summary, not nested cards. Composer padding
-  10px, radius 12px, initial prompt height 44px; long prompts scroll internally.
+  6px vertical / 10px horizontal, radius 12px, initial prompt height 36px;
+  long prompts scroll internally. The input alone owns the border/background;
+  mode, permission, model and send controls live in a separate unbordered toolbar
+  below it with a 4px gap. Status and approval messages remain below the toolbar.
   Sidebar sessions: 28px desktop rows, 44px coarse-pointer targets. No inline
   time/model metadata. Completed sessions have no status dot; pending approval
   takes precedence. Hover/focus opens a 280px viewport-bounded metadata tooltip
