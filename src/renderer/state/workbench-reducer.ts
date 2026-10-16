@@ -1,6 +1,7 @@
 import type {
   ApprovalRequest,
   ErrorInfo,
+  Permission,
   PublicSettings,
   RunEvent,
   RunHandle,
@@ -9,13 +10,19 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SessionSummary,
-  Permission,
 } from "../shared-types";
 import { appendSessionEvent } from "./session-usage";
+import {
+  type PendingOutput,
+  mergeTranscript,
+  outputSaved,
+} from "./transcript-sync";
 // Draft-only ceiling. Stored snapshots are never sliced by this reducer.
 export const STREAMING_TEXT_LIMIT = 1000000;
 
 export interface ActiveRunState {
+  readonly pendingOutputs?: readonly PendingOutput[];
+  readonly streamStartMessage?: number;
   readonly permission?: Permission;
   readonly runId?: RunId | undefined;
   readonly sessionId: SessionId;
@@ -38,6 +45,7 @@ export interface WorkbenchState {
   readonly isSessionsLoading: boolean;
   readonly activeSessionId: SessionId | null;
   readonly activeSnapshot: SessionSnapshot | null;
+  readonly snapshotPersistedAt: string | null;
   readonly isSnapshotLoading: boolean;
   readonly activeRuns: Readonly<Record<string, ActiveRunState>>;
   readonly isSettingsOpen: boolean;
@@ -45,6 +53,24 @@ export interface WorkbenchState {
   readonly mobileTab: "task" | "inspector";
   readonly isMobileSidebarOpen: boolean;
   readonly alertError: string | null;
+}
+function retainOutput(
+  run: ActiveRunState,
+  snapshot: SessionSnapshot | null,
+  toolCallId?: string,
+) {
+  const pending = run.pendingOutputs ?? [];
+  if (!run.streamingText) return pending;
+  const output: PendingOutput = {
+    id: `${run.runId ?? "pending"}:${run.streamingTurn ?? 0}`,
+    text: run.streamingText,
+    truncated: Boolean(run.streamingTruncated),
+    afterMessage: run.streamStartMessage ?? 0,
+    toolCallId,
+  };
+  return outputSaved(output, snapshot?.id === run.sessionId ? snapshot : null)
+    ? pending
+    : [...pending, output];
 }
 export const initialWorkbenchState: WorkbenchState = {
   settings: null,
@@ -54,6 +80,7 @@ export const initialWorkbenchState: WorkbenchState = {
   isSessionsLoading: false,
   activeSessionId: null,
   activeSnapshot: null,
+  snapshotPersistedAt: null,
   isSnapshotLoading: false,
   activeRuns: {},
   isSettingsOpen: false,
@@ -147,6 +174,10 @@ export function workbenchReducer(
       return {
         ...state,
         activeSessionId: action.sessionId,
+        snapshotPersistedAt:
+          state.activeSessionId === action.sessionId
+            ? state.snapshotPersistedAt
+            : null,
         activeSnapshot:
           state.activeSnapshot?.id === action.sessionId
             ? state.activeSnapshot
@@ -159,28 +190,43 @@ export function workbenchReducer(
     case "SET_ACTIVE_SNAPSHOT": {
       const snap = action.snapshot;
       if (!snap)
-        return { ...state, activeSnapshot: null, isSnapshotLoading: false };
-      const fresherTranscript =
-        state.activeSnapshot?.id === snap.id &&
-        state.activeSnapshot.updatedAt > snap.updatedAt
-          ? state.activeSnapshot
-          : undefined;
+        return {
+          ...state,
+          activeSnapshot: null,
+          snapshotPersistedAt: null,
+          isSnapshotLoading: false,
+        };
       const run = state.activeRuns[snap.id];
       // Read completion is independent of transcript freshness. Terminal local
       // events may never reach disk (for example, a pre-acceptance busy failure).
-      const selectedSnapshot = fresherTranscript
-        ? {
-            ...fresherTranscript,
-            status:
-              run && active(run.status) ? run.status : fresherTranscript.status,
-          }
-        : snap;
+      const merged = mergeTranscript(
+        state.activeSnapshot,
+        snap,
+        state.snapshotPersistedAt,
+      );
+      const selectedSnapshot =
+        run && active(run.status) ? { ...merged, status: run.status } : merged;
       // A disk read can race a newly started controller. Never terminate it from a stale snapshot.
       const runs = { ...state.activeRuns };
-      if (run && !active(run.status)) delete runs[snap.id];
+      if (run) {
+        const pendingOutputs =
+          run.pendingOutputs?.filter(
+            (output) => !outputSaved(output, selectedSnapshot),
+          ) ?? [];
+        if (!active(run.status) && !pendingOutputs.length && !run.streamingText)
+          delete runs[snap.id];
+        else runs[snap.id] = { ...run, pendingOutputs };
+      }
       const next = { ...state, activeRuns: runs };
       return {
         ...next,
+        snapshotPersistedAt:
+          state.activeSessionId === snap.id
+            ? state.snapshotPersistedAt &&
+              state.snapshotPersistedAt > snap.updatedAt
+              ? state.snapshotPersistedAt
+              : snap.updatedAt
+            : state.snapshotPersistedAt,
         activeSnapshot:
           state.activeSessionId === snap.id
             ? selectedSnapshot
@@ -207,10 +253,15 @@ export function workbenchReducer(
         sessionId: action.sessionId,
         status: "running",
         streamingText: "",
+        pendingOutputs:
+          state.activeRuns[action.sessionId]?.pendingOutputs ?? [],
       });
     case "START_RUN_FAILED": {
       const runs = { ...state.activeRuns };
-      delete runs[action.sessionId];
+      const run = runs[action.sessionId];
+      if (run?.pendingOutputs?.length)
+        runs[action.sessionId] = { ...run, status: "failed" };
+      else delete runs[action.sessionId];
       return { ...state, activeRuns: runs };
     }
     case "START_RUN_RESOLVED": {
@@ -236,15 +287,31 @@ export function workbenchReducer(
         runId,
       };
       let next = run;
-      if (event.type === "run_started") next = { ...run, accepted: true, permission: event.permission };
+      if (event.type === "run_started")
+        next = { ...run, accepted: true, permission: event.permission };
       if (event.type === "permission_changed") {
-        const queue = (run.approvalQueue ?? (run.pendingApproval ? [run.pendingApproval] : []))
-          .filter(approval => event.permission === "workspace" || approval.childSessionId);
-        next = { ...run, permission: event.permission, approvalQueue: queue, pendingApproval: queue[0] };
+        const queue = (
+          run.approvalQueue ??
+          (run.pendingApproval ? [run.pendingApproval] : [])
+        ).filter(
+          (approval) =>
+            event.permission === "workspace" || approval.childSessionId,
+        );
+        next = {
+          ...run,
+          permission: event.permission,
+          approvalQueue: queue,
+          pendingApproval: queue[0],
+        };
       }
       if (event.type === "text_delta")
         next = {
           ...run,
+          streamStartMessage: run.streamingText
+            ? (run.streamStartMessage ?? 0)
+            : state.activeSnapshot?.id === event.sessionId
+              ? state.activeSnapshot.messages.length
+              : 0,
           streamingText:
             run.streamingText +
             event.text.slice(
@@ -258,6 +325,11 @@ export function workbenchReducer(
       if (event.type === "tool_started")
         next = {
           ...run,
+          pendingOutputs: retainOutput(
+            run,
+            state.activeSnapshot,
+            event.call.id,
+          ),
           streamingText: "",
           streamingTruncated: false,
           streamingTurn: (run.streamingTurn ?? 0) + 1,
@@ -285,6 +357,7 @@ export function workbenchReducer(
       if (event.type === "run_finished")
         next = {
           ...run,
+          pendingOutputs: retainOutput(run, state.activeSnapshot),
           status: event.status,
           streamingText: "",
           streamingTruncated: false,
@@ -349,7 +422,13 @@ export function workbenchReducer(
       return { ...state, isSettingsOpen: action.isOpen };
     case "OPEN_NEW_SESSION":
       return action.isOpen
-        ? { ...state, isNewSessionOpen: true, isSettingsOpen: false, mobileTab: "task", isMobileSidebarOpen: false }
+        ? {
+            ...state,
+            isNewSessionOpen: true,
+            isSettingsOpen: false,
+            mobileTab: "task",
+            isMobileSidebarOpen: false,
+          }
         : { ...state, isNewSessionOpen: false };
     case "SET_MOBILE_TAB":
       return { ...state, mobileTab: action.tab };

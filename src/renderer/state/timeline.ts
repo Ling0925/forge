@@ -20,6 +20,7 @@ export type TimelineItem =
       readonly id: string;
       readonly message: string;
       readonly timestamp: string;
+      readonly historical?: boolean;
     };
 
 function isHumanTurn(message: SessionSnapshot["messages"][number]): boolean {
@@ -212,15 +213,18 @@ export function reduceTimeline(
   if (alignedRuns && turn >= 0)
     appendErrors(runStarts[turn] ?? 0, snapshot.events.length);
   // Old error events cannot be positioned against messages. Keep explicitly historical evidence.
+  const historical: TimelineItem[] = [];
   snapshot.events.forEach((event, index) => {
     if (event.type === "error" && !placedErrors.has(index))
-      items.push({
+      historical.push({
         kind: "error",
         id: `error:${index}`,
         message: event.error.message,
         timestamp: event.timestamp,
+        historical: true,
       });
   });
-  timelineCache.set(snapshot, items);
-  return items;
+  const result = [...historical, ...items];
+  timelineCache.set(snapshot, result);
+  return result;
 }

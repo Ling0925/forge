@@ -43,9 +43,26 @@ export const StoredTranscript = memo(function StoredTranscript({
   // Phase per entry; a human turn starts a new phase. Tool rows carry a stable
   // phase and auto-fold once a later phase begins.
   const phases = phaseMarkers(timeline);
+  const historicalErrors = timeline.filter(
+    (item) => item.kind === "error" && item.historical,
+  );
   return (
     <>
+      {historicalErrors.length > 0 && (
+        <details className="message message-internal">
+          <summary>历史异常记录 · {historicalErrors.length}</summary>
+          {historicalErrors.map(
+            (item) =>
+              item.kind === "error" && (
+                <p key={item.id}>
+                  {new Date(item.timestamp).toLocaleString()} · {item.message}
+                </p>
+              ),
+          )}
+        </details>
+      )}
       {timeline.map((item, index) => {
+        if (item.kind === "error" && item.historical) return null;
         if (item.kind === "message" && item.origin === "agent_reconciliation")
           return (
             <details className="message message-internal" key={item.id}>
@@ -200,7 +217,7 @@ export function Transcript() {
   // Loading a snapshot for the selected session is itself arriving content,
   // and a fresh approval request is arriving content too: the card must be
   // pulled into view like any new message.
-  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.streamingText ?? ""}:${pendingApproval?.id ?? ""}`;
+  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.streamingText ?? ""}:${pendingApproval?.id ?? ""}`;
   const jumpToLatest = () => {
     navigation.current.reset();
     setHasNewContent(false);
@@ -269,6 +286,21 @@ export function Transcript() {
               />
             )
           )}
+          {run?.pendingOutputs?.map((output) => (
+            <article className="message message-assistant" key={output.id}>
+              <div className="message-header message-author">
+                Forge · 待同步输出
+              </div>
+              <div className="message-body">
+                {output.truncated && (
+                  <p className="wb-muted">
+                    实时预览已达显示上限，完整内容以同步后的记录为准。
+                  </p>
+                )}
+                <Markdown source={output.text} />
+              </div>
+            </article>
+          ))}
           {run?.streamingText && (
             <article className="message message-assistant message-streaming">
               <div className="message-header message-author">

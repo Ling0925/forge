@@ -161,6 +161,8 @@ Forge retains its own name, controls, session data and permission semantics.
 
 Active runs accept permission changes from the composer. The menu reflects the host-confirmed permission; unrestricted releases pending root approvals, while readonly rejects them. Existing processes are not interrupted. Plan mode and child permission ceilings still apply, and child approvals are not released by changing the parent run.
 
+Transcript synchronization separates persisted message freshness from live event timestamps. Tool transitions and terminal events retain unsynchronized assistant output until saved messages acknowledge it; failed partial output remains visible in memory. Unpositioned historical errors appear in a collapsed group before the conversation, never appended behind the newest answer.
+
 - Surfaces: warm paper light (`#faf9f6`, sidebar `#f2f1ed`) and charcoal dark
   (`#171716`, sidebar `#121211`, elevated `#222221`). Neutral borders, no blue cast.
 - Ink: light primary `#292824`, secondary `#68665f`; dark primary `#eeede8`,
