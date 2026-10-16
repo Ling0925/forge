@@ -21,6 +21,7 @@ import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
 import { UsagePopover } from "./UsagePopover";
 import { useAutosizePrompt } from "./useAutosizePrompt";
+import "./composer-activity.css";
 
 const taskSchema = z.object({
   workspace: z
@@ -385,6 +386,28 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         </div>
       )}
       <div className="composer-inner composer-split">
+        <div className="composer-activity-slot">
+          {running && (
+            <output
+              className={`composer-activity${run?.status === "running" && !run.isCancelling ? " is-executing" : ""}`}
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span className="composer-activity-bars" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              <span>
+                {run?.isCancelling
+                  ? "正在停止"
+                  : run?.status === "awaiting_approval"
+                    ? "等待审批"
+                    : "正在执行"}
+              </span>
+            </output>
+          )}
+        </div>
         <div className="composer-prompt composer-surface is-quiet">
           <label htmlFor={promptId} className="visually-hidden">
             {isNew ? "新会话消息" : "继续任务"}

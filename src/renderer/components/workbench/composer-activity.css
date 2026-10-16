@@ -1,0 +1,55 @@
+.composer-activity-slot {
+  min-height: 20px;
+}
+.composer-activity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 20px;
+  padding-inline: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 20px;
+  user-select: none;
+}
+.composer-activity-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: 15px;
+  height: 12px;
+  color: var(--accent-sage);
+}
+.composer-activity-bars > span {
+  width: 3px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  transform: scaleY(0.4);
+}
+.composer-activity.is-executing .composer-activity-bars > span {
+  animation: composer-activity-pulse 1.2s ease-in-out infinite;
+}
+.composer-activity.is-executing .composer-activity-bars > span:nth-child(2) {
+  animation-delay: -1s;
+}
+.composer-activity.is-executing .composer-activity-bars > span:nth-child(3) {
+  animation-delay: -0.8s;
+}
+@keyframes composer-activity-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-activity.is-executing .composer-activity-bars > span {
+    animation: none;
+    opacity: 1;
+  }
+}

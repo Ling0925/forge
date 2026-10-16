@@ -15,10 +15,11 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       import './src/renderer/styles/global.css';
       import './src/renderer/components/workbench/app.css';
       import './src/renderer/styles/workspace-theme.css';
-      function Harness(){const {calls,switchSession,toggleFailure,holdSend,acceptSend,finishRun,saveEffort,failEffort}=useWorkbench();return <>
+      function Harness(){const {calls,switchSession,toggleFailure,holdSend,acceptSend,finishRun,awaitApproval,saveEffort,failEffort}=useWorkbench();return <>
         <div className="wb-app"><Composer/></div><output id="calls">{calls}</output>
         <button onClick={switchSession}>切换</button><button onClick={toggleFailure}>切换失败</button>
         <button onClick={holdSend}>延迟发送</button><button onClick={acceptSend}>接收</button><button onClick={finishRun}>完成运行</button>
+        <button onClick={awaitApproval}>等待批准</button>
         <button onClick={saveEffort}>保存等级</button><button onClick={failEffort}>保存等级失败</button>
       </>}
       createRoot(document.getElementById('root')).render(<TestProvider><Harness/></TestProvider>);
@@ -56,6 +57,7 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
             failEffort:()=>pendingEffort.current.resolve(false),
             holdSend:()=>{hold.current=true;},
             acceptSend:()=>{setRuns({[id]:{accepted:true,status:'running',permission:'workspace'}});resolveSend.current?.(true);},
+            awaitApproval:()=>setRuns({[id]:{accepted:true,status:'awaiting_approval',permission:'workspace'}}),
             setRunPermission:async(permission)=>{setRuns(old=>({...old,[id]:{...old[id],permission}}));return true;},
             cancelRun:()=>setRuns({[id]:{accepted:true,status:'running',isCancelling:true}}),
             finishRun:()=>setRuns({[id]:{accepted:true,status:'completed'}}),
@@ -252,6 +254,41 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       await page.getByRole("button", { name: "接收", exact: true }).click();
       await expect.poll(() => action.getAttribute("aria-label")).toBe("取消");
       expect(await action.boundingBox()).toEqual(initial);
+      const activity = page.locator(".composer-activity");
+      expect(await activity.innerText()).toBe("正在执行");
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      const bar = activity.locator(".composer-activity-bars > span").first();
+      const frames = await bar.evaluate((node) => {
+        const animation = node.getAnimations()[0];
+        if (!animation) throw new Error("Missing activity animation");
+        animation.pause();
+        animation.currentTime = 0;
+        const first = getComputedStyle(node).transform;
+        animation.currentTime = 600;
+        const second = getComputedStyle(node).transform;
+        animation.play();
+        return [first, second];
+      });
+      expect(frames[0]).not.toBe(frames[1]);
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate((value) => {
+          document.documentElement.dataset.theme = value;
+        }, theme);
+        await page
+          .locator("form")
+          .screenshot({ path: `/tmp/forge-activity-${width}-${theme}.png` });
+      }
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      expect(
+        await bar.evaluate((node) => getComputedStyle(node).animationName),
+      ).toBe("none");
+      await page.getByRole("button", { name: "等待批准", exact: true }).click();
+      expect(await activity.innerText()).toBe("等待审批");
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      expect(
+        await bar.evaluate((node) => getComputedStyle(node).animationName),
+      ).toBe("none");
+      await page.getByRole("button", { name: "接收", exact: true }).click();
       await page.getByRole("button", { name: "执行权限", exact: true }).click();
       await page.getByRole("menuitemradio", { name: /^无限制/ }).click();
       await expect
@@ -273,9 +310,11 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       await action.click();
       await expect.poll(() => action.getAttribute("aria-busy")).toBe("true");
       expect(await action.boundingBox()).toEqual(initial);
+      expect(await activity.innerText()).toBe("正在停止");
       await page.getByRole("button", { name: "完成运行", exact: true }).click();
       await expect.poll(() => action.getAttribute("aria-label")).toBe("运行");
       expect(await action.boundingBox()).toEqual(initial);
+      expect(await activity.count()).toBe(0);
     }
   } finally {
     await browser.close();
