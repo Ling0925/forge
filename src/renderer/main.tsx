@@ -4,6 +4,7 @@ import { App } from "./components/workbench/App";
 import { PrimitiveShowcase } from "./showcase/PrimitiveShowcase";
 import "./styles/global.css";
 import "./styles/workspace-theme.css";
+import "./styles/settings-models.css";
 import { installWebHost } from "./web-host";
 
 function Root() {

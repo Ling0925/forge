@@ -1,0 +1,173 @@
+.model-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.model-catalog-search {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+.model-catalog-search .form-input {
+  min-width: 0;
+  font-size: var(--text-xs);
+  padding-inline: var(--space-2);
+}
+.model-catalog-search .btn {
+  flex-shrink: 0;
+}
+.model-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.model-catalog-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-height-lg);
+  padding: var(--space-1-5) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.model-catalog-option > span {
+  min-width: 0;
+}
+.model-catalog-option strong,
+.model-catalog-option small {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+.model-catalog-option strong {
+  font-weight: 500;
+}
+.model-catalog-option small {
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+}
+.model-catalog-option svg {
+  flex-shrink: 0;
+}
+.model-catalog-option:hover,
+.model-catalog-option[aria-pressed="true"] {
+  background: var(--surface-selected);
+}
+.model-catalog-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+.model-catalog-hint {
+  display: block;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--text-secondary);
+  padding-inline: var(--space-2);
+}
+.wb-app .composer-model-summary {
+  max-width: 220px;
+}
+.wb-app .composer-model-panel {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  overflow-y: auto;
+  max-height: min(380px, 60dvh);
+}
+.native-dialog:has(.settings-form) {
+  width: min(560px, calc(100vw - var(--space-6)));
+  border-radius: var(--radius-card);
+}
+.native-dialog:has(.settings-form) .modal-header {
+  padding: var(--space-3) var(--space-4);
+}
+.native-dialog .settings-groups {
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+  gap: var(--space-4);
+}
+.native-dialog .settings-scroll {
+  padding: var(--space-4);
+  overflow-y: auto;
+  min-height: 0;
+}
+.settings-form .settings-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.settings-form .settings-group {
+  gap: var(--space-3);
+  padding-bottom: 0;
+  flex-shrink: 0;
+}
+.settings-form .settings-group + .settings-group {
+  padding-top: var(--space-4);
+}
+.settings-form .settings-group-title {
+  font-size: var(--text-sm);
+}
+.settings-form .form-input,
+.settings-form .form-select,
+.settings-form .form-textarea {
+  font-size: var(--text-sm);
+}
+.settings-form .settings-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+.settings-pair > h3 {
+  grid-column: 1 / -1;
+}
+.settings-advanced {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-3);
+}
+.settings-advanced > summary {
+  font-size: var(--text-sm);
+  min-height: var(--control-height);
+}
+.settings-advanced > summary span {
+  color: var(--text-secondary);
+  margin-left: var(--space-2);
+  font-size: var(--text-xs);
+}
+.settings-advanced > .settings-group {
+  margin-top: var(--space-4);
+}
+.settings-form .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+}
+@media (max-width: 640px) {
+  .settings-form .settings-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .model-catalog-option,
+  .settings-advanced > summary {
+    min-height: var(--touch-min-target);
+  }
+  .wb-app .composer-model-summary {
+    max-width: 150px;
+  }
+}

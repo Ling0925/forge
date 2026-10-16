@@ -1,9 +1,6 @@
 import {
-  ArrowClockwise,
   ArrowUp,
   CaretDown,
-  Check,
-  Cpu,
   FolderOpen,
   Lightning,
   ShieldCheck,
@@ -20,6 +17,7 @@ import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
 import { ComposerDropdown } from "./ComposerDropdown";
+import { ModelPicker } from "./ModelPicker";
 
 const taskSchema = z.object({
   workspace: z
@@ -35,10 +33,6 @@ const taskSchema = z.object({
   model: settingsFields.model,
   prompt: z.string().trim().min(1).max(1000000),
 });
-function shortModelName(model: string): string {
-  const leaf = model.trim().split("/").filter(Boolean).at(-1) ?? "未选择模型";
-  return leaf.length > 28 ? `${leaf.slice(0, 27)}…` : leaf;
-}
 function readDrafts(): Readonly<Record<string, string>> {
   try {
     return {
@@ -482,104 +476,14 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </select>
           </div>
           <div className="composer-toolbar-end">
-            {/* Custom Model Picker */}
-            <details
-              className="composer-model composer-model-picker"
-              onToggle={(event) => {
-                if (event.currentTarget.open) {
-                  queueMicrotask(() =>
-                    document.getElementById("run-model")?.focus(),
-                  );
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape" || !event.currentTarget.open) return;
-                event.preventDefault();
-                event.stopPropagation();
-                event.currentTarget.open = false;
-                event.currentTarget.querySelector("summary")?.focus();
-              }}
-            >
-              <summary
-                className="composer-dropdown-trigger composer-model-summary"
-                title={model || "尚未选择模型"}
-              >
-                <Cpu size={12} className="composer-dropdown-icon" />
-                <span className="composer-dropdown-label">
-                  {shortModelName(model)}
-                </span>
-                <CaretDown size={10} className="composer-dropdown-caret" />
-              </summary>
-              <div className="composer-model-panel">
-                <div className="composer-model-search-box">
-                  <Input
-                    id="run-model"
-                    aria-label="模型 ID"
-                    value={model}
-                    onChange={(event) => setModel(event.target.value)}
-                    placeholder="输入或搜索模型 ID..."
-                    className="composer-model-search-input"
-                  />
-                  <button
-                    type="button"
-                    className="composer-model-refresh-btn"
-                    title={listing ? "正在刷新模型..." : "刷新模型目录"}
-                    disabled={listing}
-                    onClick={() => void listModels()}
-                  >
-                    <ArrowClockwise
-                      size={13}
-                      className={listing ? "spin" : ""}
-                    />
-                  </button>
-                </div>
-                {modelError && (
-                  <p className="composer-model-error">{modelError}</p>
-                )}
-                <div className="composer-model-list">
-                  {Array.from(
-                    new Set(
-                      [
-                        model,
-                        state.settings?.model,
-                        "cbcn/deepseek-v4.1-flash",
-                        ...availableModels,
-                      ].filter(Boolean) as string[],
-                    ),
-                  ).map((item) => {
-                    const isSelected = item === model;
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        className={`composer-model-option ${isSelected ? "is-selected" : ""}`}
-                        onClick={(e) => {
-                          setModel(item);
-                          const details = e.currentTarget.closest("details");
-                          if (details) details.open = false;
-                        }}
-                      >
-                        <div className="composer-model-option-text">
-                          <span className="composer-model-option-name">
-                            {shortModelName(item)}
-                          </span>
-                          <span className="composer-model-option-full">
-                            {item}
-                          </span>
-                        </div>
-                        {isSelected && (
-                          <Check
-                            size={12}
-                            weight="bold"
-                            className="composer-dropdown-check"
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </details>
+            <ModelPicker
+              value={model}
+              models={[state.settings?.model ?? "", ...availableModels]}
+              onSelect={setModel}
+              onRefresh={() => void listModels()}
+              loading={listing}
+              error={modelError}
+            />
             {running ? (
               <Button
                 type="button"

@@ -9,6 +9,7 @@ export function Dialog({
   onClose,
   children,
   initialFocus,
+  dismissible = true,
 }: {
   readonly title: string;
   readonly kicker?: string;
@@ -16,6 +17,7 @@ export function Dialog({
   readonly onClose: () => void;
   readonly children: ReactNode;
   readonly initialFocus?: string;
+  readonly dismissible?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const close = useRef(onClose);
@@ -40,7 +42,7 @@ export function Dialog({
       aria-label={title}
       onCancel={(e) => {
         e.preventDefault();
-        close.current();
+        if (dismissible) close.current();
       }}
     >
       <header className="modal-header">
@@ -54,6 +56,7 @@ export function Dialog({
           className="modal-close"
           onClick={onClose}
           aria-label="关闭面板"
+          disabled={!dismissible}
         >
           <X size={16} aria-hidden="true" />
         </Button>

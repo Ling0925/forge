@@ -168,6 +168,14 @@ Forge retains its own name, controls, session data and permission semantics.
   Desktop controls: 28px; small controls: 24px. Touch controls retain 44px.
   Overview is a flat two-column summary, not nested cards. Composer padding
   10px, radius 12px, initial prompt height 44px; long prompts scroll internally.
+  Model catalog: 300px popover, 12px labels, 32px desktop rows; search never
+  mutates selection until an item or explicit custom-ID action is activated.
+  Full IDs wrap and remain inspectable. Escape restores trigger focus; outside
+  pointer and focus exit dismiss. Empty/error/loading states stay visible.
+  Settings: 560px dialog, 16px body inset, 12px group gaps; appearance and budget
+  fields use two columns on desktop and one on phones. Advanced budget/browser
+  fields remain mounted in a collapsed disclosure. Save/list operations disable
+  edits and close until resolved, with visible busy feedback. Touch targets 44px.
   Mode/permission menus support arrow navigation, Home/End, Escape, Tab exit,
   pointer dismissal and focus restoration. Focus rings belong to the focused
   control; input focus uses one quiet container border, never nested rings.
