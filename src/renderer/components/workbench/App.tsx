@@ -39,26 +39,27 @@ function Workbench() {
   const pending = Object.values(state.activeRuns).filter(
     (r) => r.pendingApproval,
   ).length;
+  const backgroundPending = Object.values(state.activeRuns).filter(
+    (r) => r.pendingApproval && r.sessionId !== state.activeSessionId,
+  ).length;
   // Wide-screen inspector is on-demand (closed by default for a clean reading
   // surface) via the `.inspector-collapsed` shell class; the Inspector itself
   // stays mounted so tab/scroll/field state survives every toggle.
   const [inspectorCollapsed, setInspectorCollapsed] = useState(true);
   const [focusToken, setFocusToken] = useState(0);
-  const previousPending = useRef(0);
+  const previousBackgroundPending = useRef(0);
   // Stable anchor for focus restoration when the inspector's inner close
   // button (which lives inside the pane being hidden) is used.
   const detailsToggleRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
-    // A fresh pending approval must become visible: expand the details pane.
-    // Deliberately NO focus change here: the user may be typing in the
-    // composer, so discoverability comes from the auto-open pane plus the
-    // always-visible header pill. Only an explicit open (revealInspector)
-    // moves focus into the inspector.
-    if (pending > 0 && previousPending.current === 0) {
+    // Current-session approvals are already surfaced inline in the Transcript.
+    // Only auto-expand the inspector when a background task requires approval,
+    // avoiding unnecessary layout disruption for active reading.
+    if (backgroundPending > 0 && previousBackgroundPending.current === 0) {
       setInspectorCollapsed(false);
     }
-    previousPending.current = pending;
-  }, [pending]);
+    previousBackgroundPending.current = backgroundPending;
+  }, [backgroundPending]);
   const revealInspector = () => {
     setInspectorCollapsed(false);
     setMobileTab("inspector");
@@ -93,9 +94,15 @@ function Workbench() {
           <div className="wb-header-title">
             <h1
               title={isNew ? "新会话" : state.activeSnapshot?.title}
-              aria-label={isNew ? "新会话" : state.activeSnapshot?.title ?? "Forge 工作台"}
+              aria-label={
+                isNew
+                  ? "新会话"
+                  : (state.activeSnapshot?.title ?? "Forge 工作台")
+              }
             >
-              {isNew ? "新会话" : state.activeSnapshot?.title ?? "Forge 工作台"}
+              {isNew
+                ? "新会话"
+                : (state.activeSnapshot?.title ?? "Forge 工作台")}
             </h1>
           </div>
           <div className="wb-header-actions">
