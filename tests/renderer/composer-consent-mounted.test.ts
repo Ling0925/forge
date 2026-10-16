@@ -19,6 +19,7 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
       import {defaultPublicSettings} from './src/shared/schemas';
       import {initialWorkbenchState, workbenchReducer} from './src/renderer/state/workbench-reducer';
       import {Composer} from './src/renderer/components/workbench/Composer';
+      window.forge = {chooseWorkspace: async () => '/tmp/workspace'};
       const sessionA = ${JSON.stringify(sessionA)};
       const sessionB = ${JSON.stringify(sessionB)};
       const runId = ${JSON.stringify(runId)};
@@ -63,12 +64,13 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
           cancelRun: async () => {},
           openNewSession: setShowNew,
           selectSession: (sessionId) => {
+            setShowNew(false);
             dispatch({ type: 'SELECT_SESSION', sessionId });
             dispatch({ type: 'SET_ACTIVE_SNAPSHOT', snapshot: snapshot(sessionId) });
           },
           clearRun: (sessionId) => dispatch({ type: 'START_RUN_FAILED', sessionId }),
         };
-        return <><Composer /><button onClick={() => setShowNew(true)}>New task</button>{showNew && <Composer isNew />}</>;
+        return <><Composer isNew={showNew} /><button onClick={() => setShowNew(true)}>New task</button></>;
       }
       createRoot(document.getElementById('root')).render(<Harness/>);
     `,
@@ -259,42 +261,34 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     ).toMatchObject({ permission: "readonly", mode: "plan" });
 
     await page.getByRole("button", { name: "New task", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "新建任务" });
-    const picker = dialog.locator("details.composer-model-picker");
+    expect(await page.locator("dialog[open]").count()).toBe(0);
+    const fresh = page.getByRole("form", { name: "新会话输入" });
+    const picker = fresh.locator("details.composer-model-picker");
     const summary = picker.locator("summary");
     await summary.click();
     await expect.poll(() => picker.getAttribute("open")).not.toBeNull();
-    await dialog.locator("#new-model").press("Escape");
+    await fresh.locator("#run-model").press("Escape");
     expect(await picker.getAttribute("open")).toBeNull();
-    expect(await dialog.isVisible()).toBe(true);
-    expect(
-      await summary.evaluate((node) => node === document.activeElement),
-    ).toBe(true);
-    await summary.press("Escape");
-    await expect.poll(() => dialog.count()).toBe(0);
-    // Configured empty drafts still validate without creating a session.
-    await page.getByRole("button", { name: "New task", exact: true }).click();
-    const createButton = dialog.getByRole("button", {
-      name: "创建并运行",
-      exact: true,
-    });
-    const newPrompt = dialog.locator("#new-prompt");
+    expect(await fresh.isVisible()).toBe(true);
+    expect(await summary.evaluate((node) => node === document.activeElement)).toBe(true);
+    const createButton = fresh.getByRole("button", { name: "发送并开始会话", exact: true });
+    const newPrompt = fresh.locator("#new-prompt");
     const creates = () =>
       page.evaluate(
         () =>
           (window as unknown as { createSessionCalls: unknown[] })
             .createSessionCalls.length,
       );
-    expect(await createButton.isEnabled()).toBe(true);
-    await createButton.click();
-    expect(await dialog.getByRole("alert").isVisible()).toBe(true);
+    expect(await createButton.isDisabled()).toBe(true);
+    await fresh.evaluate((node) => (node as HTMLFormElement).requestSubmit());
+    expect(await fresh.getByRole("alert").isVisible()).toBe(true);
     expect(await creates()).toBe(0);
     expect(await calls()).toBe(2);
     await newPrompt.fill("configured new task");
     await createButton.click();
     await expect.poll(calls).toBe(3);
     expect(await creates()).toBe(1);
-    await expect.poll(() => dialog.count()).toBe(0);
+    await expect.poll(() => fresh.count()).toBe(0);
 
     await page.evaluate(() =>
       (
@@ -305,21 +299,15 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     );
     await page.getByRole("button", { name: "New task", exact: true }).click();
     expect(await createButton.isDisabled()).toBe(true);
-    expect(
-      await dialog
-        .getByText("请先在设置中配置 API，再创建或运行任务。", { exact: true })
-        .isVisible(),
-    ).toBe(true);
+    expect(await fresh.getByText("连接模型后即可开始对话。", { exact: false }).isVisible()).toBe(true);
     await newPrompt.fill("must not create a session");
     await createButton.evaluate((node) => (node as HTMLButtonElement).click());
     await newPrompt.press("Control+Enter");
-    await dialog
-      .locator("form")
-      .evaluate((node) => (node as HTMLFormElement).requestSubmit());
+    await fresh.evaluate((node) => (node as HTMLFormElement).requestSubmit());
     expect(await creates()).toBe(1);
     expect(await calls()).toBe(3);
-    await newPrompt.press("Escape");
-    await expect.poll(() => dialog.count()).toBe(0);
+    await selectSession(sessionB);
+    await expect.poll(() => fresh.count()).toBe(0);
     await page.evaluate(
       (id) =>
         (

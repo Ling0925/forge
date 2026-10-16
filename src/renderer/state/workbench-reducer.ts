@@ -54,7 +54,7 @@ export const initialWorkbenchState: WorkbenchState = {
   isSnapshotLoading: false,
   activeRuns: {},
   isSettingsOpen: false,
-  isNewSessionOpen: false,
+  isNewSessionOpen: true,
   mobileTab: "task",
   isMobileSidebarOpen: false,
   alertError: null,
@@ -149,6 +149,8 @@ export function workbenchReducer(
             ? state.activeSnapshot
             : null,
         isSnapshotLoading: true,
+        isNewSessionOpen: false,
+        mobileTab: "task",
         isMobileSidebarOpen: false,
       };
     case "SET_ACTIVE_SNAPSHOT": {
@@ -336,13 +338,10 @@ export function workbenchReducer(
         : state;
     }
     case "OPEN_SETTINGS":
-      // Modal invariant: settings and new-task are mutually exclusive.
-      return action.isOpen
-        ? { ...state, isSettingsOpen: true, isNewSessionOpen: false }
-        : { ...state, isSettingsOpen: false };
+      return { ...state, isSettingsOpen: action.isOpen };
     case "OPEN_NEW_SESSION":
       return action.isOpen
-        ? { ...state, isNewSessionOpen: true, isSettingsOpen: false }
+        ? { ...state, isNewSessionOpen: true, isSettingsOpen: false, mobileTab: "task", isMobileSidebarOpen: false }
         : { ...state, isNewSessionOpen: false };
     case "SET_MOBILE_TAB":
       return { ...state, mobileTab: action.tab };

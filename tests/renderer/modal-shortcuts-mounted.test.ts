@@ -27,7 +27,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
       import {Composer} from './src/renderer/components/workbench/Composer';
       import {Dialog} from './src/renderer/components/workbench/Dialog';
       import {Settings} from './src/renderer/components/workbench/Settings';
-      window.forge = { listModels: async () => [] };
+      window.forge = { listModels: async () => [], chooseWorkspace: async () => '/tmp/workspace' };
       function LocalRestoreDialog({open, onClose}) {
         return open
           ? <Dialog title="确认恢复文件" onClose={onClose}><p>确认恢复检查点？</p></Dialog>
@@ -41,7 +41,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
         });
         const [localOpen, setLocalOpen] = useState(false);
         const openSettings = (isOpen) => dispatch({type: 'OPEN_SETTINGS', isOpen});
-        const openNewSession = (isOpen) => dispatch({type: 'OPEN_NEW_SESSION', isOpen});
+        const openNewSession = (isOpen) => { dispatch({type: 'OPEN_NEW_SESSION', isOpen}); if(isOpen) requestAnimationFrame(() => document.getElementById('new-prompt')?.focus()); };
         window.testController = {
           state,
           openSettings,
@@ -114,7 +114,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
     await page.addScriptTag({ content: bundle.outputFiles[0]?.text ?? "" });
 
     const SETTINGS = "设置 · 模型与执行";
-    const NEW_TASK = "新建任务";
+    const NEW_TASK = "新建会话";
     const PALETTE = "命令与会话导航";
     const LOCAL_RESTORE = "确认恢复文件";
 
@@ -184,11 +184,14 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
     await page.keyboard.press("Escape");
     await expectOpen([]);
     await pressMod("n");
-    await expectOpen([NEW_TASK]);
+    await expectOpen([]);
+    expect(await page.getByRole("form", { name: "新会话输入" }).isVisible()).toBe(true);
     await pressMod("k");
-    expect(await openLabels()).toEqual([NEW_TASK]);
+    await expectOpen([PALETTE]);
+    await page.keyboard.press("Escape");
+    await expectOpen([]);
     await pressMod("Comma");
-    expect(await openLabels()).toEqual([NEW_TASK]);
+    await expectOpen([SETTINGS]);
     await page.keyboard.press("Escape");
     await expectOpen([]);
 
@@ -209,12 +212,9 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
     await paletteButton.click();
     await expectOpen([PALETTE]);
     await page.getByRole("button", { name: NEW_TASK, exact: true }).click();
-    await expectOpen([NEW_TASK]);
-    await page.keyboard.press("Escape");
     await expectOpen([]);
-    // The handoff must hand the modal role back to the opener exactly once the
-    // handed-off dialog closes, not merely to "some" focusable node.
-    await expectFocusOnPaletteOpener();
+    expect(await page.getByRole("form", { name: "新会话输入" }).isVisible()).toBe(true);
+    expect(await page.locator("#new-prompt").evaluate((node) => node === document.activeElement)).toBe(true);
 
     // 5. A local native panel dialog (same Dialog as MCP / restore / rename)
     //    blocks every global modal shortcut until dismissed.

@@ -85,7 +85,7 @@ function useController() {
       if (generation !== sessionListGeneration.current) return;
       dispatch({ type: "SET_SESSIONS", sessions });
       const first = sessions[0];
-      if (first && !current.current.activeSessionId)
+      if (first && !current.current.activeSessionId && !current.current.isNewSessionOpen)
         await selectSession(first.id);
     } catch (err) {
       fail(err);
@@ -176,13 +176,15 @@ function useController() {
       return false;
     }
   };
-  const createSession = async (input: CreateSessionInput) => {
+  const createSession = async (input: CreateSessionInput, select = true) => {
     try {
       const snapshot = await window.forge.createSession(
         createSessionInputSchema.parse(input),
       );
-      dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
-      dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
+      if (select) {
+        dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
+        dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
+      }
       await loadSessions();
       return snapshot;
     } catch (err) {
@@ -300,8 +302,10 @@ function useController() {
     },
     openSettings: (isOpen: boolean) =>
       dispatch({ type: "OPEN_SETTINGS", isOpen }),
-    openNewSession: (isOpen: boolean) =>
-      dispatch({ type: "OPEN_NEW_SESSION", isOpen }),
+    openNewSession: (isOpen: boolean) => {
+      dispatch({ type: "OPEN_NEW_SESSION", isOpen });
+      if (isOpen) requestAnimationFrame(() => document.getElementById("new-prompt")?.focus());
+    },
     setMobileTab: (tab: "task" | "inspector") =>
       dispatch({ type: "SET_MOBILE_TAB", tab }),
     setMobileSidebar: (isOpen: boolean) =>

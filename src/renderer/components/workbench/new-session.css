@@ -1,0 +1,62 @@
+/* The new conversation is a workspace view, not a setup dialog. */
+.wb-new-session-intro[hidden] { display: none; }
+.wb-new-session-intro {
+  width: min(720px, calc(100% - 48px));
+  margin: auto auto 28px;
+}
+.wb-new-session-intro h2 {
+  margin: 0 0 12px;
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+.wb-new-session-intro p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
+.wb-new-session .composer-fresh {
+  flex: 0 0 auto;
+  width: min(720px, calc(100% - 48px));
+  margin: 0 auto auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.composer-project { position: relative; margin-bottom: 12px; }
+.composer-project-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.composer-project-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-project-trigger:hover { background: var(--surface-hover); color: var(--text-primary); }
+.composer-project-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  width: min(560px, calc(100vw - 56px));
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-body);
+  box-shadow: 0 12px 36px #0002;
+}
+.composer-fresh .composer-textarea { min-height: 112px; }
+@media (max-width: 640px) {
+  .wb-new-session-intro { width: calc(100% - 32px); margin-top: auto; }
+  .wb-new-session .composer-fresh { width: calc(100% - 32px); margin-bottom: auto; }
+  .composer-project-panel .composer-workspace-row { flex-wrap: wrap; }
+}
+@media (max-height: 600px) {
+  .wb-new-session { overflow-y: auto; }
+  .wb-new-session-intro { margin-top: 24px; margin-bottom: 16px; }
+  .wb-new-session .composer-fresh { margin-bottom: 24px; }
+}

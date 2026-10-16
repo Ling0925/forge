@@ -47,7 +47,7 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", key);
   }, [open]);
   const actions = [
-    { id: "new", label: "新建任务", run: () => openNewSession(true) },
+    { id: "new", label: "新建会话", run: () => openNewSession(true) },
     { id: "settings", label: "打开设置", run: () => openSettings(true) },
     ...(state.activeSessionId
       ? [

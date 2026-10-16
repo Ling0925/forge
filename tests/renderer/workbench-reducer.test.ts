@@ -233,8 +233,8 @@ it("applies live plans without waiting for a tool finish and keeps child selecti
   expect(child.activeSnapshot?.status).toBe("completed");
   expect(child.activeRuns[sessionA]?.status).toBe("running");
 });
-describe("modal exclusivity invariant", () => {
-  it("never leaves settings and new-task open at the same time", () => {
+describe("inline new conversation navigation", () => {
+  it("keeps the new view behind settings so closing settings does not lose it", () => {
     const settingsOpen = workbenchReducer(initialWorkbenchState, {
       type: "OPEN_SETTINGS",
       isOpen: true,
@@ -251,13 +251,16 @@ describe("modal exclusivity invariant", () => {
       isOpen: true,
     });
     expect(andSettings.isSettingsOpen).toBe(true);
-    expect(andSettings.isNewSessionOpen).toBe(false);
+    expect(andSettings.isNewSessionOpen).toBe(true);
     const closed = workbenchReducer(andSettings, {
       type: "OPEN_SETTINGS",
       isOpen: false,
     });
     expect(closed.isSettingsOpen).toBe(false);
-    expect(closed.isNewSessionOpen).toBe(false);
+    expect(closed.isNewSessionOpen).toBe(true);
+    const selected = workbenchReducer(closed, { type: "SELECT_SESSION", sessionId: sessionA });
+    expect(selected.isNewSessionOpen).toBe(false);
+    expect(selected.mobileTab).toBe("task");
   });
   it("closing one modal never closes the other on its own", () => {
     const newOpen = workbenchReducer(initialWorkbenchState, {

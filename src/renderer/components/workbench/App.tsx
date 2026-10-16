@@ -14,6 +14,7 @@ import { Sidebar } from "./Sidebar";
 import { Transcript } from "./Transcript";
 import "./workbench.css";
 import "./app.css";
+import "./new-session.css";
 import "../../styles/motion.css";
 function Workbench() {
   const {
@@ -34,6 +35,7 @@ function Workbench() {
     onSettings: openSettings,
     onEscape: () => setMobileSidebar(false),
   });
+  const isNew = state.isNewSessionOpen || !state.activeSessionId;
   const pending = Object.values(state.activeRuns).filter(
     (r) => r.pendingApproval,
   ).length;
@@ -85,15 +87,15 @@ function Workbench() {
         <Button onClick={() => openSettings(true)}>设置</Button>
       </nav>
       <Sidebar />
-      <main className="workbench-main">
+      <main className={`workbench-main${isNew ? " wb-new-session" : ""}`}>
         <header className="workbench-task-header">
           <CommandPalette />
           <div className="wb-header-title">
             <h1
-              title={state.activeSnapshot?.title}
-              aria-label={state.activeSnapshot?.title ?? "Forge 工作台"}
+              title={isNew ? "新会话" : state.activeSnapshot?.title}
+              aria-label={isNew ? "新会话" : state.activeSnapshot?.title ?? "Forge 工作台"}
             >
-              {state.activeSnapshot?.title ?? "Forge 工作台"}
+              {isNew ? "新会话" : state.activeSnapshot?.title ?? "Forge 工作台"}
             </h1>
           </div>
           <div className="wb-header-actions">
@@ -122,7 +124,7 @@ function Workbench() {
             >
               <Info size={16} weight="regular" />
             </button>
-            <SessionActions key={state.activeSessionId ?? "none"} />
+            {!isNew && <SessionActions key={state.activeSessionId ?? "none"} />}
             <IconButton
               icon={<Gear size={16} weight="regular" />}
               size="sm"
@@ -152,8 +154,12 @@ function Workbench() {
             }
           />
         )}
-        <Transcript />
-        {state.activeSessionId && <Composer />}
+        {!isNew && <Transcript />}
+        <div className="wb-new-session-intro" hidden={!isNew}>
+          <h2>从这里开始。</h2>
+          <p>描述你想完成的工作，或直接问一个问题。</p>
+        </div>
+        <Composer isNew={isNew} />
       </main>
       <Inspector
         focusToken={focusToken}
@@ -167,7 +173,6 @@ function Workbench() {
         }}
       />
       <Settings />
-      <Composer isNew />
     </div>
   );
 }

@@ -73,10 +73,10 @@ export function Sidebar() {
               openNewSession(true);
               setMobileSidebar(false);
             }}
-            title="新建任务 (Ctrl+N / Cmd+N)"
-            aria-label="新建任务"
+            title="新建会话 (Ctrl+N / Cmd+N)"
+            aria-label="新建会话"
           >
-            新建任务
+            新建会话
           </Button>
         </div>
 
@@ -117,7 +117,7 @@ export function Sidebar() {
           <p className="wb-muted sidebar-empty">暂无历史任务</p>
         ) : (
           filtered.map((session) => {
-            const isActive = session.id === state.activeSessionId;
+            const isActive = !state.isNewSessionOpen && session.id === state.activeSessionId;
             const run = state.activeRuns[session.id];
             const hasPendingApproval = Boolean(run?.pendingApproval);
             const currentStatus = run?.status ?? session.status;
