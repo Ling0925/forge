@@ -317,9 +317,12 @@ export function ToolDisclosure({
   const parsedParams = parseParams(parameters);
 
   // Total added/removed lines across this tool's file changes, for the header.
+  // Counts come from the recorded patch (full originals); an unknown count is
+  // skipped rather than reported as zero.
   const diffTotals = (changes ?? []).reduce(
     (total, change) => {
-      const stats = diffStats(change.before, change.after);
+      const stats = diffStats(change);
+      if (!stats) return total;
       return {
         added: total.added + stats.added,
         removed: total.removed + stats.removed,

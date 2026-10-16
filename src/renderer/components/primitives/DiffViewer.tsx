@@ -1,16 +1,18 @@
 import { CaretRight, FileCode } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FileChange } from "../../shared-types";
 import "./code-diff.css";
 
 /** A diff previews this many leading lines until the user expands it. */
 export const DIFF_PREVIEW_LINES = 10;
-/** Unchanged lines kept above and below each change; the rest is collapsed. */
+/** Unchanged lines kept above and below each change in the preview fallback. */
 export const DIFF_CONTEXT_LINES = 5;
 /** Bound the rendered rows so a pathological diff cannot flood the DOM. */
 const MAX_DIFF_ROWS = 2000;
-/** Bound the alignment work; larger changed regions fall back to a block. */
+/** Bound the fallback alignment work; larger regions degrade to a block. */
 const LCS_CELL_LIMIT = 1_000_000;
+
+type Patch = NonNullable<FileChange["patch"]>;
 
 export interface DiffViewerProps {
   readonly change?: FileChange;
@@ -21,16 +23,61 @@ export interface DiffViewerProps {
   readonly truncated?: boolean;
   /** Leading lines shown while collapsed; 0 disables the preview. */
   readonly previewLines?: number;
-  /** Unchanged context lines kept around each change. */
+  /** Unchanged context lines kept around each change (preview fallback only). */
   readonly contextLines?: number;
   readonly className?: string;
 }
 
-/** Added/removed line counts for a header summary, computed from the real diff. */
+interface DiffLineItem {
+  readonly id: number;
+  readonly type: "neutral" | "added" | "removed" | "gap";
+  readonly beforeNumber?: number;
+  readonly afterNumber?: number;
+  readonly text: string;
+  /** Only on gap rows: how many unchanged lines were skipped. */
+  readonly skipped?: number;
+}
+
+interface DiffRow {
+  readonly type: "neutral" | "added" | "removed";
+  readonly beforeNumber?: number;
+  readonly afterNumber?: number;
+  readonly text: string;
+}
+
+interface DiffModel {
+  readonly lines: readonly DiffLineItem[];
+  /** Exact +/- counts when known, otherwise null (unknown, never assumed zero). */
+  readonly stats: { readonly added: number; readonly removed: number } | null;
+  /** Shown when there are no rows: a real no-op or an unavailable diff. */
+  readonly empty: string | null;
+  readonly truncated: boolean;
+}
+
+/**
+ * Added/removed line counts for a header summary. Prefers the recorded patch
+ * (computed from full originals); falls back to the previews only when they are
+ * complete. Returns null when the true counts are unknown.
+ */
 export function diffStats(
+  change: FileChange,
+): { readonly added: number; readonly removed: number } | null {
+  const patch = change.patch;
+  if (patch) {
+    return patch.status !== "unavailable" &&
+      patch.added !== undefined &&
+      patch.removed !== undefined
+      ? { added: patch.added, removed: patch.removed }
+      : null;
+  }
+  if (change.truncated) return null;
+  return previewStats(change.before, change.after);
+}
+
+function previewStats(
   before: string | null,
   after: string | null,
-): { readonly added: number; readonly removed: number } {
+): { readonly added: number; readonly removed: number } | null {
   if (before === null && after === null) return { added: 0, removed: 0 };
   if (before === null) return { added: countLines(after ?? ""), removed: 0 };
   if (after === null) return { added: 0, removed: countLines(before ?? "") };
@@ -48,27 +95,60 @@ function countLines(text: string): number {
   return text === "" ? 0 : text.split("\n").length;
 }
 
-interface DiffRow {
-  readonly type: "neutral" | "added" | "removed";
-  readonly beforeNumber?: number;
-  readonly afterNumber?: number;
-  readonly text: string;
-}
-
-interface DiffLineItem {
-  readonly id: number;
-  readonly type: "neutral" | "added" | "removed" | "gap";
-  readonly beforeNumber?: number;
-  readonly afterNumber?: number;
-  readonly text: string;
-  /** Only on gap rows: how many unchanged lines were skipped. */
-  readonly skipped?: number;
+/** Render the recorded patch hunks; each already carries its context window. */
+function rowsFromPatch(patch: Patch): DiffModel {
+  const lines: DiffLineItem[] = [];
+  let id = 0;
+  let previousOldEnd: number | undefined;
+  for (const hunk of patch.hunks) {
+    if (previousOldEnd !== undefined) {
+      const skipped = hunk.oldStart - previousOldEnd;
+      if (skipped > 0) lines.push({ id: id++, type: "gap", text: "", skipped });
+    }
+    let oldLine = hunk.oldStart;
+    let newLine = hunk.newStart;
+    for (const item of hunk.lines) {
+      const text = item.text.endsWith("\n")
+        ? item.text.slice(0, -1)
+        : item.text;
+      if (item.op === "delete") {
+        lines.push({ id: id++, type: "removed", beforeNumber: oldLine, text });
+        oldLine += 1;
+      } else if (item.op === "insert") {
+        lines.push({ id: id++, type: "added", afterNumber: newLine, text });
+        newLine += 1;
+      } else {
+        lines.push({
+          id: id++,
+          type: "neutral",
+          beforeNumber: oldLine,
+          afterNumber: newLine,
+          text,
+        });
+        oldLine += 1;
+        newLine += 1;
+      }
+    }
+    previousOldEnd = oldLine;
+  }
+  const stats =
+    patch.added !== undefined && patch.removed !== undefined
+      ? { added: patch.added, removed: patch.removed }
+      : null;
+  const truncated = patch.status === "truncated";
+  const empty =
+    lines.length > 0
+      ? null
+      : patch.status === "unavailable"
+        ? "（精确差异不可用：内容超出计算预算）"
+        : "（无文本改动）";
+  return { lines, stats, empty, truncated };
 }
 
 /**
- * Line-level alignment. A common prefix/suffix is trimmed first so a local edit
- * does not mark every following line as changed, then the middle is aligned with
- * an LCS table (bounded) so a one-line insertion stays a one-line change.
+ * Line-level alignment for the preview fallback. A common prefix/suffix is
+ * trimmed first so a local edit does not mark every following line as changed,
+ * then the middle is aligned with a bounded LCS so an insertion stays one line.
  */
 function alignLines(
   beforeLines: readonly string[],
@@ -201,10 +281,7 @@ function withContext(
     const to = Math.min(rows.length - 1, index + context);
     for (let k = from; k <= to; k += 1) keep[k] = true;
   });
-  if (!changed)
-    return rows.length
-      ? [{ id: 0, type: "neutral", text: "（无行级差异）" }]
-      : [];
+  if (!changed) return [];
   const items: DiffLineItem[] = [];
   let skipped = 0;
   rows.forEach((row, index) => {
@@ -219,25 +296,41 @@ function withContext(
   return items;
 }
 
-function computeSimpleDiff(
+/** Fallback model built from the (possibly truncated) before/after previews. */
+function rowsFromPreview(
   before: string | null,
   after: string | null,
   context: number,
-): { readonly lines: readonly DiffLineItem[]; readonly truncated: boolean } {
+  sourceTruncated: boolean,
+): DiffModel {
   const finish = (
     rows: readonly DiffRow[],
-    truncated: boolean,
-  ): {
-    readonly lines: readonly DiffLineItem[];
-    readonly truncated: boolean;
-  } => {
+    alignTruncated: boolean,
+  ): DiffModel => {
     const items = withContext(rows, context);
-    return items.length > MAX_DIFF_ROWS
-      ? { lines: items.slice(0, MAX_DIFF_ROWS), truncated: true }
-      : { lines: items, truncated };
+    const lines =
+      items.length > MAX_DIFF_ROWS ? items.slice(0, MAX_DIFF_ROWS) : items;
+    return {
+      lines,
+      stats: previewStats(before, after),
+      empty:
+        lines.length > 0
+          ? null
+          : sourceTruncated
+            ? "（差异内容已截断，无法显示行级对比）"
+            : "（无文本改动）",
+      truncated:
+        sourceTruncated || alignTruncated || items.length > MAX_DIFF_ROWS,
+    };
   };
 
-  if (before === null && after === null) return { lines: [], truncated: false };
+  if (before === null && after === null)
+    return {
+      lines: [],
+      stats: { added: 0, removed: 0 },
+      empty: null,
+      truncated: false,
+    };
   if (before === null)
     return finish(
       (after ?? "").split("\n").map((text, idx) => ({
@@ -271,9 +364,18 @@ export function DiffViewer({
   contextLines = DIFF_CONTEXT_LINES,
   className = "",
 }: DiffViewerProps) {
-  const diff = computeSimpleDiff(before, after, contextLines);
-  const lines = diff.lines;
+  // Prefer the recorded patch: it is computed from the full originals, so a
+  // change beyond the 8192-character before/after preview is still shown. Only
+  // fall back to the previews when no patch was recorded.
+  const model = useMemo<DiffModel>(
+    () =>
+      change?.patch
+        ? rowsFromPatch(change.patch)
+        : rowsFromPreview(before, after, contextLines, truncated),
+    [change, before, after, contextLines, truncated],
+  );
   const [expanded, setExpanded] = useState(false);
+  const lines = model.lines;
   const preview = previewLines > 0 ? previewLines : lines.length;
   const visible = expanded ? lines : lines.slice(0, preview);
   const hidden = lines.length - visible.length;
@@ -289,7 +391,7 @@ export function DiffViewer({
           <FileCode size={16} weight="regular" aria-hidden="true" />
           <span>{path}</span>
         </div>
-        <div>
+        <div className="diff-header-meta">
           {isSuggested ? (
             <span className="diff-badge-suggested">建议差异</span>
           ) : (
@@ -301,6 +403,15 @@ export function DiffViewer({
         <div
           style={{ display: "flex", flexDirection: "column", width: "100%" }}
         >
+          {lines.length === 0 && (
+            <div className="diff-line diff-line-neutral">
+              <span className="diff-line-number" />
+              <span className="diff-marker" />
+              <span className="diff-content">
+                {model.empty ?? "（无文本改动）"}
+              </span>
+            </div>
+          )}
           {visible.map((item) => {
             if (item.type === "gap")
               return (
@@ -349,11 +460,11 @@ export function DiffViewer({
           {expanded ? "收起差异" : `展开全部差异（还有 ${hidden} 行）`}
         </button>
       )}
-      {(truncated || diff.truncated) && (
+      {(truncated && !change?.patch) || model.truncated ? (
         <div className="diff-truncated-notice">
           提示：文件差异内容过大，已截断显示。
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

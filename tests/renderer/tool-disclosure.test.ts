@@ -6,6 +6,7 @@ import {
   ToolDisclosure,
   type ToolDisclosureProps,
 } from "../../src/renderer/components/primitives/ToolDisclosure";
+import { createDiffPatch } from "../../src/shared/diff";
 
 const render = (props: ToolDisclosureProps) =>
   renderToStaticMarkup(createElement(ToolDisclosure, props));
@@ -133,6 +134,34 @@ describe("tool disclosure row", () => {
     // 3 added (new one, new two, extra), 2 removed (old one, old two).
     expect(html).toContain('class="tool-diff-stat tool-diff-added">+3<');
     expect(html).toContain('class="tool-diff-stat tool-diff-removed">-2<');
+  });
+
+  it("prefers the recorded patch over the truncated 8192-character previews", () => {
+    // A late edit: the before/after previews (first 8192 chars) are identical,
+    // which previously produced a bogus "no line-level difference".
+    const beforeLines = Array.from({ length: 1800 }, (_, i) => `line ${i}`);
+    const beforeFull = beforeLines.join("\n");
+    const afterFull = beforeFull.replace("line 1700", "changed late");
+    const preview = beforeFull.slice(0, 8192);
+    const html = render({
+      toolName: "edit_file",
+      target: "src/a.ts",
+      status: "completed",
+      changes: [
+        {
+          path: "src/a.ts",
+          kind: "modified",
+          before: preview,
+          after: preview,
+          truncated: true,
+          patch: createDiffPatch(beforeFull, afterFull),
+        },
+      ],
+    });
+    expect(html).not.toContain("无行级差异");
+    expect(html).toContain("changed late");
+    expect(html).toContain('class="tool-diff-stat tool-diff-added">+1<');
+    expect(html).toContain('class="tool-diff-stat tool-diff-removed">-1<');
   });
 
   it("renders an object tool result as parsed rows, not raw JSON", () => {
