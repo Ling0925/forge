@@ -10,7 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { FileChange } from "../../shared-types";
-import { DiffViewer } from "./DiffViewer";
+import { DiffViewer, diffStats } from "./DiffViewer";
 import "./tool-disclosure.css";
 
 export interface ToolDisclosureProps {
@@ -316,6 +316,18 @@ export function ToolDisclosure({
 
   const parsedParams = parseParams(parameters);
 
+  // Total added/removed lines across this tool's file changes, for the header.
+  const diffTotals = (changes ?? []).reduce(
+    (total, change) => {
+      const stats = diffStats(change.before, change.after);
+      return {
+        added: total.added + stats.added,
+        removed: total.removed + stats.removed,
+      };
+    },
+    { added: 0, removed: 0 },
+  );
+
   const statusLabel =
     status === "running" ? "执行中" : status === "completed" ? "完成" : "失败";
 
@@ -344,6 +356,16 @@ export function ToolDisclosure({
           )}
         </div>
         <div className="tool-disclosure-meta">
+          {diffTotals.added > 0 && (
+            <span className="tool-diff-stat tool-diff-added">
+              +{diffTotals.added}
+            </span>
+          )}
+          {diffTotals.removed > 0 && (
+            <span className="tool-diff-stat tool-diff-removed">
+              -{diffTotals.removed}
+            </span>
+          )}
           {durationMs !== undefined && (
             <span className="tool-disclosure-time">
               {formatDuration(durationMs)}
@@ -426,10 +448,14 @@ export function ToolDisclosure({
                   </div>
                 </div>
               )}
-              <div className="tool-section">
-                <span className="tool-section-title">参数输入</span>
-                <ParameterFields parameters={parsedParams} />
-              </div>
+              {/* A file edit shows only the diff: its raw before/after argument
+                  rows ("原内容"/"新内容") would just duplicate the comparison. */}
+              {!writesFiles && (
+                <div className="tool-section">
+                  <span className="tool-section-title">参数输入</span>
+                  <ParameterFields parameters={parsedParams} />
+                </div>
+              )}
 
               {exitCode !== undefined && exitCode !== null && (
                 <div className="tool-section">

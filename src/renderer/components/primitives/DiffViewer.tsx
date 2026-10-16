@@ -26,6 +26,28 @@ export interface DiffViewerProps {
   readonly className?: string;
 }
 
+/** Added/removed line counts for a header summary, computed from the real diff. */
+export function diffStats(
+  before: string | null,
+  after: string | null,
+): { readonly added: number; readonly removed: number } {
+  if (before === null && after === null) return { added: 0, removed: 0 };
+  if (before === null) return { added: countLines(after ?? ""), removed: 0 };
+  if (after === null) return { added: 0, removed: countLines(before ?? "") };
+  const { rows } = alignLines(before.split("\n"), after.split("\n"));
+  let added = 0;
+  let removed = 0;
+  for (const row of rows) {
+    if (row.type === "added") added += 1;
+    else if (row.type === "removed") removed += 1;
+  }
+  return { added, removed };
+}
+
+function countLines(text: string): number {
+  return text === "" ? 0 : text.split("\n").length;
+}
+
 interface DiffRow {
   readonly type: "neutral" | "added" | "removed";
   readonly beforeNumber?: number;

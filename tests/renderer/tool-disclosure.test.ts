@@ -113,6 +113,26 @@ describe("tool disclosure row", () => {
     expect(html).toContain("文件改动");
     expect(html).toContain("const next = 2;");
     expect(html).toContain("src/a.ts");
+    // Only the diff is shown; the raw before/after argument rows are dropped.
+    expect(html).not.toContain("参数输入");
+    expect(html).not.toContain("原内容");
+    expect(html).not.toContain("新内容");
+  });
+
+  it("shows colored +added / -removed counts in the file-edit header", () => {
+    const before = ["keep", "old one", "old two", "tail"].join("\n");
+    const after = ["keep", "new one", "new two", "extra", "tail"].join("\n");
+    const html = render({
+      toolName: "edit_file",
+      target: "src/a.ts",
+      status: "completed",
+      changes: [
+        { path: "src/a.ts", kind: "modified", before, after, truncated: false },
+      ],
+    });
+    // 3 added (new one, new two, extra), 2 removed (old one, old two).
+    expect(html).toContain('class="tool-diff-stat tool-diff-added">+3<');
+    expect(html).toContain('class="tool-diff-stat tool-diff-removed">-2<');
   });
 
   it("renders an object tool result as parsed rows, not raw JSON", () => {

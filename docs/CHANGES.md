@@ -1,5 +1,7 @@
 # Changes
 
+- A file-edit card now shows only the diff: the raw "参数输入" rows ("原内容"/"新内容") are dropped for `edit_file`/`write_file`, since they merely duplicated the comparison. The card header now shows colored line counts — green `+N` added and red `-M` removed — computed from the same real alignment (`diffStats()`), summed across the tool's changed files. Covered by `tests/renderer/tool-disclosure.test.ts`.
+
 - The file diff no longer shows the whole file. `DiffViewer` now aligns lines properly (trim common prefix/suffix, then a bounded LCS over the middle), so a mid-file insertion is one added line instead of marking every following line as changed. Rendering keeps only the changed lines plus ±5 context (`DIFF_CONTEXT_LINES`); skipped unchanged runs collapse into a single "⋯ 已省略 N 行未改动内容 ⋯" separator. The 10-line preview and expand control are unchanged. Covered by `tests/renderer/tool-disclosure.test.ts`.
 
 - Tool cards were simplified for readability. A `run_command` card now opens by default and shows only the executed command and its raw result — the parsed "参数输入" rows and parsed result key/value rows are gone, since they duplicated the command line and made the card look cluttered. A file-edit card (`edit_file`/`write_file`) still opens by default but its diff now previews only the first 10 lines (`DIFF_PREVIEW_LINES`) behind a "展开全部差异（还有 N 行）" control; expanding reveals the rest inside a bounded scroll region. Covered by `tests/renderer/tool-disclosure.test.ts`.
