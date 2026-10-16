@@ -1,6 +1,5 @@
 import {
   Archive,
-  CaretRight,
   FolderOpen,
   Gear,
   MagnifyingGlass,
@@ -9,41 +8,12 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useWorkbench } from "../../state/workbench-context";
-import { Button } from "../primitives/Button";
 import { IconButton } from "../primitives/IconButton";
-import { Input } from "../primitives/Input";
-
-function formatTimestamp(iso: string) {
-  try {
-    const d = new Date(iso);
-    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
-  } catch {
-    return iso;
-  }
-}
-
-const statusLabels: Record<string, string> = {
-  running: "执行中",
-  awaiting_approval: "待审批",
-  completed: "完成",
-  failed: "失败",
-  cancelled: "已取消",
-  interrupted: "中断",
-  idle: "空闲",
-};
-
-function statusLabel(status: string) {
-  return statusLabels[status] ?? "空闲";
-}
+import { SessionListItem } from "./SessionListItem";
 
 export function Sidebar() {
-  const {
-    state,
-    selectSession,
-    openNewSession,
-    openSettings,
-    setMobileSidebar,
-  } = useWorkbench();
+  const { state, openNewSession, openSettings, setMobileSidebar } =
+    useWorkbench();
 
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -127,74 +97,9 @@ export function Sidebar() {
         ) : state.sessions.length === 0 ? (
           <p className="wb-muted sidebar-empty">暂无历史任务</p>
         ) : (
-          filtered.map((session) => {
-            const isActive =
-              !state.isNewSessionOpen && session.id === state.activeSessionId;
-            const run = state.activeRuns[session.id];
-            const hasPendingApproval = Boolean(run?.pendingApproval);
-            const currentStatus = run?.status ?? session.status;
-            const label = hasPendingApproval
-              ? "待批准"
-              : `状态：${statusLabel(currentStatus)}`;
-            const metadata = `${session.model} · ${formatTimestamp(session.updatedAt)} · ${statusLabel(currentStatus)}${hasPendingApproval ? " · 待批准" : ""}`;
-
-            return (
-              <div
-                key={session.id}
-                className={`session-item ${isActive ? "is-active" : ""}`}
-              >
-                <button
-                  type="button"
-                  className="session-item-main"
-                  onClick={() => {
-                    void selectSession(session.id);
-                    setMobileSidebar(false);
-                  }}
-                  aria-current={isActive ? "true" : undefined}
-                  title={`${session.archived ? "归档 · " : ""}${session.title} · ${metadata}`}
-                >
-                  <div className="session-item-row">
-                    <span
-                      className={`wb-status-dot${hasPendingApproval ? " is-pending" : ""}`}
-                      data-status={
-                        hasPendingApproval ? "awaiting_approval" : currentStatus
-                      }
-                      role="img"
-                      aria-label={label}
-                    />
-                    <span className="session-item-title">
-                      {session.archived ? "归档 · " : ""}
-                      {session.title}
-                    </span>
-                  </div>
-                  <div className="session-item-sub">
-                    <span className="session-item-time">
-                      {formatTimestamp(session.updatedAt)}
-                    </span>
-                    <span className="session-item-model">
-                      {session.model.split("/").pop()}
-                    </span>
-                  </div>
-                </button>
-                <details className="session-item-meta wb-disclosure">
-                  <summary
-                    aria-label={`${session.title} 详细信息`}
-                    title={`${session.title} 详细信息`}
-                  >
-                    <CaretRight size={11} weight="bold" aria-hidden="true" />
-                  </summary>
-                  <div className="wb-disclosure-body">
-                    <span>{session.model}</span>
-                    <span>{formatTimestamp(session.updatedAt)}</span>
-                    <span>
-                      {statusLabel(currentStatus)}
-                      {hasPendingApproval ? " · 待批准" : ""}
-                    </span>
-                  </div>
-                </details>
-              </div>
-            );
-          })
+          filtered.map((session) => (
+            <SessionListItem key={session.id} session={session} />
+          ))
         )}
       </div>
 

@@ -1,0 +1,165 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { SessionSummary } from "../../shared-types";
+import { useWorkbench } from "../../state/workbench-context";
+
+const labels: Readonly<Record<string, string>> = {
+  running: "执行中",
+  awaiting_approval: "待批准",
+  completed: "完成",
+  failed: "失败",
+  cancelled: "已取消",
+  interrupted: "中断",
+  idle: "空闲",
+};
+
+export function SessionListItem({
+  session,
+}: { readonly session: SessionSummary }) {
+  const { state, selectSession, setMobileSidebar } = useWorkbench();
+  const run = state.activeRuns[session.id];
+  const pending = Boolean(run?.pendingApproval);
+  const status = pending
+    ? "awaiting_approval"
+    : (run?.status ?? session.status);
+  const active =
+    !state.isNewSessionOpen && session.id === state.activeSessionId;
+  const [open, setOpen] = useState(false);
+  const [info, setInfo] = useState({ tokens: "读取中…", model: session.model });
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const anchor = useRef<HTMLButtonElement>(null);
+  const tooltipId = useId();
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setInfo({ tokens: "读取中…", model: session.model });
+    const timer = setTimeout(() => {
+      void window.forge
+        .getSession(session.id)
+        .then((snapshot) => {
+          if (cancelled) return;
+          const runs = snapshot.events.filter(
+            (event) => event.type === "run_finished",
+          );
+          const reported = runs.filter((event) => event.usage !== undefined);
+          const total = reported.reduce(
+            (sum, event) => sum + (event.usage?.totalTokens ?? 0),
+            0,
+          );
+          const partial =
+            reported.length !== runs.length ||
+            runs.some((event) => event.usageComplete === false);
+          const latestModel = snapshot.events
+            .filter((event) => event.type === "run_started")
+            .at(-1)?.model;
+          setInfo({
+            tokens: reported.length
+              ? `${total.toLocaleString()}${partial ? "（部分统计）" : ""}`
+              : "未记录",
+            model: latestModel ?? snapshot.model,
+          });
+        })
+        .catch(() => {
+          if (!cancelled)
+            setInfo({ tokens: "暂时无法读取", model: session.model });
+        });
+    }, 200);
+    const dismiss = () => setOpen(false);
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
+    };
+  }, [open, session.id, session.model]);
+  const reveal = () => {
+    const box = anchor.current?.getBoundingClientRect();
+    if (!box) return;
+    setPosition({
+      left: Math.max(8, Math.min(box.right + 8, window.innerWidth - 288)),
+      top: Math.max(8, Math.min(box.top, window.innerHeight - 270)),
+    });
+    setOpen(true);
+  };
+  return (
+    <div
+      className={`session-item ${active ? "is-active" : ""}`}
+      onMouseEnter={reveal}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        ref={anchor}
+        type="button"
+        className="session-item-main"
+        onFocus={reveal}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
+        onClick={() => {
+          setOpen(false);
+          void selectSession(session.id);
+          setMobileSidebar(false);
+        }}
+        aria-current={active ? "true" : undefined}
+        aria-describedby={open ? tooltipId : undefined}
+      >
+        {status !== "completed" && (
+          <span
+            className={`wb-status-dot${pending ? " is-pending" : ""}`}
+            data-status={status}
+            role="img"
+            aria-label={labels[status] ?? status}
+          />
+        )}
+        <span className="session-item-title">
+          {session.archived ? "归档 · " : ""}
+          {session.title}
+        </span>
+      </button>
+      {open &&
+        createPortal(
+          <div
+            id={tooltipId}
+            role="tooltip"
+            className="session-hover-info"
+            style={{
+              ...position,
+              maxHeight: `calc(100dvh - ${position.top + 8}px)`,
+            }}
+          >
+            <strong>{session.title}</strong>
+            <dl>
+              <dt>状态</dt>
+              <dd>{labels[status] ?? status}</dd>
+              <dt>创建时间</dt>
+              <dd>
+                {new Date(session.createdAt).toLocaleString("zh-CN", {
+                  hour12: false,
+                })}
+              </dd>
+              <dt>更新时间</dt>
+              <dd>
+                {new Date(session.updatedAt).toLocaleString("zh-CN", {
+                  hour12: false,
+                })}
+              </dd>
+              <dt>累计 token</dt>
+              <dd>{info.tokens}</dd>
+              <dt>模型 ID</dt>
+              <dd>{info.model}</dd>
+              <dt>工作区</dt>
+              <dd>{session.workspace}</dd>
+            </dl>
+            <p>本会话已结束运行的报告用量，不含子会话。</p>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}

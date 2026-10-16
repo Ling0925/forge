@@ -168,6 +168,12 @@ Forge retains its own name, controls, session data and permission semantics.
   Desktop controls: 28px; small controls: 24px. Touch controls retain 44px.
   Overview is a flat two-column summary, not nested cards. Composer padding
   10px, radius 12px, initial prompt height 44px; long prompts scroll internally.
+  Sidebar sessions: 28px desktop rows, 44px coarse-pointer targets. No inline
+  time/model metadata. Completed sessions have no status dot; pending approval
+  takes precedence. Hover/focus opens a 280px viewport-bounded metadata tooltip
+  with dates, status, full model ID and own-session reported run token totals.
+  Fetch full snapshots only on sustained hover/focus; unknown/partial usage is
+  explicitly labelled. Escape, focus exit and scroll dismiss the tooltip.
   Model catalog: 300px popover, 12px labels, 32px desktop rows; search never
   mutates selection until an item or explicit custom-ID action is activated.
   Full IDs wrap and remain inspectable. Escape restores trigger focus; outside
