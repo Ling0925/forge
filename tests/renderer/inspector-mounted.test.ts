@@ -80,7 +80,7 @@ it("mounted Inspector switches sessions without retaining sibling navigation or 
     await page.setContent('<div id="root"></div>');
     await page.addScriptTag({ content: bundle.outputFiles[0]?.text ?? "" });
 
-    const changesTab = page.getByRole("tab", { name: "变更 / 检查点" });
+    const changesTab = page.getByRole("tab", { name: "变更", exact: true });
     await changesTab.click();
 
     // Forward/back across all four sessions, revisiting parents so an
@@ -138,6 +138,8 @@ it("mounted Inspector switches sessions without retaining sibling navigation or 
       );
       expect(await changesTab.getAttribute("aria-selected")).toBe("true");
     }
+
+    await page.getByText("关联任务的变更", { exact: true }).click();
 
     // Exercise the real child-open and return-to-parent actions, not only
     // externally driven selection.

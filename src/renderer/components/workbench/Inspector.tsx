@@ -10,6 +10,7 @@ import { CheckpointPanel, ProjectResources } from "./CatalogPanels";
 import { ChangeSessionNavigation } from "./ChangeSessionNavigation";
 import { RuntimePanels } from "./RuntimePanels";
 import { permissionLabels } from "./Settings";
+import "./inspector.css";
 
 // The Transcript renders the selected session's live request inline; the
 // Inspector owns every other request (background, child, other session).
@@ -26,7 +27,7 @@ export function Inspector({
   readonly onRequestCollapse?: (() => void) | undefined;
   readonly focusToken?: number | undefined;
 }) {
-  const [section, setSection] = useState("inspector-changes");
+  const [section, setSection] = useState("inspector-runtime");
   const { state, answerApproval, selectSession, refreshActiveSession } =
     useWorkbench();
   const paneRef = useRef<HTMLElement | null>(null);
@@ -75,6 +76,7 @@ export function Inspector({
     >
       <div className="inspector-header wb-inspector-head">
         <span>执行详情</span>
+        {snapshot && <StatusBadge status={run?.status ?? snapshot.status} />}
         {onRequestCollapse && (
           <button
             type="button"
@@ -107,9 +109,7 @@ export function Inspector({
                   key={request.id}
                   className="wb-approval-row wb-approval-row-inline wb-stack"
                 >
-                  <p className="wb-muted">
-                    这条审批已在主消息流的内联卡片中显示，可直接在对话里批准或拒绝。
-                  </p>
+                  <p className="wb-muted">在对话中批准或拒绝本次操作。</p>
                   <div className="wb-row">
                     <span>
                       {request.toolName}
@@ -166,130 +166,170 @@ export function Inspector({
             })}
           </section>
         )}
-        <Tabs
-          className="inspector-tabs"
-          ariaLabel="检查详情分类"
-          activeId={section}
-          onChange={setSection}
-          keepMounted
-          tabs={[
-            {
-              id: "inspector-changes",
-              label: "变更 / 检查点",
-              content: (
-                <div className="wb-stack">
-                  {snapshot && (
-                    <ChangeSessionNavigation
-                      key={`changes-navigation:${snapshot.id}`}
-                      sessionId={snapshot.id}
-                      parentSessionId={snapshot.parentSessionId}
-                      sessions={state.sessions}
-                      onOpenChanges={(id) => {
-                        setSection("inspector-changes");
-                        void selectSession(id);
-                      }}
-                    />
-                  )}
-                  <CheckpointPanel
-                    key={`changes-checkpoints:${state.activeSessionId ?? "none"}`}
-                  />
-                  <section className="wb-stack">
-                    <h3>文件变更</h3>
-                    {snapshot?.changes.length ? (
-                      snapshot.changes.map((change, i) => (
-                        <details
-                          key={`${change.path}-${i}`}
-                          className="wb-disclosure"
-                        >
-                          <summary>
-                            {change.path} · {change.kind}
-                          </summary>
-                          <DiffViewer change={change} isSuggested={false} />
-                        </details>
-                      ))
-                    ) : (
-                      <p className="wb-muted">本会话尚无直接文件变更</p>
-                    )}
-                  </section>
-                </div>
-              ),
-            },
-            {
-              id: "inspector-runtime",
-              label: "概览 / 运行",
-              content: (
-                <div className="wb-stack">
-                  <StatusBadge
-                    status={run?.status ?? snapshot?.status ?? "idle"}
-                  />
-                  {storedActive && (
-                    <p className="wb-muted">
-                      这是已保存的运行状态；本窗口没有对应的根运行句柄，不代表操作属于其他进程。子任务可请求取消，由主机确认本进程是否拥有操作。可刷新记录查看最新状态。
-                    </p>
-                  )}
-                  <RuntimePanels key={state.activeSessionId ?? "none"} />
-                  {/* Repeated raw run metadata collapses into one quiet
-                      disclosure; nothing is dropped, only deferred. */}
-                  <details className="wb-disclosure">
-                    <summary>上次运行元数据</summary>
-                    <div className="wb-disclosure-body wb-stack">
+        {!snapshot ? (
+          <p className="wb-muted inspector-empty">
+            {state.isSnapshotLoading
+              ? "正在读取执行记录…"
+              : "选择一个会话，查看执行详情"}
+          </p>
+        ) : (
+          <Tabs
+            className="inspector-tabs"
+            ariaLabel="检查详情分类"
+            activeId={section}
+            onChange={setSection}
+            keepMounted
+            tabs={[
+              {
+                id: "inspector-runtime",
+                label: "运行",
+                content: (
+                  <div className="inspector-sections">
+                    <section className="inspector-overview">
                       <dl className="wb-details">
                         <dt>模型</dt>
                         <dd>
                           {started?.type === "run_started"
                             ? started.model
-                            : (snapshot?.model ??
-                              state.settings?.model ??
-                              "未配置")}
+                            : snapshot.model}
                         </dd>
                         <dt>权限</dt>
                         <dd>
                           {
                             permissionLabels[
-                              started?.type === "run_started"
-                                ? started.permission
-                                : (state.settings?.defaultPermission ??
-                                  "workspace")
-                            ]
+                              run?.permission ??
+                                (started?.type === "run_started"
+                                  ? started.permission
+                                  : (state.settings?.defaultPermission ??
+                                    "workspace"))
+                            ].split(" · ")[0]
                           }
                         </dd>
                         <dt>工作区</dt>
-                        <dd>{snapshot?.workspace ?? "未选择"}</dd>
+                        <dd>{snapshot.workspace}</dd>
                       </dl>
-                      {usage && (
-                        <section>
-                          <h3>上次运行用量</h3>
-                          <p>
-                            输入 {usage.promptTokens} · 输出{" "}
-                            {usage.completionTokens} · 总计 {usage.totalTokens}
-                          </p>
-                          {usage.cachedPromptTokens !== undefined && (
-                            <p>缓存输入 {usage.cachedPromptTokens}</p>
-                          )}
-                        </section>
-                      )}
-                      {finished?.type === "run_finished" && (
+                      {storedActive && (
                         <p className="wb-muted">
-                          {finished.turns} 轮 · {finished.toolCalls} 次工具调用
+                          已保存的状态，本窗口没有运行句柄。刷新可查看最新记录；取消操作由主机确认。
                         </p>
                       )}
-                    </div>
-                  </details>
-                  <Button size="sm" onClick={() => void refreshActiveSession()}>
-                    刷新保存的记录
-                  </Button>
-                </div>
-              ),
-            },
-            {
-              id: "inspector-resources",
-              label: "资源",
-              content: (
-                <ProjectResources key={state.activeSessionId ?? "none"} />
-              ),
-            },
-          ]}
-        />
+                    </section>
+                    <RuntimePanels key={state.activeSessionId ?? "none"} />
+                    <details className="wb-disclosure">
+                      <summary>上次运行用量</summary>
+                      <div className="wb-disclosure-body">
+                        {usage ? (
+                          <dl className="wb-details">
+                            <dt>输入 / 输出</dt>
+                            <dd>
+                              {usage.promptTokens.toLocaleString()} /{" "}
+                              {usage.completionTokens.toLocaleString()}
+                            </dd>
+                            <dt>总计</dt>
+                            <dd>{usage.totalTokens.toLocaleString()}</dd>
+                            {usage.cachedPromptTokens !== undefined && (
+                              <>
+                                <dt>缓存输入</dt>
+                                <dd>
+                                  {usage.cachedPromptTokens.toLocaleString()}
+                                </dd>
+                              </>
+                            )}
+                          </dl>
+                        ) : (
+                          <p className="wb-muted">尚无已结算的运行用量</p>
+                        )}
+                        {finished?.type === "run_finished" && (
+                          <p className="wb-muted">
+                            {finished.turns} 轮 · {finished.toolCalls}{" "}
+                            次工具调用
+                          </p>
+                        )}
+                      </div>
+                    </details>
+                    <Button
+                      size="sm"
+                      onClick={() => void refreshActiveSession()}
+                    >
+                      刷新记录
+                    </Button>
+                  </div>
+                ),
+              },
+              {
+                id: "inspector-changes",
+                label: "变更",
+                content: (
+                  <div className="wb-stack">
+                    {(snapshot.parentSessionId ||
+                      state.sessions.some(
+                        (session) => session.parentSessionId === snapshot.id,
+                      )) && (
+                      <details className="wb-disclosure">
+                        <summary>关联任务的变更</summary>
+                        <div className="wb-disclosure-body">
+                          <ChangeSessionNavigation
+                            key={`changes-navigation:${snapshot.id}`}
+                            sessionId={snapshot.id}
+                            parentSessionId={snapshot.parentSessionId}
+                            sessions={state.sessions}
+                            onOpenChanges={(id) => {
+                              setSection("inspector-changes");
+                              void selectSession(id);
+                            }}
+                          />
+                        </div>
+                      </details>
+                    )}
+                    <section className="wb-stack">
+                      <h3>
+                        文件变更{" "}
+                        <span className="wb-muted">
+                          {snapshot.changes.length}
+                        </span>
+                      </h3>
+                      {snapshot?.changes.length ? (
+                        snapshot.changes.map((change, i) => (
+                          <details
+                            key={`${change.path}-${i}`}
+                            className="wb-disclosure"
+                          >
+                            <summary>
+                              <span className="inspector-file-path">
+                                {change.path}
+                              </span>
+                              <span className="inspector-file-kind">
+                                {change.kind}
+                              </span>
+                            </summary>
+                            <DiffViewer change={change} isSuggested={false} />
+                          </details>
+                        ))
+                      ) : (
+                        <p className="wb-muted">本会话尚无直接文件变更</p>
+                      )}
+                    </section>
+                    <details className="wb-disclosure">
+                      <summary>文件检查点与恢复</summary>
+                      <div className="wb-disclosure-body">
+                        <CheckpointPanel
+                          key={`changes-checkpoints:${state.activeSessionId ?? "none"}`}
+                        />
+                      </div>
+                    </details>
+                  </div>
+                ),
+              },
+              {
+                id: "inspector-resources",
+                label: "资源",
+                content: (
+                  <ProjectResources key={state.activeSessionId ?? "none"} />
+                ),
+              },
+            ]}
+          />
+        )}
       </div>
     </aside>
   );

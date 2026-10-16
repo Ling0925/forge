@@ -1,0 +1,151 @@
+.wb-app .wb-inspector {
+  font-size: var(--text-xs);
+  line-height: var(--leading-sm);
+}
+.wb-inspector .wb-inspector-head {
+  gap: var(--space-2);
+}
+.wb-inspector-head > .status-badge {
+  margin-left: auto;
+  align-self: center;
+}
+.wb-inspector .inspector-tabs .tabpanel {
+  padding: 0;
+}
+.wb-app .wb-inspector .inspector-scroll {
+  padding: 0 var(--space-3) var(--space-4);
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+.wb-inspector .inspector-tabs .tablist {
+  padding: var(--space-2) 0;
+  margin-bottom: var(--space-3);
+  border: 0;
+  gap: var(--space-1);
+  background: var(--surface-body);
+}
+.wb-inspector .inspector-tabs .tab-btn {
+  min-height: 28px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  border: 0;
+  border-radius: var(--radius-md);
+}
+.wb-inspector .inspector-tabs .tab-btn.is-active {
+  color: var(--text-primary);
+  background: var(--surface-selected);
+}
+.wb-inspector .inspector-tabs .tab-btn::after {
+  display: none;
+}
+.wb-inspector .inspector-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.wb-inspector .inspector-section {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+.wb-inspector .wb-stack {
+  gap: var(--space-2);
+}
+.wb-inspector .inspector-scroll h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-xs);
+}
+.wb-inspector .inspector-scroll p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.wb-inspector .inspector-scroll .wb-details {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  align-items: baseline;
+}
+.wb-inspector .inspector-scroll .wb-details dt,
+.wb-inspector .inspector-scroll .wb-details dd {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-sm);
+}
+.wb-inspector .wb-details dt {
+  color: var(--text-secondary);
+}
+.wb-inspector code {
+  font-size: calc(var(--text-base) * 0.9);
+}
+.wb-inspector .wb-disclosure {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+}
+.wb-inspector details > summary {
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+}
+.wb-inspector details > summary:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.wb-inspector .wb-disclosure-body {
+  padding: var(--space-2);
+  margin-top: var(--space-1);
+  background: var(--surface-soft);
+  border-radius: var(--radius-md);
+  overflow-wrap: anywhere;
+}
+.wb-inspector .inspector-file-kind {
+  margin-left: var(--space-2);
+  color: var(--text-secondary);
+}
+.wb-inspector .agent-card {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  padding: var(--space-2);
+  min-width: 0;
+}
+.wb-inspector .inspector-child-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.wb-inspector .inspector-child-meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.wb-inspector .wb-plan-progress {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wb-inspector .wb-plan-progress li {
+  padding: var(--space-1) 0;
+  overflow-wrap: anywhere;
+}
+.wb-inspector .inspector-empty,
+.wb-inspector .wb-approvals-summary {
+  margin-top: var(--space-3);
+}
+.wb-inspector .inspector-sections > .btn,
+.wb-inspector .inspector-section > .btn {
+  align-self: flex-start;
+}
+@media (pointer: coarse) {
+  .wb-inspector .inspector-tabs .tab-btn,
+  .wb-inspector details > summary {
+    min-height: 44px;
+  }
+}

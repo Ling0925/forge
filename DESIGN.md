@@ -163,6 +163,8 @@ Active runs accept permission changes from the composer. The menu reflects the h
 
 Transcript synchronization separates persisted message freshness from live event timestamps. Tool transitions and terminal events retain unsynchronized assistant output until saved messages acknowledge it; failed partial output remains visible in memory. Unpositioned historical errors appear in a collapsed group before the conversation, never appended behind the newest answer.
 
+The execution inspector opens on Runtime, with Changes and Resources as separate tabs. Its header shows the selected session status; quiet sections use 12px text, 16px section spacing and aligned key/value rows. Tabs remain sticky within the single inspector scroll container. Plans and active child tasks are visible; raw context statistics, checkpoint management and long metadata use native disclosures. Long IDs and paths wrap without widening the pane. Diagnostics load only when their disclosure opens, not on streaming deltas. Existing approval actions stay above all categories, and touch targets retain 44px.
+
 - Surfaces: warm paper light (`#faf9f6`, sidebar `#f2f1ed`) and charcoal dark
   (`#171716`, sidebar `#121211`, elevated `#222221`). Neutral borders, no blue cast.
 - Ink: light primary `#292824`, secondary `#68665f`; dark primary `#eeede8`,

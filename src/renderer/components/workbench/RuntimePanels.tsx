@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { OperationScope } from "../../state/operation-scope";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
+import { StatusBadge } from "../primitives/StatusBadge";
 import { Markdown } from "./Markdown";
 
 export function RuntimePanels() {
@@ -24,6 +25,9 @@ export function RuntimePanels() {
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [controlMessage, setControlMessage] = useState("");
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState("");
+  const sessionId = snapshot?.id;
   const cancelOwned = async (id: NonNullable<typeof state.activeSessionId>) => {
     const valid = cancelScope.current.begin();
     setCancelling(true);
@@ -44,20 +48,23 @@ export function RuntimePanels() {
   useEffect(() => {
     let alive = true;
     setDiagnostics(null);
-    if (snapshot)
+    setDiagnosticsError("");
+    if (sessionId && diagnosticsOpen)
       void window.forge
-        .getDiagnostics(snapshot.id)
+        .getDiagnostics(sessionId)
         .then((value) => {
           if (alive) setDiagnostics(value);
         })
         .catch((err) => {
           if (alive)
-            setError(err instanceof Error ? err.message : "上下文统计读取失败");
+            setDiagnosticsError(
+              err instanceof Error ? err.message : "上下文统计读取失败",
+            );
         });
     return () => {
       alive = false;
     };
-  }, [snapshot]);
+  }, [sessionId, diagnosticsOpen]);
   if (!snapshot) return null;
   const parentId = snapshot.parentSessionId;
   const children = state.sessions.filter(
@@ -76,8 +83,10 @@ export function RuntimePanels() {
     <>
       {/* Active children stay visible by default: this is live delegation
           state, not raw metadata. */}
-      <section className="wb-stack">
-        <h3>子代理</h3>
+      <section className="wb-stack inspector-section">
+        <h3>
+          子任务 <span className="wb-muted">{children.length}</span>
+        </h3>
         {parentId && (
           <Button size="sm" onClick={() => void selectSession(parentId)}>
             打开父任务
@@ -115,12 +124,13 @@ export function RuntimePanels() {
                     disabled={cancelling}
                     onClick={() => void cancelOwned(child.id)}
                   >
-                    取消子任务（本进程）
+                    {cancelling ? "正在取消…" : "取消任务"}
                   </Button>
                 )}
-                <p className="message-body">
-                  {child.model} · {child.status}
-                </p>
+                <div className="inspector-child-meta">
+                  <StatusBadge status={child.status} />
+                  <span title={child.model}>{child.model}</span>
+                </div>
                 {updates
                   .filter((update) => update.childSessionId === child.id)
                   .slice(-1)
@@ -160,14 +170,23 @@ export function RuntimePanels() {
         )}
         {snapshot.ownership && <p>负责范围：{snapshot.ownership}</p>}
       </section>
-      <section className="wb-stack">
+      <section className="wb-stack inspector-section">
         <h3>上下文</h3>
         {/* Raw context statistics collapse into one quiet disclosure; the
             compaction controls below stay directly reachable. */}
-        {diagnostics && (
-          <details className="wb-disclosure">
-            <summary>上下文统计</summary>
-            <div className="wb-disclosure-body">
+        <details
+          className="wb-disclosure"
+          onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)}
+        >
+          <summary>上下文统计</summary>
+          <div className="wb-disclosure-body">
+            {diagnosticsError ? (
+              <p role="alert" className="form-error">
+                {diagnosticsError}
+              </p>
+            ) : !diagnostics ? (
+              <p className="wb-muted">正在读取…</p>
+            ) : (
               <dl className="wb-details">
                 <dt>原始记录</dt>
                 <dd>
@@ -183,9 +202,9 @@ export function RuntimePanels() {
                     : "语义摘要 / 未压缩"}
                 </dd>
               </dl>
-            </div>
-          </details>
-        )}
+            )}
+          </div>
+        </details>
         {snapshot.contextSummary && (
           <details className="wb-disclosure">
             <summary>
@@ -215,8 +234,13 @@ export function RuntimePanels() {
             }
           }}
         >
-          压缩上下文（保留原始记录）
+          {busy ? "正在压缩…" : "压缩上下文"}
         </Button>
+        <p className="wb-muted">
+          {running
+            ? "运行结束后可压缩，原始记录保留。"
+            : "保留原始记录，仅压缩模型使用的上下文。"}
+        </p>
         {busy && (
           <Button
             variant="danger"
@@ -233,7 +257,7 @@ export function RuntimePanels() {
           </p>
         )}
       </section>
-      <section className="wb-stack">
+      <section className="wb-stack inspector-section">
         <h3>计划</h3>
         {snapshot.plan ? (
           <>
