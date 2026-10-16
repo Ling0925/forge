@@ -65,7 +65,7 @@ export function ModelPicker(props: {
           {props.value.split("/").at(-1) || "选择模型"}
         </span>
         {props.reasoning && <span className="model-effort-meter" aria-label={`思考等级：${effortLabel}${effortIndex > 1 ? `，${effortIndex - 1}/5` : ""}`}>
-          {[1, 2, 3, 4, 5].map(level => <span key={level} className={level <= effortIndex - 1 ? "is-filled" : ""} style={{ height: `${3 + level * 2}px` }} />)}
+          {[1, 2, 3, 4, 5].map(level => <span key={level} className={level <= effortIndex - 1 ? "is-filled" : ""} />)}
           {effortIndex <= 1 && <small>{effortIndex === 1 ? "关" : "自"}</small>}
         </span>}
         <CaretDown size={10} aria-hidden="true" />
