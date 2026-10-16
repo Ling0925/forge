@@ -61,6 +61,9 @@ export function CodeBlock({
         <Button
           variant="ghost"
           size="sm"
+          // Present only while the confirmation check is shown: the keyframe
+          // runs once on the swap and is never re-triggered by later renders.
+          className={copied ? "copy-success-bounce" : ""}
           icon={
             copied ? (
               <Check size={14} weight="bold" />

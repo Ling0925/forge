@@ -24,6 +24,11 @@
   --motion-distance-sm: 6px;
   --motion-distance-md: 12px;
   --motion-distance-lg: 16px;
+
+  /* Spring / expo curves for micro-feedback and shell transitions */
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.15);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 1. Narrow sidebar opening & wide on-demand inspector reveal */
@@ -228,6 +233,76 @@
   }
 }
 
+/* 6. Streaming caret: appended after the newest block of the live draft only.
+   The pseudo-element sits on the last rendered Markdown block, so no wrapper
+   element is inserted into the prose and text selection stays untouched.
+   Code/table wrappers are skipped: an inline caret would land outside the
+   scroller that owns those blocks. */
+.message-streaming
+  .markdown-content
+  > :last-child:not(.markdown-code):not(.markdown-table-scroll)::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 1.15em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  border-radius: 2px;
+  background: var(--accent-sage);
+  animation: wb-caret-blink 1s cubic-bezier(0.2, 0, 0, 1) infinite;
+}
+
+@keyframes wb-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 7. Thinking shimmer: a faint sweep across the live "思考中" label. */
+.reasoning-live .reasoning-label {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 0%,
+    var(--text-primary) 50%,
+    var(--text-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: thinking-shimmer 2.2s linear infinite;
+}
+
+@keyframes thinking-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 8. Copy confirmation: a small spring bounce on the swapped icon. */
+.copy-success-bounce {
+  animation: copy-bounce 260ms var(--ease-spring);
+}
+
+@keyframes copy-bounce {
+  0% {
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 /* Running status gentle pulse */
 @keyframes status-running-pulse {
   0%,
@@ -264,11 +339,28 @@
   .conversation-inner > .tool-disclosure:last-child,
   .composer-model-panel,
   .empty-state,
+  .copy-success-bounce,
   .tool-disclosure-status[data-status="running"] {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     transform: none !important;
+  }
+
+  /* The caret stays as a static (non-blinking) marker, and the shimmer label
+     keeps a readable solid colour instead of a frozen clipped gradient. */
+  .message-streaming
+    .markdown-content
+    > :last-child:not(.markdown-code):not(.markdown-table-scroll)::after {
+    animation: none !important;
+    opacity: 1;
+  }
+
+  .reasoning-live .reasoning-label {
+    animation: none !important;
+    background: none;
+    -webkit-text-fill-color: var(--text-secondary);
+    color: var(--text-secondary);
   }
 
   .btn:active:not(:disabled),
@@ -277,5 +369,11 @@
   .session-item:active,
   .tab-btn:active:not(:disabled) {
     transform: none !important;
+  }
+
+  /* The tab pill must still land exactly on the selected tab, so its
+     positioning transform is preserved while its duration collapses to zero. */
+  .tabs-indicator {
+    transition-duration: 0.01ms !important;
   }
 }

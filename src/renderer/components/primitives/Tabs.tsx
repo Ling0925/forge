@@ -1,4 +1,11 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import "./tabs.css";
 
 export interface TabItem {
@@ -18,6 +25,19 @@ export interface TabsProps {
   readonly keepMounted?: boolean;
 }
 
+interface IndicatorGeometry {
+  readonly left: number;
+  readonly width: number;
+}
+
+/**
+ * Segmented tabs with a sliding selection pill. The pill is measured from the
+ * selected button (not an assumed equal-width share) so a long label that
+ * widens one tab keeps it aligned; measurement runs after mount, on resize and
+ * when the label set changes. Selection is still expressed by
+ * `aria-selected` / `tabIndex`, so keyboard and screen-reader behaviour is
+ * unchanged and the pill stays decorative (`aria-hidden`).
+ */
 export function Tabs({
   tabs,
   activeId,
@@ -26,6 +46,45 @@ export function Tabs({
   className = "",
   keepMounted = false,
 }: TabsProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<IndicatorGeometry | null>(null);
+  const activeIndex = tabs.findIndex((tab) => tab.id === activeId);
+  const measure = useCallback(() => {
+    const list = listRef.current;
+    const button =
+      activeIndex < 0
+        ? undefined
+        : list?.querySelectorAll<HTMLElement>('[role="tab"]')[activeIndex];
+    if (!list || !button) {
+      setIndicator(null);
+      return;
+    }
+    const listBox = list.getBoundingClientRect();
+    const buttonBox = button.getBoundingClientRect();
+    setIndicator({
+      // Content coordinates: the pill keeps its position when the row scrolls.
+      left: buttonBox.left - listBox.left + list.scrollLeft,
+      width: buttonBox.width,
+    });
+  }, [activeIndex]);
+  useEffect(() => {
+    measure();
+    const list = listRef.current;
+    if (!list) return;
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize);
+    // Font loading and label changes resize the row without a window resize.
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => measure());
+    observer?.observe(list);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      observer?.disconnect();
+    };
+  }, [measure]);
+
   const handleKeyDown = (
     e: KeyboardEvent<HTMLButtonElement>,
     index: number,
@@ -66,10 +125,28 @@ export function Tabs({
   };
 
   const activeTab = tabs.find((t) => t.id === activeId);
+  const classes = ["tabs-container", indicator ? "has-indicator" : "", className]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className={`tabs-container ${className}`.trim()}>
-      <div role="tablist" aria-label={ariaLabel} className="tablist">
+    <div className={classes}>
+      <div
+        ref={listRef}
+        role="tablist"
+        aria-label={ariaLabel}
+        className="tablist"
+      >
+        {indicator && (
+          <span
+            className="tabs-indicator"
+            aria-hidden="true"
+            style={{
+              width: `${indicator.width}px`,
+              transform: `translateX(${indicator.left}px)`,
+            }}
+          />
+        )}
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeId;
           return (

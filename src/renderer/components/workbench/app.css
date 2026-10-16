@@ -1141,9 +1141,37 @@
   text-align: left;
 }
 @media (min-width: 1001px) {
-  .wb-app.inspector-collapsed .workbench-inspector,
-  .wb-app .workbench-inspector.inspector-collapsed {
-    display: none;
+  /* The pane keeps its 380px layout instead of a hard `display: none`, so the
+     reading column reflows smoothly instead of snapping. The border is
+     animated away too, so a collapsed pane occupies exactly zero width.
+     `visibility: hidden` (delayed until the slide ends) keeps the collapsed
+     pane out of the accessibility tree and untabbable. */
+  .wb-app .workbench-inspector {
+    overflow: hidden;
+    will-change: width, transform;
+    transition:
+      width var(--motion-duration-md) var(--motion-ease-out),
+      border-left-width var(--motion-duration-md) var(--motion-ease-out),
+      opacity var(--motion-duration-sm) ease,
+      transform var(--motion-duration-md) var(--motion-ease-out);
+  }
+  .wb-app .workbench-inspector > * {
+    width: var(--inspector-width);
+    min-width: var(--inspector-width);
+  }
+  .wb-app.inspector-collapsed .workbench-inspector {
+    width: 0;
+    border-left-width: 0;
+    opacity: 0;
+    transform: translateX(var(--motion-distance-lg));
+    pointer-events: none;
+    visibility: hidden;
+    transition:
+      width var(--motion-duration-md) var(--motion-ease-out),
+      border-left-width var(--motion-duration-md) var(--motion-ease-out),
+      opacity var(--motion-duration-sm) ease,
+      transform var(--motion-duration-md) var(--motion-ease-out),
+      visibility 0s linear var(--motion-duration-md);
   }
 }
 @media (max-width: 768px) {

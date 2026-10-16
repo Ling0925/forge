@@ -220,7 +220,15 @@ export function Transcript() {
     navigation.current.reset();
     setHasNewContent(false);
     const scroll = scrollRef.current;
-    if (scroll) scroll.scrollTop = scroll.scrollHeight;
+    if (!scroll) return;
+    // User-initiated catch-up only. Token streaming below keeps the raw
+    // scrollTop assignment so the follow-scroll never lags, and reduced-motion
+    // users get the same instant jump instead of an animated sweep.
+    const reduced =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) scroll.scrollTop = scroll.scrollHeight;
+    else scroll.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
   };
   useLayoutEffect(() => {
     // Each saved session starts at its own tail, even if the previous one was
