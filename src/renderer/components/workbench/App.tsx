@@ -12,6 +12,7 @@ import { SessionActions } from "./SessionActions";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
 import { Transcript } from "./Transcript";
+import { Welcome } from "./Welcome";
 import "./workbench.css";
 import "./app.css";
 import "./new-session.css";
@@ -162,10 +163,7 @@ function Workbench() {
           />
         )}
         {!isNew && <Transcript />}
-        <div className="wb-new-session-intro" hidden={!isNew}>
-          <h2>从这里开始。</h2>
-          <p>描述你想完成的工作，或直接问一个问题。</p>
-        </div>
+        {isNew && <Welcome />}
         <Composer isNew={isNew} />
       </main>
       <Inspector

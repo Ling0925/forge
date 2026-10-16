@@ -1,0 +1,239 @@
+:root,
+[data-theme="light"] {
+  --canvas-bg: #faf9f6;
+  --sidebar-bg: #f2f1ed;
+  --surface-shell: #eae9e4;
+  --surface-elevated: #ffffff;
+  --surface-soft: #f0efeb;
+  --surface-hover: #e8e6e0;
+  --surface-active: #dedbd3;
+  --surface-selected: #e6e3dc;
+  --text-primary: #292824;
+  --text-secondary: #68665f;
+  --text-muted: #716e66;
+  --text-tertiary: #716e66;
+  --text-disabled: #716e66;
+  --border-subtle: #e5e3dc;
+  --border-control: #d1cec5;
+  --border-hover: #aba69a;
+  --accent: #a54f35;
+  --accent-sage: #a54f35;
+  --accent-sage-soft: #f3e6df;
+  --focus-ring: #a54f35;
+  --link: #a54f35;
+  --run-bg: #35332e;
+  --run-ink: #ffffff;
+  --run-hover: #49463f;
+  --run-active: #24221e;
+  --shadow-composer: 0 2px 8px rgb(35 30 20 / 4%);
+  --reading-measure: 880px;
+  --welcome-measure: 560px;
+  --welcome-title-size: 28px;
+  --radius-composer: 18px;
+}
+
+[data-theme="dark"] {
+  --canvas-bg: #171716;
+  --sidebar-bg: #121211;
+  --surface-shell: #191918;
+  --surface-elevated: #222221;
+  --surface-soft: #252524;
+  --surface-hover: #30302e;
+  --surface-active: #3a3936;
+  --surface-selected: #343330;
+  --text-primary: #eeede8;
+  --text-secondary: #aaa79f;
+  --text-muted: #aaa79f;
+  --text-tertiary: #aaa79f;
+  --text-disabled: #aaa79f;
+  --border-subtle: #2b2b28;
+  --border-control: #3d3c37;
+  --border-hover: #706d64;
+  --accent: #dc9477;
+  --accent-sage: #dc9477;
+  --accent-sage-soft: #3b2b24;
+  --focus-ring: #dc9477;
+  --link: #dc9477;
+  --run-bg: #e9e6de;
+  --run-ink: #242320;
+  --run-hover: #ffffff;
+  --run-active: #d4d0c5;
+  --shadow-composer: 0 2px 8px rgb(0 0 0 / 8%);
+}
+
+.wb-app .workbench-task-header {
+  border-bottom-color: transparent;
+  padding-inline: var(--space-6);
+}
+.wb-app .wb-header-title h1 {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.wb-app .sidebar-brand-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-6);
+}
+.wb-app .sidebar-title {
+  font-size: var(--text-xl);
+  letter-spacing: -0.04em;
+}
+.wb-app .sidebar-new-btn {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  border-color: transparent;
+  min-height: var(--control-height-lg);
+}
+.wb-app .sidebar-search-input-wrap {
+  background: transparent;
+  border-color: transparent;
+}
+.wb-app .sidebar-search-input-wrap:focus-within {
+  border-color: var(--border-control);
+}
+.wb-app .sidebar-empty {
+  margin-block: var(--space-12);
+  text-align: center;
+}
+.wb-app .wb-new-session-intro {
+  width: min(var(--reading-measure), calc(100% - 2 * var(--space-12)));
+  margin: var(--space-12) auto var(--space-8);
+}
+.welcome-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.welcome-mark {
+  color: var(--accent);
+  font: italic 500 var(--welcome-title-size) Georgia, serif;
+}
+.wb-new-session-intro h2 {
+  margin: 0;
+  font-size: var(--welcome-title-size);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.wb-new-session-intro > p {
+  margin-top: var(--space-3);
+}
+.welcome-overview {
+  max-width: var(--welcome-measure);
+  margin-top: var(--space-10);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+}
+.welcome-overview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.welcome-overview h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.welcome-overview-heading > span,
+.welcome-overview > p {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.welcome-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+.welcome-metrics > div {
+  background: var(--surface-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+.welcome-metrics dt {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.welcome-metrics dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+}
+.wb-app .wb-new-session .composer-fresh {
+  width: min(var(--reading-measure), calc(100% - 2 * var(--space-12)));
+  margin: auto auto var(--space-6);
+  padding: 0;
+  overflow: visible;
+  max-height: none;
+}
+.wb-app .composer-surface {
+  border-radius: var(--radius-composer);
+  border-color: var(--border-control);
+  box-shadow: var(--shadow-composer);
+  padding: var(--space-4);
+}
+.wb-app .composer-surface:focus-within {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-composer);
+}
+.wb-app .composer-surface:has(:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.wb-app .composer-fresh .composer-textarea {
+  min-height: var(--space-12);
+  height: calc(2 * var(--space-8));
+}
+.wb-app .composer-dropdown-trigger {
+  background: transparent;
+  border-color: transparent;
+  min-height: var(--control-height);
+}
+.wb-app .composer-dropdown-trigger:hover {
+  background: var(--surface-hover);
+}
+.wb-app .composer-project-trigger {
+  font-family: var(--font-sans);
+  border-color: transparent;
+  min-height: var(--control-height);
+}
+.wb-app .message-user {
+  box-shadow: none;
+  border-color: transparent;
+}
+.wb-app .message-assistant .message-body {
+  font-size: var(--prose-size);
+  line-height: var(--prose-leading);
+}
+@media (max-width: 1000px) {
+  .wb-app .wb-new-session-intro,
+  .wb-app .wb-new-session .composer-fresh {
+    width: calc(100% - 2 * var(--space-4));
+  }
+  .wb-app .wb-new-session-intro {
+    margin-top: var(--space-6);
+  }
+  .welcome-overview {
+    margin-top: var(--space-6);
+  }
+  .wb-app .composer-dropdown-trigger,
+  .wb-app .composer-project-trigger {
+    min-height: var(--touch-min-target);
+  }
+}
+@media (max-height: 700px) {
+  .wb-app .wb-new-session {
+    overflow-y: auto;
+  }
+  .wb-app .wb-new-session-intro {
+    margin-top: var(--space-4);
+  }
+  .wb-app .wb-new-session .composer-fresh {
+    margin-bottom: var(--space-4);
+  }
+}

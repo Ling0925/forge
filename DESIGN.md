@@ -152,6 +152,30 @@ Forge 展现的是沉稳、专注、温暖且精密的高级工作台氛围，�
 
 配色验证（Author A 局部检查）：light 主文/画布14.43:1、次文/soft5.52:1、sage/白6.05:1；dark 主文/画布15.86:1、次文/elevated6.43:1、sage/elevated6.06:1。此局部 token 验证不代表完成真实 DOM 全状态验收。
 
+## 8 Claude Desktop-inspired workspace (2026-10-16)
+
+This section supersedes earlier palette and home-layout decisions. The supplied
+Claude Desktop screenshot is a spatial and aesthetic reference, not a pixel clone.
+Forge retains its own name, controls, session data and permission semantics.
+
+- Surfaces: warm paper light (`#faf9f6`, sidebar `#f2f1ed`) and charcoal dark
+  (`#171716`, sidebar `#121211`, elevated `#222221`). Neutral borders, no blue cast.
+- Ink: light primary `#292824`, secondary `#68665f`; dark primary `#eeede8`,
+  secondary `#aaa79f`. Terracotta accent `#a54f35` / `#dc9477`, used sparingly.
+- Desktop rail: 264px. Main reading/home measure: 880px. Home overview: 560px.
+  Greeting: 28px / 1.4, weight 500. Main gutter: 48px, mobile: 16px.
+- Home greeting sits near the top; a single quiet overview shows actual unarchived
+  session and workspace counts. Unknown/loading values use an em dash. No invented
+  token totals, heatmaps or activity. The composer sits near the bottom with open
+  space between overview and prompt; short screens scroll the main region.
+- Reuse existing sidebar, composer, buttons and model/permission menus. Home
+  overview uses a semantic definition list. Composer radius 18px; neutral focus
+  border plus visible keyboard focus ring. Sidebar controls use tonal surfaces.
+- Mobile keeps the existing navigation and drawer. Overview reflows without
+  truncating Chinese labels. All existing theme, modal and approval states remain.
+- Accepted scope: reference-inspired layout, not Claude branding or exact copy;
+  API inference and desktop packaging are outside this visual change's validation.
+
 ## 7 Gemini 最终视觉精修落地 (Gemini Visual Refinement Pass)
 
 本轮由 Gemini 负责整套界面视觉最终微调与精致度打磨，严格遵守零功能/业务/测试代码修改原则，仅调整 CSS 与设计契约：
