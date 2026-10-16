@@ -81,8 +81,16 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-2);
   flex: 1;
+}
+/* A human turn starts a new phase: a little extra air marks the boundary while
+   everything inside a phase stays tight. */
+.wb-app .conversation-inner > .message-user {
+  margin-top: var(--space-3);
+}
+.wb-app .conversation-inner > .message-user:first-child {
+  margin-top: 0;
 }
 /* Deliberate welcome hierarchy for the main first-use empty frame */
 .wb-app .conversation-inner .empty-state {

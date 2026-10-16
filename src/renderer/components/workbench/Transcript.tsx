@@ -5,7 +5,7 @@ import type {
   SessionId,
   SessionSnapshot,
 } from "../../shared-types";
-import { reduceTimeline } from "../../state/timeline";
+import { type TimelineItem, reduceTimeline } from "../../state/timeline";
 import { TranscriptScrollState } from "../../state/transcript-scroll";
 import { useWorkbench } from "../../state/workbench-context";
 import { ApprovalPanel } from "../primitives/ApprovalPanel";
@@ -15,13 +15,37 @@ import { ErrorState } from "../primitives/ErrorState";
 import { ToolDisclosure } from "../primitives/ToolDisclosure";
 import { Markdown } from "./Markdown";
 import { StreamingMarkdown } from "./StreamingMarkdown";
+/** Phase number per timeline entry; a human turn opens a new phase. */
+export function phaseMarkers(
+  timeline: readonly TimelineItem[],
+): readonly number[] {
+  let phase = 0;
+  return timeline.map((item) => {
+    if (
+      item.kind === "message" &&
+      item.role === "user" &&
+      item.origin !== "agent_reconciliation"
+    )
+      phase += 1;
+    return phase;
+  });
+}
+
+/** A tool row auto-folds once a later phase exists (its own phase is history). */
+export function foldedTool(index: number, phases: readonly number[]): boolean {
+  return (phases[index] ?? 0) < (phases[phases.length - 1] ?? 0);
+}
+
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
 }: { readonly snapshot: SessionSnapshot }) {
   const timeline = reduceTimeline(snapshot);
+  // Phase per entry; a human turn starts a new phase. Tool rows carry a stable
+  // phase and auto-fold once a later phase begins.
+  const phases = phaseMarkers(timeline);
   return (
     <>
-      {timeline.map((item) => {
+      {timeline.map((item, index) => {
         if (item.kind === "message" && item.origin === "agent_reconciliation")
           return (
             <details className="message message-internal" key={item.id}>
@@ -85,6 +109,7 @@ export const StoredTranscript = memo(function StoredTranscript({
               item.call.function.arguments.length > 12000
             }
             status={item.status}
+            autoCollapsed={foldedTool(index, phases)}
           />
         );
       })}

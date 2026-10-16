@@ -8,7 +8,7 @@ import {
   Wrench,
   X,
 } from "@phosphor-icons/react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import "./tool-disclosure.css";
 
 export interface ToolDisclosureProps {
@@ -25,6 +25,9 @@ export interface ToolDisclosureProps {
   readonly error?: string | null;
   readonly truncated?: boolean;
   readonly defaultExpanded?: boolean;
+  /** When true, the row folds once as its phase becomes history (see the
+   * transcript). The user can still reopen it; it is never forced shut twice. */
+  readonly autoCollapsed?: boolean;
   readonly className?: string;
 }
 
@@ -122,11 +125,24 @@ export function ToolDisclosure({
   error,
   truncated = false,
   defaultExpanded = false,
+  autoCollapsed = false,
   className = "",
 }: ToolDisclosureProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const detailsId = useId();
   const label = friendlyLabel(toolName);
+
+  // Phases fold once when they pass into history. Remember which phase already
+  // folded so a manual reopen is respected until the item enters a new phase.
+  const foldedPhase = useRef(false);
+  useEffect(() => {
+    if (autoCollapsed && !foldedPhase.current) {
+      foldedPhase.current = true;
+      setExpanded(false);
+    } else if (!autoCollapsed) {
+      foldedPhase.current = false;
+    }
+  }, [autoCollapsed]);
 
   const formattedParams =
     typeof parameters === "string"
