@@ -20,12 +20,25 @@ export function ModelPicker(props: {
   const [open, setOpen] = useState(false);
   const effortIndex = efforts.findIndex(([value]) => value === props.reasoning?.value);
   const effortLabel = efforts[effortIndex]?.[1] ?? "自动";
+  const [draftEffort, setDraftEffort] = useState(Math.max(0, effortIndex));
+  const submittedEffort = useRef<number | null>(null);
+  useEffect(() => {
+    if (props.reasoning?.disabled) return;
+    setDraftEffort(Math.max(0, effortIndex));
+    submittedEffort.current = null;
+  }, [effortIndex, props.reasoning?.disabled]);
+  const commitEffort = (index: number) => {
+    const choice = efforts[index];
+    if (!choice || !props.reasoning || props.reasoning.disabled || index === effortIndex || submittedEffort.current === index) return;
+    submittedEffort.current = index;
+    props.reasoning.onChange(choice[0]);
+  };
   const close = () => {
     if (ref.current) ref.current.open = false;
   };
   useEffect(() => {
     if (!open) return;
-    ref.current?.querySelector<HTMLInputElement>("input")?.focus();
+    ref.current?.querySelector<HTMLInputElement>("input:not([type=range])")?.focus();
     const outside = (event: PointerEvent) => {
       if (
         event.target instanceof Node &&
@@ -74,9 +87,20 @@ export function ModelPicker(props: {
         <div className="composer-model-panel">
           {props.reasoning && <fieldset className="model-effort-options" disabled={props.reasoning.disabled}>
             <legend>思考等级 <span>全局保存 · 用于后续请求</span></legend>
-            <div>{efforts.map(([value, label]) => <button type="button" key={value}
-              aria-pressed={props.reasoning?.value === value}
-              onClick={() => props.reasoning?.onChange(value)}>{label}</button>)}</div>
+            <div className="effort-slider-heading"><span>{props.reasoning.disabled ? "暂不可调整" : "拖动选择等级"}</span><output>{efforts[draftEffort]?.[1]}</output></div>
+            <div className="effort-slider" data-max={draftEffort === 6}>
+              <div className="effort-slider-track" aria-hidden="true"><span className="effort-slider-fill" style={{ width: `${draftEffort / 6 * 100}%` }} /></div>
+              <input type="range" min={0} max={6} step={1} value={draftEffort}
+                aria-label="思考等级" aria-valuetext={efforts[draftEffort]?.[1]}
+                onChange={event => setDraftEffort(Number(event.currentTarget.value))}
+                onPointerUp={event => commitEffort(Number(event.currentTarget.value))}
+                onPointerCancel={() => setDraftEffort(Math.max(0, effortIndex))}
+                onKeyUp={event => {
+                  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) commitEffort(Number(event.currentTarget.value));
+                }}
+                onBlur={event => commitEffort(Number(event.currentTarget.value))} />
+            </div>
+            <div className="effort-slider-labels" aria-hidden="true">{efforts.map(([value, label], index) => <span key={value} data-active={draftEffort === index}>{label}</span>)}</div>
           </fieldset>}
           <ModelCatalog
             {...props}
