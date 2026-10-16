@@ -35,20 +35,26 @@ export function Reasoning({
 }) {
   const [expanded, setExpanded] = useState(false);
   const viewport = useRef<HTMLDivElement>(null);
-  // Keep the newest line in view as the thought grows; reset on each delta.
+  // Keep the newest line in view as the thought grows. Runs after every render
+  // (each delta re-renders), which is exactly when the viewport must re-pin.
   useLayoutEffect(() => {
     if (live) {
       const node = viewport.current;
       if (node) node.scrollTop = node.scrollHeight;
     }
-  }, [live, text]);
+  });
   if (!text) return null;
   if (live) {
     const tail = text.split("\n").slice(-LIVE_TAIL_LINES).join("\n");
     return (
       <section className="reasoning reasoning-live" aria-label="思考中">
         <div className="reasoning-head">
-          <Brain size={14} weight="fill" className="reasoning-glyph" aria-hidden="true" />
+          <Brain
+            size={14}
+            weight="fill"
+            className="reasoning-glyph"
+            aria-hidden="true"
+          />
           <span className="reasoning-label">思考中</span>
         </div>
         <div className="reasoning-viewport" ref={viewport}>
@@ -68,7 +74,12 @@ export function Reasoning({
         aria-expanded={expanded}
         aria-label={`思考过程：${last}`}
       >
-        <Brain size={14} weight="regular" className="reasoning-glyph" aria-hidden="true" />
+        <Brain
+          size={14}
+          weight="regular"
+          className="reasoning-glyph"
+          aria-hidden="true"
+        />
         <span className="reasoning-summary" title={last}>
           {last}
         </span>

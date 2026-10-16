@@ -63,7 +63,9 @@ it("streams reasoning in a scrolling viewport then keeps only the last line", as
   if (!js || !css) throw new Error("Missing bundle");
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const page = await browser.newPage({
+      viewport: { width: 1280, height: 800 },
+    });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setContent('<div id="root"></div>');
@@ -77,7 +79,9 @@ it("streams reasoning in a scrolling viewport then keeps only the last line", as
       );
       await page.evaluate(
         () =>
-          new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          ),
       );
     };
 
@@ -106,7 +110,9 @@ it("streams reasoning in a scrolling viewport then keeps only the last line", as
     expect(await page.locator(".reasoning-full").count()).toBe(0);
     await done.locator(".reasoning-head").click();
     await expect.poll(() => page.locator(".reasoning-full").count()).toBe(1);
-    expect(await page.locator(".reasoning-full").innerText()).toContain("line 1");
+    expect(await page.locator(".reasoning-full").innerText()).toContain(
+      "line 1",
+    );
 
     // Persisted reasoning renders as its own collapsed last-line summary.
     await step("saved");
