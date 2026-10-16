@@ -11,6 +11,14 @@ import { ChangeSessionNavigation } from "./ChangeSessionNavigation";
 import { RuntimePanels } from "./RuntimePanels";
 import { permissionLabels } from "./Settings";
 
+// The Transcript renders the selected session's live request inline; the
+// Inspector owns every other request (background, child, other session).
+function scrollToInlineApproval(approvalId: string) {
+  const target = document.querySelector(`[data-approval-id="${approvalId}"]`);
+  if (target instanceof HTMLElement)
+    target.scrollIntoView({ block: "center", behavior: "auto" });
+}
+
 export function Inspector({
   onRequestCollapse,
   focusToken,
@@ -47,6 +55,17 @@ export function Inspector({
   const pendingApprovals = Object.values(state.activeRuns).filter(
     (r) => r.pendingApproval,
   );
+  // Exactly one request can be the selected session's live head; the
+  // Transcript already renders it in the reading flow, so the drawer only
+  // annotates and links it instead of duplicating the buttons. `run` is
+  // keyed by the active session, so its pending request is that exact head.
+  const inlineApprovalId = run?.pendingApproval?.id;
+  const inlineCovered = pendingApprovals.filter(
+    (r) => r.pendingApproval?.id === inlineApprovalId,
+  );
+  const drawerApprovals = pendingApprovals.filter(
+    (r) => r.pendingApproval?.id !== inlineApprovalId,
+  );
   return (
     <aside
       ref={paneRef}
@@ -72,12 +91,43 @@ export function Inspector({
         {pendingApprovals.length > 0 && (
           // Approvals are never hidden behind a disclosure or a collapsed
           // pane: this summary (and the header pill in App) always shows the
-          // pending count before any per-request detail.
+          // pending count before any per-request detail. The selected
+          // session's live request is decided in the Transcript, so the drawer
+          // links to it instead of duplicating its buttons; every other
+          // request (background / child) still gets a full panel here.
           <section className="wb-approvals-summary wb-stack">
             <h3 className="wb-approvals-title">
               待批准（{pendingApprovals.length}）
             </h3>
-            {pendingApprovals.map((r) => {
+            {inlineCovered.map((r) => {
+              const request = r.pendingApproval;
+              if (!request) return null;
+              return (
+                <section
+                  key={request.id}
+                  className="wb-approval-row wb-approval-row-inline wb-stack"
+                >
+                  <p className="wb-muted">
+                    这条审批已在主消息流的内联卡片中显示，可直接在对话里批准或拒绝。
+                  </p>
+                  <div className="wb-row">
+                    <span>
+                      {request.toolName}
+                      {request.childSessionId
+                        ? ` · 子代理 ${request.childSessionId}`
+                        : ""}
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={() => scrollToInlineApproval(request.id)}
+                    >
+                      定位到消息流
+                    </Button>
+                  </div>
+                </section>
+              );
+            })}
+            {drawerApprovals.map((r) => {
               const request = r.pendingApproval;
               if (!request) return null;
               return (

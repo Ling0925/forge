@@ -1,8 +1,13 @@
 import { memo, useLayoutEffect, useRef, useState } from "react";
-import type { SessionSnapshot } from "../../shared-types";
+import type {
+  ApprovalRequest,
+  SessionId,
+  SessionSnapshot,
+} from "../../shared-types";
 import { reduceTimeline } from "../../state/timeline";
 import { TranscriptScrollState } from "../../state/transcript-scroll";
 import { useWorkbench } from "../../state/workbench-context";
+import { ApprovalPanel } from "../primitives/ApprovalPanel";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
@@ -78,19 +83,91 @@ export const StoredTranscript = memo(function StoredTranscript({
     </>
   );
 });
+// In-line approval keeps the decision inside the reading flow: the same facts
+// and the same single-use command rule as the Inspector panel, rendered at the
+// live tail instead of requiring a trip to the right-hand drawer. It is a thin
+// wrapper on purpose, so the primitive stays the one authoritative surface.
+export const InlineApproval = memo(function InlineApproval({
+  request,
+  sessionId,
+  isSubmitting,
+  hasQueued,
+  onDecide,
+}: {
+  readonly request: ApprovalRequest;
+  readonly sessionId: SessionId;
+  readonly isSubmitting: boolean;
+  readonly hasQueued: boolean;
+  readonly onDecide: (approved: boolean) => void;
+}) {
+  const command = request.command
+    ? // Command arrays are shown verbatim; a plain description is the fallback
+      // for approvals whose risk is not a literal argv.
+      JSON.stringify(request.command)
+    : request.description;
+  return (
+    <section
+      className="transcript-approval wb-stack"
+      aria-label="待批准执行"
+      data-session-id={sessionId}
+      data-approval-id={request.id}
+      style={{
+        // Styling owned by this component only: the workspace CSS file is not
+        // part of this change, so the card borrows contract tokens inline.
+        gap: "var(--space-3)",
+        padding: "var(--space-4)",
+        borderRadius: "var(--radius-card)",
+        border: "1px solid var(--warning-border)",
+        // The ApprovalPanel inside keeps its own warning surface; the outer
+        // frame is a quiet card so the pair reads as one inline unit.
+        background: "var(--surface-elevated)",
+      }}
+    >
+      <div className="transcript-approval-head wb-stack">
+        <strong style={{ fontSize: "var(--text-base)", fontWeight: 600 }}>
+          需要你的批准
+        </strong>
+        {request.childSessionId && (
+          <span className="wb-muted">
+            子代理审批 · {request.childSessionId}
+          </span>
+        )}
+      </div>
+      <ApprovalPanel
+        toolName={request.toolName}
+        description={request.description}
+        command={command}
+        isSubmitting={isSubmitting}
+        riskNotice="命令不是 OS 沙箱；批准仅对本次请求有效。"
+        onApprove={() => onDecide(true)}
+        onReject={() => onDecide(false)}
+      />
+      {hasQueued && (
+        <p className="wb-muted">
+          还有排队的审批请求，处理完这一条后会继续显示。
+        </p>
+      )}
+    </section>
+  );
+});
+
 export function Transcript() {
-  const { state, openNewSession } = useWorkbench();
+  const { state, answerApproval, openNewSession } = useWorkbench();
   const snapshot = state.activeSnapshot;
-  const run = state.activeSessionId
-    ? state.activeRuns[state.activeSessionId]
-    : undefined;
+  const sessionId = state.activeSessionId;
+  const run = sessionId ? state.activeRuns[sessionId] : undefined;
+  const pendingApproval = run?.pendingApproval;
+  // The inline card is the primary path only for the selected session's live
+  // run; every other run (background, child) stays in the Inspector summary.
+  const showInlineApproval = Boolean(sessionId && pendingApproval);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const navigation = useRef(new TranscriptScrollState());
   const [hasNewContent, setHasNewContent] = useState(false);
-  const sessionId = state.activeSessionId;
-  // Loading a snapshot for the selected session is itself arriving content.
-  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.streamingText ?? ""}`;
+  // Loading a snapshot for the selected session is itself arriving content,
+  // and a fresh approval request is arriving content too: the card must be
+  // pulled into view like any new message.
+  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.streamingText ?? ""}:${pendingApproval?.id ?? ""}`;
   const jumpToLatest = () => {
     navigation.current.reset();
     setHasNewContent(false);
@@ -176,6 +253,20 @@ export function Transcript() {
                 />
               </div>
             </article>
+          )}
+          {showInlineApproval && pendingApproval && sessionId && (
+            <InlineApproval
+              key={pendingApproval.id}
+              request={pendingApproval}
+              sessionId={sessionId}
+              isSubmitting={Boolean(
+                run?.isSubmittingApproval || run?.isCancelling,
+              )}
+              hasQueued={(run?.approvalQueue?.length ?? 0) > 1}
+              onDecide={(approved) =>
+                void answerApproval(sessionId, pendingApproval.id, approved)
+              }
+            />
           )}
         </div>
       </div>
