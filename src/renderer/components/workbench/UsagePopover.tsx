@@ -86,7 +86,9 @@ export function UsagePopover({
         </svg>
         <span>
           {ratio === undefined
-            ? "上下文"
+            ? context
+              ? `${context.estimated ? "≈" : ""}${compactTokens(context.usedTokens)} tokens`
+              : "上下文"
             : `${context?.estimated ? "≈" : ""}${percent(ratio)}`}
         </span>
       </summary>
@@ -97,7 +99,9 @@ export function UsagePopover({
             <dt>上下文{context?.estimated ? "（估算）" : ""}</dt>
             <dd>
               {context
-                ? `${percent(ratio)} / ${compactTokens(context.usedTokens)}`
+                ? ratio === undefined
+                  ? `${compactTokens(context.usedTokens)} tokens 已用`
+                  : `${percent(ratio)} / ${compactTokens(context.usedTokens)}`
                 : "尚无数据"}
             </dd>
           </dl>

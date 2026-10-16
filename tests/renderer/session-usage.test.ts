@@ -120,7 +120,11 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     import './src/renderer/components/workbench/app.css';
     import './src/renderer/styles/workspace-theme.css';
     const events = ${JSON.stringify(events)};
+    if (location.search === '?unknown-window') {
+      events.splice(0, events.length, ${JSON.stringify(context(61597, 58368, null))});
+    }
     const snapshot = {version:1,id:events[0].sessionId,title:'test',workspace:'/tmp',model:'model',createdAt:events[0].timestamp,updatedAt:events.at(-1).timestamp,status:'completed',messages:[],changes:[],events};
+    if (location.search === '?unknown-window') snapshot.status = 'running';
     createRoot(document.getElementById('root')).render(<div className="wb-app"><UsagePopover events={events} snapshot={snapshot} /></div>);
   `,
     },
@@ -187,6 +191,12 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     expect(
       await page.evaluate(() => localStorage.getItem("forge-session-usage-v1")),
     ).toBe(saved);
+    await page.goto("http://usage.test/?unknown-window");
+    await page.getByText("≈61.7K tokens", { exact: true }).click();
+    const unknownPanel = page.getByRole("region", { name: "用量详情" });
+    expect(await unknownPanel.innerText()).toContain("61.7K tokens 已用");
+    expect(await unknownPanel.innerText()).toContain("上下文窗口未知，暂不计算百分比");
+    expect(await page.getByRole("progressbar", { name: "上下文占用" }).count()).toBe(0);
   } finally {
     await browser.close();
   }
