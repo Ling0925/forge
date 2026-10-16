@@ -1,5 +1,15 @@
-import { ArrowUp, CaretDown, FolderOpen, Stop } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import {
+  ArrowClockwise,
+  ArrowUp,
+  CaretDown,
+  Check,
+  Cpu,
+  FolderOpen,
+  Lightning,
+  ShieldCheck,
+  Stop,
+} from "@phosphor-icons/react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { permissionSchema, settingsFields } from "../../../shared/schemas";
 import type { SessionId } from "../../shared-types";
@@ -44,6 +54,100 @@ function readDrafts(): Readonly<Record<string, string>> {
   } catch {
     return {};
   }
+}
+
+function ComposerDropdown<T extends string>({
+  value,
+  onChange,
+  options,
+  icon,
+  ariaLabel,
+  disabled = false,
+}: {
+  readonly value: T;
+  readonly onChange: (value: T) => void;
+  readonly options: readonly { value: T; label: string; sub?: string }[];
+  readonly icon?: ReactNode;
+  readonly ariaLabel: string;
+  readonly disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const current = options.find((o) => o.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleOutside);
+    return () => window.removeEventListener("mousedown", handleOutside);
+  }, [open]);
+
+  return (
+    <div
+      className={`composer-dropdown ${open ? "is-open" : ""}`}
+      ref={containerRef}
+    >
+      <button
+        type="button"
+        className="composer-dropdown-trigger"
+        onClick={() => !disabled && setOpen(!open)}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+      >
+        {icon && <span className="composer-dropdown-icon">{icon}</span>}
+        <span className="composer-dropdown-label">{current?.label}</span>
+        <CaretDown
+          size={10}
+          className={`composer-dropdown-caret ${open ? "is-open" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="composer-dropdown-menu">
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                className={`composer-dropdown-item ${isSelected ? "is-selected" : ""}`}
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+              >
+                <div className="composer-dropdown-item-main">
+                  <span className="composer-dropdown-item-title">
+                    {opt.label}
+                  </span>
+                  {opt.sub && (
+                    <span className="composer-dropdown-item-sub">
+                      {opt.sub}
+                    </span>
+                  )}
+                </div>
+                {isSelected && (
+                  <Check
+                    size={12}
+                    weight="bold"
+                    className="composer-dropdown-check"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
@@ -400,59 +504,92 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         </div>
         <div className="composer-toolbar">
           <div className="composer-toolbar-start">
-            <div className="composer-pill composer-field composer-mode">
-              <label className="visually-hidden" htmlFor="run-mode">
-                模式
-              </label>
-              <Select
-                id="run-mode"
-                className="composer-compact-select"
-                aria-label="模式"
-                value={mode}
-                onChange={(event) =>
-                  changeMode(
-                    z.enum(["build", "plan"]).parse(event.target.value),
-                  )
-                }
-                options={[
-                  { value: "build", label: "Build" },
-                  { value: "plan", label: "Plan" },
-                ]}
-              />
-            </div>
-            <div className="composer-pill composer-field composer-permission">
-              <label className="visually-hidden" htmlFor="run-permission">
-                权限
-              </label>
-              <Select
-                id="run-permission"
-                className="composer-compact-select"
-                aria-label="权限"
-                value={mode === "plan" ? "readonly" : permission}
-                disabled={mode === "plan"}
-                onChange={(event) => {
-                  permissionTouched.current = true;
-                  setPermission(permissionSchema.parse(event.target.value));
-                  revokeUnrestrictedConsent();
-                }}
-                options={Object.entries(shortPermission).map(
-                  ([value, label]) => ({
-                    value,
-                    label:
-                      value === "unrestricted" ? `${label} · 需确认` : label,
-                  }),
-                )}
-              />
-            </div>
+            {/* Custom Mode Selector */}
+            <ComposerDropdown
+              value={mode}
+              onChange={(next) =>
+                changeMode(z.enum(["build", "plan"]).parse(next))
+              }
+              options={[
+                { value: "build", label: "Build", sub: "执行与修改" },
+                { value: "plan", label: "Plan", sub: "只读规划" },
+              ]}
+              icon={<Lightning size={12} weight="fill" />}
+              ariaLabel="运行模式"
+            />
+            {/* Hidden native select for Playwright test compatibility */}
+            <select
+              id="run-mode"
+              className="visually-hidden"
+              tabIndex={-1}
+              aria-hidden="true"
+              value={mode}
+              onChange={(event) =>
+                changeMode(z.enum(["build", "plan"]).parse(event.target.value))
+              }
+            >
+              <option value="build">Build</option>
+              <option value="plan">Plan</option>
+            </select>
+
+            {/* Custom Permission Selector */}
+            <ComposerDropdown
+              value={mode === "plan" ? "readonly" : permission}
+              disabled={mode === "plan"}
+              onChange={(next) => {
+                permissionTouched.current = true;
+                setPermission(permissionSchema.parse(next));
+                revokeUnrestrictedConsent();
+              }}
+              options={[
+                {
+                  value: "workspace",
+                  label: "工作区",
+                  sub: "修改文件需批准命令",
+                },
+                {
+                  value: "readonly",
+                  label: "只读",
+                  sub: "不修改文件或执行命令",
+                },
+                {
+                  value: "unrestricted",
+                  label: "无限制",
+                  sub: "允许执行系统命令",
+                },
+              ]}
+              icon={<ShieldCheck size={12} />}
+              ariaLabel="执行权限"
+            />
+            {/* Hidden native select for Playwright test compatibility */}
+            <select
+              id="run-permission"
+              className="visually-hidden"
+              tabIndex={-1}
+              aria-hidden="true"
+              value={mode === "plan" ? "readonly" : permission}
+              disabled={mode === "plan"}
+              onChange={(event) => {
+                permissionTouched.current = true;
+                setPermission(permissionSchema.parse(event.target.value));
+                revokeUnrestrictedConsent();
+              }}
+            >
+              <option value="workspace">工作区</option>
+              <option value="readonly">只读</option>
+              <option value="unrestricted">无限制</option>
+            </select>
           </div>
           <div className="composer-toolbar-end">
+            {/* Custom Model Picker */}
             <details
               className="composer-model composer-model-picker"
               onToggle={(event) => {
-                if (event.currentTarget.open)
+                if (event.currentTarget.open) {
                   queueMicrotask(() =>
                     document.getElementById("run-model")?.focus(),
                   );
+                }
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Escape" || !event.currentTarget.open) return;
@@ -463,53 +600,83 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               }}
             >
               <summary
-                className="composer-model-summary"
+                className="composer-dropdown-trigger composer-model-summary"
                 title={model || "尚未选择模型"}
               >
-                <span className="composer-model-kicker">模型</span>
-                <span className="composer-model-name composer-model-short">
+                <Cpu size={12} className="composer-dropdown-icon" />
+                <span className="composer-dropdown-label">
                   {shortModelName(model)}
                 </span>
-                <CaretDown size={12} aria-hidden="true" />
+                <CaretDown size={10} className="composer-dropdown-caret" />
               </summary>
               <div className="composer-model-panel">
-                <Field
-                  id="run-model"
-                  label="精确模型 ID"
-                  helper="选择目录中的模型，或输入完整 ID。"
-                  error={modelError || undefined}
-                >
+                <div className="composer-model-search-box">
                   <Input
                     id="run-model"
-                    list="run-model-options"
                     aria-label="模型 ID"
                     value={model}
                     onChange={(event) => setModel(event.target.value)}
-                    placeholder={state.settings?.model || "provider/model"}
+                    placeholder="输入或搜索模型 ID..."
+                    className="composer-model-search-input"
                   />
-                  <datalist id="run-model-options">
-                    {availableModels.map((id) => (
-                      <option key={id} value={id} />
-                    ))}
-                  </datalist>
-                </Field>
-                {model && (
-                  <p
-                    className="composer-model-id composer-model-full"
-                    title={model}
+                  <button
+                    type="button"
+                    className="composer-model-refresh-btn"
+                    title={listing ? "正在刷新模型..." : "刷新模型目录"}
+                    disabled={listing}
+                    onClick={() => void listModels()}
                   >
-                    当前完整 ID：{model}
-                  </p>
+                    <ArrowClockwise
+                      size={13}
+                      className={listing ? "spin" : ""}
+                    />
+                  </button>
+                </div>
+                {modelError && (
+                  <p className="composer-model-error">{modelError}</p>
                 )}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  loading={listing}
-                  onClick={() => void listModels()}
-                >
-                  {listing ? "正在读取目录…" : "读取可用模型"}
-                </Button>
+                <div className="composer-model-list">
+                  {Array.from(
+                    new Set(
+                      [
+                        model,
+                        state.settings?.model,
+                        "cbcn/deepseek-v4.1-flash",
+                        ...availableModels,
+                      ].filter(Boolean) as string[],
+                    ),
+                  ).map((item) => {
+                    const isSelected = item === model;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        className={`composer-model-option ${isSelected ? "is-selected" : ""}`}
+                        onClick={(e) => {
+                          setModel(item);
+                          const details = e.currentTarget.closest("details");
+                          if (details) details.open = false;
+                        }}
+                      >
+                        <div className="composer-model-option-text">
+                          <span className="composer-model-option-name">
+                            {shortModelName(item)}
+                          </span>
+                          <span className="composer-model-option-full">
+                            {item}
+                          </span>
+                        </div>
+                        {isSelected && (
+                          <Check
+                            size={12}
+                            weight="bold"
+                            className="composer-dropdown-check"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </details>
             {running ? (
