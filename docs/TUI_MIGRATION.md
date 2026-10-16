@@ -5,7 +5,8 @@
 - 框架：Ink 6.6.0 / React / Yoga。生产入口为 `node-io → TerminalReader → InkController → InkApp → InkView`。
 - 输入：唯一 `InputDecoder` 保留 UTF-8、跨 chunk 按键和 bracketed-paste 来源；不可变编辑状态和焦点 reducer 由 `InputStore` 管理，React `useSyncExternalStore` 订阅。
 - 展示：Composer、ApprovalInput、Picker、SlashSuggestions、RichRow 独立组件；`dockLayout` 按实际终端高度统一分配预算，不再固定 20 行。
-- 完成输出经 Ink `useStdout().write` 提交，框架负责清除/恢复动态区域；不再使用会不断累积历史字节的 Ink Static。应用不自行发送光标移动/鼠标/备用屏幕序列。
+- 默认富终端使用备用屏幕；Ink/Yoga 固定高度根 Box、可伸缩消息区和不收缩的底部 dock，保留一行防止终端底部换行。完成历史与流式 tail 同属消息视口，不再向主屏 scrollback 追加；原 Shell 画面退出恢复。应用仅管理备用屏幕生命周期，绘制/光标刷新仍由 Ink 负责。
+- 读屏模式保持行内输出（`useStdout().write`），不进入备用屏幕、不填充空白。两种路径都不使用无限累积的 Static 列表，不捕获鼠标。
 - 普通 run / JSON / 管道采用最小 PlainController；不加载 Ink，不依赖旧手写 Screen。旧引擎已从 `src` 搬到 `tests/cli/legacy`，仅作历史行为 fixture，不进入 CLI 包。
 - 模型、会话、权限、工具执行与存储协议不变。本机仍只编译 CLI，不安装、不更改启动器。
 
@@ -23,8 +24,8 @@
 | 状态、上下文、计划、待发预览 | 响应式预算；极矮窗口优先输入 |
 | 未完成长回答阅读 | PgUp 冻结近期历史+当前 tail 快照，PgUp/PgDn 翻页，End/Esc 返回；后台继续运行 |
 | 原生选择/复制 | 不捕获鼠标、不发 OSC52；阅读冻结期间不因后台输出破坏选区 |
-| 长历史性能 | 近期阅读缓存 2000 行 / 1 MB；冻结快照 2000 物理行；延迟输出 2 MB，超限明确提示，存储不裁剪 |
-| 输出唯一性 | 完成批次序号防重复交付；不把未完成快照追加为历史 |
+| 长历史性能 | 近期阅读缓存 2000 行 / 1 MB；冻结快照 2000 物理行；全屏不累积延迟输出，存储不裁剪 |
+| 输出唯一性 | 完成内容仅入历史一次；全屏只绘制可见切片，读屏行内路径用批次序号防重复交付 |
 | light/dark/system | COLORFGBG + 一次有截止时间的 OSC11 探测；迟到响应不改主题 |
 | NO_COLOR / TERM=dumb / 非TTY | 颜色禁用或纯文本降级 |
 | 读屏模式 | INK_SCREEN_READER=true 接入 Ink 无障碍路径；关闭 timer-only 动画与 partial tail，完成输出保留 |
@@ -61,6 +62,12 @@
 - 新增 `palette.test.ts` 与 `ink-colors.test.ts`，在真实 Chromium/xterm 逐格对比前景/背景/粗体/反色：light/dark/system × 16/256/真彩 × 彩色/无色共 18 组；另验默认主题探测超时、选择器和审批。
 - 编译产物 PTY 测试扩展为无色、亮色、暗色三个启动场景，用临时 HOME/FORGE_HOME，直接断言真实鼠尾草 SGR，不仅断言文案。
 - 本次配色验证：`pnpm exec vitest run tests/cli/palette.test.ts tests/cli/ink-colors.test.ts tests/cli/theme-v2.test.ts tests/cli/diff-theme.test.ts tests/cli/ink-bundle.test.ts tests/cli/ink-view.test.ts tests/cli/ink-terminal.test.ts tests/cli/ink-xterm.test.ts tests/cli/format.test.ts tests/cli/tool-cards.test.ts tests/cli/context-footer.test.ts tests/cli/diff-accuracy.test.ts`：12 文件 / **118 项通过**；原主题对比度测试仍通过。限定严格类型检查、CLI 编译和产物语法检查通过，未执行全仓库测试。
+
+## 全屏固定输入补齐
+
+按用户选择，默认富终端切换全屏，而不是继续兼容主屏 scrollback。根 Box 使用终端高度减一，消息区 `flexGrow`，输入/状态 dock `flexShrink=0`；Slash 建议向上展开。屏幕切换仅在 Ink 挂载时启用，退出恢复；未挂载审批、普通文本和读屏模式不切换。
+
+本轮检查：`pnpm exec vitest run tests/cli/ink-bundle.test.ts tests/cli/ink-xterm.test.ts tests/cli/ink-view.test.ts tests/cli/ink-modes.test.ts tests/cli/ink-terminal.test.ts tests/cli/ink-app.test.ts tests/cli/ink-colors.test.ts tests/cli/ink-transcript.test.ts tests/cli/interactive.test.ts`：**9 文件 / 123 项通过**。真实 xterm 断言输入行坐标（24行终端无额外底栏时为第23行）、消息历史翻页、原生选区冻结、审批/菜单/选择器、仅高度及宽高缩放、原Shell画面恢复；读屏无整屏填充。限定严格类型检查、CLI编译、产物语法与亮/暗/无色PTY启动退出通过。
 
 ## 测试与历史基线
 
