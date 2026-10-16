@@ -1,5 +1,6 @@
 import {
   ArrowUp,
+  Brain,
   CaretDown,
   FolderOpen,
   Lightning,
@@ -55,6 +56,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     chooseWorkspace,
     cancelRun,
     openSettings,
+    updateSettings,
   } = useWorkbench();
   // Keep one composer mounted across new/history views; drafts never migrate to another session.
   const [drafts, setDrafts] = useState(readDrafts);
@@ -125,6 +127,26 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
+  const [savingEffort, setSavingEffort] = useState(false);
+  const effortSaving = useRef(false);
+  const changeEffort = async (value: string) => {
+    if (effortSaving.current) return;
+    const reasoningEffort = settingsFields.reasoningEffort
+      .unwrap()
+      .parse(value);
+    effortSaving.current = true;
+    setSavingEffort(true);
+    setError("");
+    try {
+      const ok = await updateSettings({ settings: { reasoningEffort } });
+      if (!ok && alive.current) setError("思考等级保存失败，请重试。");
+    } catch {
+      if (alive.current) setError("思考等级保存失败，请重试。");
+    } finally {
+      effortSaving.current = false;
+      if (alive.current) setSavingEffort(false);
+    }
+  };
   const [permission, setPermission] = useState(
     state.settings?.defaultPermission ?? "workspace",
   );
@@ -206,7 +228,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const isConfigured = state.settings?.isConfigured === true;
   const configurationHint = "连接模型后即可开始对话。";
   const submit = async () => {
-    if (submitting.current || running || submission) return;
+    if (submitting.current || effortSaving.current || running || submission)
+      return;
     if (!isConfigured) {
       setError(configurationHint);
       return;
@@ -514,6 +537,31 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               loading={listing}
               error={modelError}
             />
+            <div
+              className="composer-effort"
+              title="思考等级：全局保存，用于后续请求；支持的等级取决于模型服务"
+            >
+              <ComposerDropdown
+                value={state.settings?.reasoningEffort ?? "default"}
+                onChange={(value) => void changeEffort(value)}
+                disabled={savingEffort || busy || !!submission}
+                ariaLabel="思考等级"
+                icon={<Brain size={12} aria-hidden="true" />}
+                options={[
+                  {
+                    value: "default",
+                    label: "默认",
+                    sub: "由模型决定 · 全局保存",
+                  },
+                  { value: "none", label: "关闭", sub: "none" },
+                  { value: "minimal", label: "极低", sub: "minimal" },
+                  { value: "low", label: "低", sub: "low" },
+                  { value: "medium", label: "中", sub: "medium" },
+                  { value: "high", label: "高", sub: "high" },
+                  { value: "xhigh", label: "极高", sub: "xhigh" },
+                ]}
+              />
+            </div>
             {running ? (
               <Button
                 type="button"
@@ -533,7 +581,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 size="sm"
                 className="composer-submit composer-run composer-action"
                 loading={busy || !!submission}
-                disabled={!isConfigured || !prompt.trim() || !!submission}
+                disabled={
+                  !isConfigured ||
+                  !prompt.trim() ||
+                  !!submission ||
+                  savingEffort
+                }
                 aria-label={isNew ? "发送并开始会话" : "运行"}
                 title={
                   busy || submission

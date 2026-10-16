@@ -240,6 +240,19 @@
     var(--transition-fast);
   transform: none;
 }
+.wb-app .composer-effort {
+  flex: 0 0 auto;
+}
+.wb-app .composer-effort .composer-dropdown-menu {
+  left: auto;
+  right: 0;
+  max-height: 60dvh;
+  overflow-y: auto;
+}
+.wb-app .workbench-composer:has(.composer-split) {
+  overflow: visible;
+  max-height: none;
+}
 .wb-app .composer-action:hover:not(:disabled),
 .wb-app .composer-action:active:not(:disabled) {
   transform: none;

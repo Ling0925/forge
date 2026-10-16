@@ -15,10 +15,11 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       import './src/renderer/styles/global.css';
       import './src/renderer/components/workbench/app.css';
       import './src/renderer/styles/workspace-theme.css';
-      function Harness(){const {calls,switchSession,toggleFailure,holdSend,acceptSend,finishRun}=useWorkbench();return <>
+      function Harness(){const {calls,switchSession,toggleFailure,holdSend,acceptSend,finishRun,saveEffort,failEffort}=useWorkbench();return <>
         <div className="wb-app"><Composer/></div><output id="calls">{calls}</output>
         <button onClick={switchSession}>切换</button><button onClick={toggleFailure}>切换失败</button>
         <button onClick={holdSend}>延迟发送</button><button onClick={acceptSend}>接收</button><button onClick={finishRun}>完成运行</button>
+        <button onClick={saveEffort}>保存等级</button><button onClick={failEffort}>保存等级失败</button>
       </>}
       createRoot(document.getElementById('root')).render(<TestProvider><Harness/></TestProvider>);
     `,
@@ -45,17 +46,21 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
           const [id,setId]=useState('a');const [calls,setCalls]=useState(0);
           const [failure,setFailure]=useState(false);const [runs,setRuns]=useState({});
           const hold=useRef(false);const resolveSend=useRef(null);
+          const [effort,setEffort]=useState('default');const pendingEffort=useRef(null);
           const startRun=async()=>{setCalls(n=>n+1);if(failure)return false;
             if(hold.current) return new Promise(resolve=>{resolveSend.current=resolve;});
             setRuns(old=>({...old,[id]:{accepted:true,status:'completed'}}));return true;};
           return <Context.Provider value={{calls,startRun,toggleFailure:()=>setFailure(v=>!v),
+            updateSettings:({settings})=>new Promise(resolve=>{pendingEffort.current={value:settings.reasoningEffort,resolve};}),
+            saveEffort:()=>{setEffort(pendingEffort.current.value);pendingEffort.current.resolve(true);},
+            failEffort:()=>pendingEffort.current.resolve(false),
             holdSend:()=>{hold.current=true;},
             acceptSend:()=>{setRuns({[id]:{accepted:true,status:'running'}});resolveSend.current?.(true);},
             cancelRun:()=>setRuns({[id]:{accepted:true,status:'running',isCancelling:true}}),
             finishRun:()=>setRuns({[id]:{accepted:true,status:'completed'}}),
             switchSession:()=>setId(v=>v==='a'?'b':'a'),selectSession:()=>{},
             state:{activeSessionId:id,activeSnapshot:{model:'provider/model',workspace:'/tmp'},sessions:[],
-              settings:{...defaultPublicSettings,model:'provider/model',isConfigured:true},activeRuns:runs}}}>{children}</Context.Provider>
+              settings:{...defaultPublicSettings,model:'provider/model',isConfigured:true,reasoningEffort:effort},activeRuns:runs}}}>{children}</Context.Provider>
         }
       `,
           }));
@@ -73,11 +78,12 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     const page = await browser.newPage({
       viewport: { width: 1440, height: 900 },
     });
+    page.setDefaultTimeout(3000);
     await page.setContent('<div id="root"></div>');
     await page.addStyleTag({ content: css });
     await page.addStyleTag({
       content:
-        ".wb-app{height:auto!important}body,#root{overflow:auto!important}",
+        ".wb-app{height:auto!important;padding-top:400px}body,#root{overflow:auto!important}",
     });
     await page.addScriptTag({ content: js });
     const input = page.locator("textarea.composer-textarea");
@@ -87,6 +93,38 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     await input.press("Enter");
     await expect.poll(calls).toBe("1");
     await expect.poll(() => input.inputValue()).toBe("");
+    const effort = page.getByRole("button", { name: "思考等级", exact: true });
+    await effort.click();
+    await page
+      .getByRole("menuitemradio", { name: "高 high", exact: true })
+      .click();
+    await input.fill("wait for effort");
+    expect(
+      await page
+        .getByRole("button", { name: "运行", exact: true })
+        .isDisabled(),
+    ).toBe(true);
+    await input.press("Enter");
+    expect(await calls()).toBe("1");
+    await page.getByRole("button", { name: "保存等级", exact: true }).click();
+    await expect.poll(() => effort.innerText()).toBe("高");
+    await effort.click();
+    await page
+      .getByRole("menuitemradio", { name: "低 low", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "保存等级失败", exact: true })
+      .click();
+    await expect
+      .poll(() => page.getByRole("alert").innerText())
+      .toBe("思考等级保存失败，请重试。");
+    expect(await effort.innerText()).toBe("高");
+    await effort.click();
+    await page
+      .getByRole("menuitemradio", { name: "默认", exact: false })
+      .click();
+    await page.getByRole("button", { name: "保存等级", exact: true }).click();
+    await expect.poll(() => effort.innerText()).toBe("默认");
     await input.fill("one");
     await input.press("Shift+Enter");
     await input.press("Enter");
@@ -144,6 +182,35 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     await page.getByRole("button", { name: "延迟发送", exact: true }).click();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
+      await effort.click();
+      const menu = page.getByRole("menu", { name: "思考等级", exact: true });
+      await menu.evaluate(async (node) => {
+        await Promise.all(
+          node.getAnimations().map((animation) => animation.finished),
+        );
+      });
+      const menuBounds = await menu.boundingBox();
+      if (!menuBounds) throw new Error("Missing effort menu");
+      expect(menuBounds.x).toBeGreaterThanOrEqual(0);
+      expect(menuBounds.y).toBeGreaterThanOrEqual(0);
+      expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(width);
+      expect(
+        await menu
+          .locator("button")
+          .first()
+          .evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            return node.contains(
+              document.elementFromPoint(
+                rect.x + rect.width / 2,
+                rect.y + rect.height / 2,
+              ),
+            );
+          }),
+      ).toBe(true);
+      await page.screenshot({ path: `/tmp/forge-effort-${width}.png` });
+      await page.keyboard.press("Escape");
+      expect(await effort.getAttribute("aria-expanded")).toBe("false");
       await input.fill("animation check");
       await page.evaluate(async () => {
         await Promise.all(
