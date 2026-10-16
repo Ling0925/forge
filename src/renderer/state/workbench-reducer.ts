@@ -9,12 +9,14 @@ import type {
   SessionSnapshot,
   SessionStatus,
   SessionSummary,
+  Permission,
 } from "../shared-types";
 import { appendSessionEvent } from "./session-usage";
 // Draft-only ceiling. Stored snapshots are never sliced by this reducer.
 export const STREAMING_TEXT_LIMIT = 1000000;
 
 export interface ActiveRunState {
+  readonly permission?: Permission;
   readonly runId?: RunId | undefined;
   readonly sessionId: SessionId;
   readonly status: SessionStatus;
@@ -234,7 +236,12 @@ export function workbenchReducer(
         runId,
       };
       let next = run;
-      if (event.type === "run_started") next = { ...run, accepted: true };
+      if (event.type === "run_started") next = { ...run, accepted: true, permission: event.permission };
+      if (event.type === "permission_changed") {
+        const queue = (run.approvalQueue ?? (run.pendingApproval ? [run.pendingApproval] : []))
+          .filter(approval => event.permission === "workspace" || approval.childSessionId);
+        next = { ...run, permission: event.permission, approvalQueue: queue, pendingApproval: queue[0] };
+      }
       if (event.type === "text_delta")
         next = {
           ...run,

@@ -245,6 +245,18 @@ function useController() {
       });
     }
   };
+  const setRunPermission = async (permission: Permission) => {
+    const id = current.current.activeSessionId;
+    const run = id ? current.current.activeRuns[id] : undefined;
+    if (!run?.runId) return false;
+    try {
+      await window.forge.setRunPermission(run.runId, permission);
+      return true;
+    } catch (err) {
+      fail(err);
+      return false;
+    }
+  };
   const answerApproval = async (
     id: SessionId,
     approvalId: string,
@@ -286,6 +298,7 @@ function useController() {
     createSession,
     startRun,
     cancelRun,
+    setRunPermission,
     answerApproval,
     updateSettings,
     chooseWorkspace: async () => {

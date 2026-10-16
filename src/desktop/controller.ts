@@ -15,6 +15,7 @@ import {
   type ApprovalRequest,
   type ErrorInfo,
   type RunInput,
+  type Permission,
   approvalRequestSchema,
 } from "../shared/schemas";
 
@@ -42,6 +43,8 @@ export function createWorkerController(
       abort: AbortController;
       approvals: Map<string, Approval>;
       finished: boolean;
+      permission: Permission | undefined;
+      permissionChanged: boolean;
     }
   >();
   const pending = new Map<string, RpcRequest>();
@@ -90,6 +93,7 @@ export function createWorkerController(
       value.sessionId !== run.input.sessionId
     )
       return;
+    if (value.type === "run_started") run.permission = value.permission;
     if (value.type === "approval_requested") {
       const approval = approvalRequestSchema.parse(value.request);
       if (
@@ -102,6 +106,14 @@ export function createWorkerController(
         consumed: false,
         claimed: false,
       });
+      if (!approval.childSessionId && (run.permission === "unrestricted" || (run.permissionChanged && run.permission === "readonly"))) {
+        const pendingApproval = run.approvals.get(approval.id);
+        if (pendingApproval) {
+          pendingApproval.consumed = true;
+          pendingApproval.answer = run.permission === "unrestricted";
+        }
+        return;
+      }
     }
     const parsed = workerMessageSchema.parse({
       kind: "event",
@@ -274,6 +286,8 @@ export function createWorkerController(
             abort: new AbortController(),
             approvals: new Map<string, Approval>(),
             finished: false,
+            permission: undefined as Permission | undefined,
+            permissionChanged: false,
           };
           runs.set(runId, run);
           respond(request, { runId, sessionId: request.input.sessionId });
@@ -323,6 +337,7 @@ export function createWorkerController(
                   });
                 },
                 run.abort.signal,
+                { drainSteering: () => [], getPermission: () => run.permission },
               ),
             )
             .then(
@@ -331,6 +346,30 @@ export function createWorkerController(
             );
           operations.add(operation);
           void operation.finally(() => operations.delete(operation));
+          break;
+        }
+        case "setRunPermission": {
+          const run = runs.get(request.runId);
+          if (!run || run.finished || run.abort.signal.aborted)
+            throw new ForgeError("not_found", "The run is no longer active.");
+          const snapshot = await service.getSession(run.input.sessionId);
+          if (run.finished || run.abort.signal.aborted)
+            throw new ForgeError("not_found", "The run is no longer active.");
+          const levels = ["readonly", "workspace", "unrestricted"] as const;
+          const ceiling = run.input.mode === "plan" ? "readonly" : snapshot.permissionCeiling ?? "unrestricted";
+          if (levels.indexOf(request.permission) > levels.indexOf(ceiling))
+            throw new ForgeError("invalid_input", "当前运行的只读模式或子代理权限上限不允许此权限。");
+          run.permission = request.permission;
+          run.permissionChanged = true;
+          for (const approval of run.approvals.values()) {
+            if (approval.consumed || approval.request.childSessionId || request.permission === "workspace") continue;
+            approval.consumed = true;
+            approval.answer = request.permission === "unrestricted";
+            approval.resolve?.(approval.answer);
+          }
+          event(request.runId, { type: "permission_changed", sessionId: run.input.sessionId,
+            timestamp: new Date().toISOString(), permission: request.permission });
+          respond(request, request.permission);
           break;
         }
         case "cancelRun": {

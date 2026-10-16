@@ -23,6 +23,19 @@ const snapshot: SessionSnapshot = {
   changes: [],
 };
 describe("workbench authority", () => {
+  it("updates live permission and clears only root pending approvals", () => {
+    const root = { id: "root", sessionId: sessionA, toolCallId: "tool", toolName: "run_command", description: "test" };
+    const child = { ...root, id: "child", childSessionId: sessionB };
+    const state = { ...initialWorkbenchState, activeRuns: { [sessionA]: {
+      sessionId: sessionA, runId: runA, status: "awaiting_approval" as const, streamingText: "", pendingApproval: root, approvalQueue: [root, child],
+    } } };
+    const next = workbenchReducer(state, { type: "RUN_EVENT_RECEIVED", event: { runId: runA, event: {
+      type: "permission_changed", sessionId: sessionA, timestamp: snapshot.updatedAt, permission: "unrestricted",
+    } } });
+    expect(next.activeRuns[sessionA]?.permission).toBe("unrestricted");
+    expect(next.activeRuns[sessionA]?.approvalQueue).toEqual([child]);
+    expect(next.activeRuns[sessionA]?.pendingApproval).toEqual(child);
+  });
   it("reconciles terminal desktop controllers with a newer CLI run", () => {
     const state = {
       ...initialWorkbenchState,

@@ -55,7 +55,8 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
             saveEffort:()=>{setEffort(pendingEffort.current.value);pendingEffort.current.resolve(true);},
             failEffort:()=>pendingEffort.current.resolve(false),
             holdSend:()=>{hold.current=true;},
-            acceptSend:()=>{setRuns({[id]:{accepted:true,status:'running'}});resolveSend.current?.(true);},
+            acceptSend:()=>{setRuns({[id]:{accepted:true,status:'running',permission:'workspace'}});resolveSend.current?.(true);},
+            setRunPermission:async(permission)=>{setRuns(old=>({...old,[id]:{...old[id],permission}}));return true;},
             cancelRun:()=>setRuns({[id]:{accepted:true,status:'running',isCancelling:true}}),
             finishRun:()=>setRuns({[id]:{accepted:true,status:'completed'}}),
             switchSession:()=>setId(v=>v==='a'?'b':'a'),selectSession:()=>{},
@@ -251,6 +252,24 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       await page.getByRole("button", { name: "接收", exact: true }).click();
       await expect.poll(() => action.getAttribute("aria-label")).toBe("取消");
       expect(await action.boundingBox()).toEqual(initial);
+      await page.getByRole("button", { name: "执行权限", exact: true }).click();
+      await page.getByRole("menuitemradio", { name: /^无限制/ }).click();
+      await expect
+        .poll(() =>
+          page
+            .getByRole("button", { name: "执行权限", exact: true })
+            .innerText(),
+        )
+        .toBe("无限制");
+      await page.getByRole("button", { name: "执行权限", exact: true }).click();
+      await page.getByRole("menuitemradio", { name: /^工作区/ }).click();
+      await expect
+        .poll(() =>
+          page
+            .getByRole("button", { name: "执行权限", exact: true })
+            .innerText(),
+        )
+        .toBe("工作区");
       await action.click();
       await expect.poll(() => action.getAttribute("aria-busy")).toBe("true");
       expect(await action.boundingBox()).toEqual(initial);

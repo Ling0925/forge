@@ -56,6 +56,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     selectSession,
     chooseWorkspace,
     cancelRun,
+    setRunPermission,
     openSettings,
     updateSettings,
   } = useWorkbench();
@@ -222,6 +223,24 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       : undefined;
   const running =
     run?.status === "running" || run?.status === "awaiting_approval";
+  const [changingPermission, setChangingPermission] = useState(false);
+  const changePermission = async (next: string) => {
+    const selected = permissionSchema.parse(next);
+    if (changingPermission) return;
+    if (running) {
+      setChangingPermission(true);
+      const ok = await setRunPermission(selected);
+      if (alive.current) setChangingPermission(false);
+      if (!ok) return;
+    }
+    if (!alive.current || selectedDraft.current !== draftId) return;
+    permissionTouched.current = true;
+    setPermission(selected);
+    revokeUnrestrictedConsent();
+  };
+  const displayedPermission = running
+    ? (run?.permission ?? permission)
+    : permission;
   const changeMode = (next: "build" | "plan") => {
     setMode(next);
     revokeUnrestrictedConsent();
@@ -483,13 +502,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
 
             {/* Custom Permission Selector */}
             <ComposerDropdown
-              value={mode === "plan" ? "readonly" : permission}
-              disabled={mode === "plan"}
-              onChange={(next) => {
-                permissionTouched.current = true;
-                setPermission(permissionSchema.parse(next));
-                revokeUnrestrictedConsent();
-              }}
+              value={
+                !running && mode === "plan" ? "readonly" : displayedPermission
+              }
+              disabled={
+                (!running && mode === "plan") ||
+                changingPermission ||
+                busy ||
+                !!submission
+              }
+              onChange={(next) => void changePermission(next)}
               options={[
                 {
                   value: "workspace",
@@ -504,7 +526,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 {
                   value: "unrestricted",
                   label: "无限制",
-                  sub: "允许执行系统命令",
+                  sub: running
+                    ? "立即生效，并放行当前会话待审批操作"
+                    : "允许执行系统命令",
                 },
               ]}
               icon={<ShieldCheck size={12} />}
@@ -516,13 +540,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               className="visually-hidden"
               tabIndex={-1}
               aria-hidden="true"
-              value={mode === "plan" ? "readonly" : permission}
-              disabled={mode === "plan"}
-              onChange={(event) => {
-                permissionTouched.current = true;
-                setPermission(permissionSchema.parse(event.target.value));
-                revokeUnrestrictedConsent();
-              }}
+              value={
+                !running && mode === "plan" ? "readonly" : displayedPermission
+              }
+              disabled={
+                (!running && mode === "plan") ||
+                changingPermission ||
+                busy ||
+                !!submission
+              }
+              onChange={(event) => void changePermission(event.target.value)}
             >
               <option value="workspace">工作区</option>
               <option value="readonly">只读</option>

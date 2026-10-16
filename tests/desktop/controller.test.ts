@@ -69,6 +69,104 @@ function handle(messages: WorkerMessage[]): RunId {
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("worker controller", () => {
+  for (const permission of ["unrestricted", "readonly"] as const) {
+    it(`changes live permission to ${permission} and settles root approval`, async () => {
+      const messages: WorkerMessage[] = [];
+      let answer: boolean | undefined;
+      let effective: string | undefined;
+      const approval = {
+        id: randomUUID(),
+        sessionId,
+        toolCallId: "change-permission",
+        toolName: "run_command",
+        description: "test",
+      };
+      const controller = createWorkerController(
+        service({
+          run: async (_input, onEvent, approve, signal, control) => {
+            onEvent({
+              type: "run_started",
+              sessionId,
+              timestamp: new Date().toISOString(),
+              model: "test",
+              permission: "workspace",
+            });
+            onEvent({
+              type: "approval_requested",
+              sessionId,
+              timestamp: new Date().toISOString(),
+              request: approval,
+            });
+            answer = await approve(approval, signal);
+            effective = control?.getPermission?.();
+            return snapshot;
+          },
+        }),
+        (message) => messages.push(message),
+      );
+      await controller.handle({
+        id: randomUUID(),
+        method: "startRun",
+        input: { sessionId, prompt: "test", permission: "workspace" },
+      });
+      await tick();
+      await controller.handle({
+        id: randomUUID(),
+        method: "setRunPermission",
+        runId: handle(messages),
+        permission,
+      });
+      await tick();
+      expect(answer).toBe(permission === "unrestricted");
+      expect(effective).toBe(permission);
+      expect(
+        messages.some(
+          (message) =>
+            message.kind === "event" &&
+            message.data.event.type === "permission_changed" &&
+            message.data.event.permission === permission,
+        ),
+      ).toBe(true);
+      await controller.dispose();
+    });
+  }
+  for (const mode of ["plan", "build"] as const) {
+    it(`rejects live escalation beyond ${mode === "plan" ? "plan policy" : "child ceiling"}`, async () => {
+      const messages: WorkerMessage[] = [];
+      const controller = createWorkerController(
+        service({
+          getSession: async () => ({
+            ...snapshot,
+            permissionCeiling: "workspace",
+          }),
+          run: async (_input, _onEvent, _approve, signal) => {
+            await new Promise<void>((resolve) =>
+              signal.addEventListener("abort", () => resolve(), { once: true }),
+            );
+            return snapshot;
+          },
+        }),
+        (message) => messages.push(message),
+      );
+      await controller.handle({
+        id: randomUUID(),
+        method: "startRun",
+        input: { sessionId, prompt: "test", mode },
+      });
+      await tick();
+      await controller.handle({
+        id: randomUUID(),
+        method: "setRunPermission",
+        runId: handle(messages),
+        permission: "unrestricted",
+      });
+      expect(messages.at(-1)).toMatchObject({
+        kind: "response",
+        response: { method: "setRunPermission", ok: false },
+      });
+      await controller.dispose();
+    });
+  }
   it("dispatches context projection, MCP and checkpoint routes with validated replies", async () => {
     const checkpointId = randomUUID();
     const calls: string[] = [];

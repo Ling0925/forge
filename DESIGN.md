@@ -159,6 +159,8 @@ This section supersedes earlier palette and home-layout decisions. The supplied
 Claude Desktop screenshot is a spatial and aesthetic reference, not a pixel clone.
 Forge retains its own name, controls, session data and permission semantics.
 
+Active runs accept permission changes from the composer. The menu reflects the host-confirmed permission; unrestricted releases pending root approvals, while readonly rejects them. Existing processes are not interrupted. Plan mode and child permission ceilings still apply, and child approvals are not released by changing the parent run.
+
 - Surfaces: warm paper light (`#faf9f6`, sidebar `#f2f1ed`) and charcoal dark
   (`#171716`, sidebar `#121211`, elevated `#222221`). Neutral borders, no blue cast.
 - Ink: light primary `#292824`, secondary `#68665f`; dark primary `#eeede8`,
