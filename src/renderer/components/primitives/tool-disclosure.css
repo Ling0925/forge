@@ -191,6 +191,22 @@
   color: var(--error);
 }
 
+/* The concrete command reads as the primary evidence, slightly stronger than
+   generic parameter output. */
+.tool-command {
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.tool-command-cwd {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 .tool-section-empty {
   color: var(--text-muted);
   font-size: var(--text-xs);

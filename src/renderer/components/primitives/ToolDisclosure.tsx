@@ -13,7 +13,9 @@ import "./tool-disclosure.css";
 
 export interface ToolDisclosureProps {
   readonly toolName: string;
-  readonly target?: string;
+  readonly target?: string | undefined;
+  readonly command?: string | undefined;
+  readonly cwd?: string | undefined;
   readonly status: "running" | "completed" | "failed";
   readonly durationMs?: number;
   readonly timestamp?: string;
@@ -109,6 +111,8 @@ function StatusGlyph({
 export function ToolDisclosure({
   toolName,
   target,
+  command,
+  cwd,
   status,
   durationMs,
   timestamp,
@@ -179,6 +183,13 @@ export function ToolDisclosure({
 
       {expanded && (
         <div id={detailsId} className="tool-disclosure-body">
+          {command && (
+            <div className="tool-section">
+              <span className="tool-section-title">命令</span>
+              <pre className="tool-section-content tool-command">{command}</pre>
+              {cwd && <span className="tool-command-cwd">工作目录 {cwd}</span>}
+            </div>
+          )}
           <div className="tool-section">
             <span className="tool-section-title">参数输入</span>
             {formattedParams ? (

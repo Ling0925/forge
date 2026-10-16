@@ -1,4 +1,5 @@
 import { memo, useLayoutEffect, useRef, useState } from "react";
+import { commandActivity, toolActivity } from "../../../shared/tool-activity";
 import type {
   ApprovalRequest,
   SessionId,
@@ -66,10 +67,17 @@ export const StoredTranscript = memo(function StoredTranscript({
               <code>{item.call.function.arguments.slice(0, 12000)}</code>
             </section>
           );
+        const argvActivity =
+          item.call.function.name === "run_command"
+            ? commandActivity(item.call)
+            : undefined;
         return (
           <ToolDisclosure
             key={item.id}
             toolName={item.call.function.name}
+            target={toolActivity(item.call).target || undefined}
+            command={argvActivity?.command || undefined}
+            cwd={argvActivity?.cwd || undefined}
             parameters={item.call.function.arguments.slice(0, 12000)}
             output={item.output.slice(0, 24000)}
             truncated={
