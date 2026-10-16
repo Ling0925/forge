@@ -1,5 +1,7 @@
 import {
   Archive,
+  CaretRight,
+  Folder,
   FolderOpen,
   Gear,
   MagnifyingGlass,
@@ -7,9 +9,22 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import { useState } from "react";
+import type { SessionSummary } from "../../shared-types";
 import { useWorkbench } from "../../state/workbench-context";
 import { IconButton } from "../primitives/IconButton";
 import { SessionListItem } from "./SessionListItem";
+
+/** Folder label for a workspace path; the full path stays available as a tooltip. */
+function workspaceName(workspace: string) {
+  const trimmed = workspace.replace(/[\\/]+$/, "");
+  const leaf = trimmed.split(/[\\/]/).pop();
+  return leaf && leaf.length > 0 ? leaf : workspace;
+}
+
+interface SessionGroup {
+  readonly workspace: string;
+  readonly sessions: readonly SessionSummary[];
+}
 
 export function Sidebar() {
   const { state, openNewSession, openSettings, setMobileSidebar } =
@@ -17,17 +32,39 @@ export function Sidebar() {
 
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [collapsedFolders, setCollapsedFolders] = useState<
+    Readonly<Record<string, boolean>>
+  >({});
+  const needle = query.trim().toLowerCase();
+  const searching = needle.length > 0;
   const filtered = state.sessions.filter(
     (session) =>
       (showArchived || !session.archived) &&
-      `${session.title} ${session.workspace} ${session.model}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
+      `${session.title} ${session.workspace}`.toLowerCase().includes(needle),
   );
+  // Sessions arrive newest-first, so first-seen insertion order already lists the
+  // folders by most recent activity; the order inside a folder is preserved too.
+  const groups: readonly SessionGroup[] = (() => {
+    const byWorkspace = new Map<string, SessionSummary[]>();
+    for (const session of filtered) {
+      const existing = byWorkspace.get(session.workspace);
+      if (existing) existing.push(session);
+      else byWorkspace.set(session.workspace, [session]);
+    }
+    return [...byWorkspace].map(([workspace, sessions]) => ({
+      workspace,
+      sessions,
+    }));
+  })();
   const activeWorkspace =
     state.activeSnapshot?.workspace ??
     state.sessions[0]?.workspace ??
     "未配置工作区";
+  const toggleFolder = (workspace: string) =>
+    setCollapsedFolders((previous) => ({
+      ...previous,
+      [workspace]: !previous[workspace],
+    }));
 
   return (
     <aside
@@ -96,10 +133,65 @@ export function Sidebar() {
           <p className="wb-muted sidebar-empty">正在加载会话...</p>
         ) : state.sessions.length === 0 ? (
           <p className="wb-muted sidebar-empty">暂无历史任务</p>
+        ) : groups.length === 0 ? (
+          <p className="wb-muted sidebar-empty">没有匹配的任务</p>
         ) : (
-          filtered.map((session) => (
-            <SessionListItem key={session.id} session={session} />
-          ))
+          groups.map((group) => {
+            // A live search must reveal its matches, so collapse state is held
+            // back while filtering and restored once the query is cleared.
+            const isCollapsed =
+              !searching && Boolean(collapsedFolders[group.workspace]);
+            const bodyId = `sidebar-folder-${encodeURIComponent(group.workspace)}`;
+            return (
+              <section className="session-folder" key={group.workspace}>
+                <button
+                  type="button"
+                  className={`session-folder-header${isCollapsed ? " is-collapsed" : ""}`}
+                  onClick={() => toggleFolder(group.workspace)}
+                  aria-expanded={!isCollapsed}
+                  aria-controls={bodyId}
+                  title={group.workspace}
+                >
+                  <CaretRight
+                    size={11}
+                    weight="bold"
+                    className="session-folder-caret"
+                    aria-hidden="true"
+                  />
+                  {isCollapsed ? (
+                    <Folder
+                      size={13}
+                      weight="regular"
+                      className="session-folder-icon"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <FolderOpen
+                      size={13}
+                      weight="regular"
+                      className="session-folder-icon"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="session-folder-name">
+                    {workspaceName(group.workspace)}
+                  </span>
+                  <span className="session-folder-count">
+                    {group.sessions.length}
+                  </span>
+                </button>
+                <div
+                  className="session-folder-body"
+                  id={bodyId}
+                  hidden={isCollapsed}
+                >
+                  {group.sessions.map((session) => (
+                    <SessionListItem key={session.id} session={session} />
+                  ))}
+                </div>
+              </section>
+            );
+          })
         )}
       </div>
 

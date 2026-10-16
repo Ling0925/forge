@@ -6,6 +6,8 @@ export type TimelineItem =
       readonly id: string;
       readonly role: "user" | "assistant";
       readonly content: string;
+      readonly reasoning?: string;
+      readonly reasoningTruncated?: boolean;
       readonly origin?: "agent_reconciliation";
     }
   | {
@@ -82,12 +84,19 @@ export function reduceTimeline(
       // Internal child joins do not start a human turn or break pending results.
       if (message.role !== "user" || message.origin !== "agent_reconciliation")
         pending.clear();
-      if (message.content)
+      if (message.content || (message.role === "assistant" && message.reasoning))
         items.push({
           kind: "message",
           id: `message:${index}`,
           role: message.role,
-          content: message.content,
+          content: message.content ?? "",
+          ...(message.role === "assistant" && message.reasoning
+            ? { reasoning: message.reasoning }
+            : {}),
+          ...(message.role === "assistant" && message.reasoning?.length === 131072
+            ? { reasoningTruncated: true }
+            : {}),
+          // Provider reasoning is display-only, separate from assistant prose.
           ...(message.role === "user" &&
           message.origin === "agent_reconciliation"
             ? { origin: message.origin }

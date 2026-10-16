@@ -16,11 +16,17 @@ import {
   type PendingOutput,
   mergeTranscript,
   outputSaved,
+  reasoningSaved,
 } from "./transcript-sync";
 // Draft-only ceiling. Stored snapshots are never sliced by this reducer.
 export const STREAMING_TEXT_LIMIT = 1000000;
+export const STREAMING_REASONING_LIMIT = 131072;
 
 export interface ActiveRunState {
+  readonly streamingReasoning?: string;
+  readonly reasoningTruncated?: boolean;
+  readonly reasoningStartMessage?: number;
+  readonly pendingReasoning?: readonly PendingOutput[];
   readonly pendingOutputs?: readonly PendingOutput[];
   readonly streamStartMessage?: number;
   readonly permission?: Permission;
@@ -72,6 +78,25 @@ function retainOutput(
     ? pending
     : [...pending, output];
 }
+function retainReasoning(
+  run: ActiveRunState,
+  snapshot: SessionSnapshot | null,
+  toolCallId?: string,
+): readonly PendingOutput[] {
+  const pending = run.pendingReasoning ?? [];
+  if (!run.streamingReasoning) return pending;
+  const output: PendingOutput = {
+    id: `${run.runId ?? "pending"}:${run.streamingTurn ?? 0}:reasoning`,
+    text: run.streamingReasoning,
+    truncated: Boolean(run.reasoningTruncated),
+    afterMessage: run.reasoningStartMessage ?? 0,
+    toolCallId,
+  };
+  return reasoningSaved(output, snapshot?.id === run.sessionId ? snapshot : null)
+    ? pending
+    : [...pending, output];
+}
+
 export const initialWorkbenchState: WorkbenchState = {
   settings: null,
   isSettingsLoading: false,
@@ -213,9 +238,12 @@ export function workbenchReducer(
           run.pendingOutputs?.filter(
             (output) => !outputSaved(output, selectedSnapshot),
           ) ?? [];
-        if (!active(run.status) && !pendingOutputs.length && !run.streamingText)
+        const pendingReasoning = (run.pendingReasoning ?? []).filter(
+          (output) => !reasoningSaved(output, selectedSnapshot),
+        );
+        if (!active(run.status) && !pendingOutputs.length && !pendingReasoning.length && !run.streamingText && !run.streamingReasoning)
           delete runs[snap.id];
-        else runs[snap.id] = { ...run, pendingOutputs };
+        else runs[snap.id] = { ...run, pendingOutputs, pendingReasoning };
       }
       const next = { ...state, activeRuns: runs };
       return {
@@ -255,11 +283,13 @@ export function workbenchReducer(
         streamingText: "",
         pendingOutputs:
           state.activeRuns[action.sessionId]?.pendingOutputs ?? [],
+        pendingReasoning:
+          state.activeRuns[action.sessionId]?.pendingReasoning ?? [],
       });
     case "START_RUN_FAILED": {
       const runs = { ...state.activeRuns };
       const run = runs[action.sessionId];
-      if (run?.pendingOutputs?.length)
+      if (run?.pendingOutputs?.length || run?.pendingReasoning?.length)
         runs[action.sessionId] = { ...run, status: "failed" };
       else delete runs[action.sessionId];
       return { ...state, activeRuns: runs };
@@ -304,6 +334,19 @@ export function workbenchReducer(
           pendingApproval: queue[0],
         };
       }
+      if (event.type === "reasoning_delta") {
+        const text = run.streamingReasoning ?? "";
+        next = {
+          ...run,
+          reasoningStartMessage: text
+            ? (run.reasoningStartMessage ?? 0)
+            : state.activeSnapshot?.id === event.sessionId
+              ? state.activeSnapshot.messages.length
+              : 0,
+          streamingReasoning: text + event.text.slice(0, Math.max(0, STREAMING_REASONING_LIMIT - text.length)),
+          reasoningTruncated: Boolean(run.reasoningTruncated) || text.length + event.text.length > STREAMING_REASONING_LIMIT,
+        };
+      }
       if (event.type === "text_delta")
         next = {
           ...run,
@@ -330,6 +373,9 @@ export function workbenchReducer(
             state.activeSnapshot,
             event.call.id,
           ),
+          pendingReasoning: retainReasoning(run, state.activeSnapshot, event.call.id),
+          streamingReasoning: "",
+          reasoningTruncated: false,
           streamingText: "",
           streamingTruncated: false,
           streamingTurn: (run.streamingTurn ?? 0) + 1,
@@ -358,6 +404,9 @@ export function workbenchReducer(
         next = {
           ...run,
           pendingOutputs: retainOutput(run, state.activeSnapshot),
+          pendingReasoning: retainReasoning(run, state.activeSnapshot),
+          streamingReasoning: "",
+          reasoningTruncated: false,
           status: event.status,
           streamingText: "",
           streamingTruncated: false,

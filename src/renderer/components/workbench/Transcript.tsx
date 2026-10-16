@@ -1,11 +1,11 @@
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useLayoutEffect, useRef, useState } from "react";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
 import type {
   ApprovalRequest,
   SessionId,
   SessionSnapshot,
 } from "../../shared-types";
-import { type TimelineItem, reduceTimeline } from "../../state/timeline";
+import { reduceTimeline } from "../../state/timeline";
 import { TranscriptScrollState } from "../../state/transcript-scroll";
 import { useWorkbench } from "../../state/workbench-context";
 import { ApprovalPanel } from "../primitives/ApprovalPanel";
@@ -15,34 +15,25 @@ import { ErrorState } from "../primitives/ErrorState";
 import { ToolDisclosure } from "../primitives/ToolDisclosure";
 import { Markdown } from "./Markdown";
 import { StreamingMarkdown } from "./StreamingMarkdown";
-/** Phase number per timeline entry; a human turn opens a new phase. */
-export function phaseMarkers(
-  timeline: readonly TimelineItem[],
-): readonly number[] {
-  let phase = 0;
-  return timeline.map((item) => {
-    if (
-      item.kind === "message" &&
-      item.role === "user" &&
-      item.origin !== "agent_reconciliation"
-    )
-      phase += 1;
-    return phase;
-  });
-}
+import { Reasoning } from "./Reasoning";
+import { foldedTool, transcriptStages, type TranscriptStage } from "../../state/transcript-stages";
+import "./transcript.css";
+export { phaseMarkers, foldedTool } from "../../state/transcript-stages";
 
-/** A tool row auto-folds once a later phase exists (its own phase is history). */
-export function foldedTool(index: number, phases: readonly number[]): boolean {
-  return (phases[index] ?? 0) < (phases[phases.length - 1] ?? 0);
+function StageHeader({ stage }: { readonly stage: TranscriptStage }) {
+  return (
+    <h3 className="transcript-stage-header">
+      <span className="transcript-stage-author">Forge</span>
+      {stage.title && <span className="transcript-stage-title">{stage.title}</span>}
+    </h3>
+  );
 }
 
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
 }: { readonly snapshot: SessionSnapshot }) {
   const timeline = reduceTimeline(snapshot);
-  // Phase per entry; a human turn starts a new phase. Tool rows carry a stable
-  // phase and auto-fold once a later phase begins.
-  const phases = phaseMarkers(timeline);
+  const { phases, headers } = transcriptStages(timeline);
   const historicalErrors = timeline.filter(
     (item) => item.kind === "error" && item.historical,
   );
@@ -73,14 +64,16 @@ export const StoredTranscript = memo(function StoredTranscript({
           );
         if (item.kind === "message")
           return (
-            <article className={`message message-${item.role}`} key={item.id}>
-              <div className="message-header">
-                {item.role === "user" ? "你" : "Forge"}
-              </div>
-              <div className="message-body">
-                <Markdown source={item.content} />
-              </div>
-            </article>
+            <Fragment key={item.id}>
+              {headers[index] && <StageHeader stage={headers[index]} />}
+              <article className={`message message-${item.role}`}>
+                {item.role === "user" && <div className="message-header">你</div>}
+                {item.reasoning && (
+                  <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
+                )}
+                {item.content && <div className="message-body"><Markdown source={item.content} /></div>}
+              </article>
+            </Fragment>
           );
         if (item.kind === "error")
           return (
@@ -113,8 +106,9 @@ export const StoredTranscript = memo(function StoredTranscript({
             ? commandActivity(item.call)
             : undefined;
         return (
+          <Fragment key={item.id}>
+          {headers[index] && <StageHeader stage={headers[index]} />}
           <ToolDisclosure
-            key={item.id}
             toolName={item.call.function.name}
             target={toolActivity(item.call).target || undefined}
             command={argvActivity?.command || undefined}
@@ -129,6 +123,7 @@ export const StoredTranscript = memo(function StoredTranscript({
             changes={item.changes}
             autoCollapsed={foldedTool(index, phases)}
           />
+          </Fragment>
         );
       })}
     </>

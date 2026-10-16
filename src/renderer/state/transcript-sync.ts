@@ -27,6 +27,20 @@ export function outputSaved(
   );
 }
 
+/** Reasoning is display-only and synchronized independently of assistant prose. */
+export function reasoningSaved(
+  output: PendingOutput,
+  snapshot: SessionSnapshot | null,
+): boolean {
+  return (
+    snapshot?.messages.slice(output.afterMessage).some((message) =>
+      message.role === "assistant" &&
+      Boolean(message.reasoning?.startsWith(output.text)) &&
+      (!output.toolCallId || message.tool_calls?.some((call) => call.id === output.toolCallId)),
+    ) ?? false
+  );
+}
+
 export function mergeTranscript(
   current: SessionSnapshot | null,
   incoming: SessionSnapshot,
