@@ -264,6 +264,17 @@
   word-break: break-word;
 }
 
+/* File-change diffs: one stacked viewer per changed file. */
+.tool-diffs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tool-diff-count {
+  font-weight: 400;
+}
+
 /* The concrete command reads as the primary evidence, slightly stronger than
    generic parameter output. */
 .tool-command {

@@ -126,6 +126,7 @@ export const StoredTranscript = memo(function StoredTranscript({
               item.call.function.arguments.length > 12000
             }
             status={item.status}
+            changes={item.changes}
             autoCollapsed={foldedTool(index, phases)}
           />
         );

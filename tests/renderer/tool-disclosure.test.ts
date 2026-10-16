@@ -87,4 +87,37 @@ describe("tool disclosure row", () => {
     });
     expect(html).toContain("{not json");
   });
+
+  it("default-expands a file edit and shows the diff", () => {
+    const html = render({
+      toolName: "edit_file",
+      target: "src/a.ts",
+      status: "completed",
+      changes: [
+        {
+          path: "src/a.ts",
+          kind: "modified",
+          before: "const old = 1;",
+          after: "const next = 2;",
+          truncated: false,
+        },
+      ],
+    });
+    // No defaultExpanded: an edit opens itself and renders the change.
+    expect(html).toContain("文件改动");
+    expect(html).toContain("const next = 2;");
+    expect(html).toContain("src/a.ts");
+  });
+
+  it("renders an object tool result as parsed rows, not raw JSON", () => {
+    const html = render({
+      toolName: "edit_file",
+      status: "completed",
+      output: JSON.stringify({ edited: true, replacements: 2 }),
+      defaultExpanded: true,
+    });
+    expect(html).toContain("替换");
+    expect(html).toContain("true");
+    expect(html).not.toContain('{"edited"');
+  });
 });

@@ -9,6 +9,8 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import type { FileChange } from "../../shared-types";
+import { DiffViewer } from "./DiffViewer";
 import "./tool-disclosure.css";
 
 export interface ToolDisclosureProps {
@@ -23,6 +25,7 @@ export interface ToolDisclosureProps {
   readonly output?: string | null;
   readonly exitCode?: number | null;
   readonly error?: string | null;
+  readonly changes?: readonly FileChange[] | undefined;
   readonly truncated?: boolean;
   readonly defaultExpanded?: boolean;
   /** When true, the row folds once as its phase becomes history (see the
@@ -144,6 +147,21 @@ const paramLabels: Readonly<Record<string, string>> = {
   depth: "深度",
   task: "任务",
   origin: "来源",
+  // Common result fields.
+  edited: "已编辑",
+  written: "已写入",
+  unchanged: "无变化",
+  created: "已创建",
+  replacements: "替换",
+  matches: "匹配数",
+  entries: "条目数",
+  exit_code: "退出码",
+  stdout: "标准输出",
+  stderr: "标准错误",
+  error: "错误",
+  total_lines: "总行数",
+  truncated: "已截断",
+  scan_truncated: "扫描不完整",
 };
 
 /** Best-effort pretty print for non-scalar argument values. */
@@ -163,7 +181,9 @@ function paramValue(value: unknown): ReactNode {
     return value === "" ? (
       <span className="tool-param-empty">空</span>
     ) : (
-      <span className="tool-param-text">{value}</span>
+      <span className="tool-param-text">
+        {value.length > 2000 ? `${value.slice(0, 2000)}…` : value}
+      </span>
     );
   if (typeof value === "number" || typeof value === "boolean")
     return <span className="tool-param-scalar">{String(value)}</span>;
@@ -225,6 +245,34 @@ function ParameterFields({ parameters }: { readonly parameters: unknown }) {
   );
 }
 
+/** Result payloads: parsed key/value rows for a JSON object, plain text otherwise. */
+function ResultFields({ output }: { readonly output: string }) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    return <pre className="tool-section-content">{output}</pre>;
+  }
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    Object.keys(parsed).length === 0
+  )
+    return <pre className="tool-section-content">{output}</pre>;
+  const record = parsed as Record<string, unknown>;
+  return (
+    <dl className="tool-params">
+      {Object.entries(record).map(([key, value]) => (
+        <div className="tool-param-row" key={key}>
+          <dt className="tool-param-key">{paramLabels[key] ?? key}</dt>
+          <dd className="tool-param-value">{paramValue(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function ToolDisclosure({
   toolName,
   target,
@@ -237,12 +285,16 @@ export function ToolDisclosure({
   output,
   exitCode,
   error,
+  changes,
   truncated = false,
   defaultExpanded = false,
   autoCollapsed = false,
   className = "",
 }: ToolDisclosureProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  // File-writing tools open by default so their diff is visible without a click;
+  // the user can still collapse them, and history phases fold as usual.
+  const writesFiles = toolName === "edit_file" || toolName === "write_file";
+  const [expanded, setExpanded] = useState(defaultExpanded || writesFiles);
   const detailsId = useId();
   const label = friendlyLabel(toolName);
 
@@ -315,6 +367,23 @@ export function ToolDisclosure({
               {cwd && <span className="tool-command-cwd">工作目录 {cwd}</span>}
             </div>
           )}
+          {changes && changes.length > 0 && (
+            <div className="tool-section">
+              <span className="tool-section-title">
+                文件改动{" "}
+                <span className="tool-diff-count">（{changes.length}）</span>
+              </span>
+              <div className="tool-diffs">
+                {changes.map((change, i) => (
+                  <DiffViewer
+                    change={change}
+                    isSuggested={false}
+                    key={`${change.path}-${i}`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
           <div className="tool-section">
             <span className="tool-section-title">参数输入</span>
             <ParameterFields parameters={parsedParams} />
@@ -348,7 +417,7 @@ export function ToolDisclosure({
             {output === null || output === undefined || output === "" ? (
               <span className="tool-section-empty">工具未返回文本</span>
             ) : (
-              <pre className="tool-section-content">{output}</pre>
+              <ResultFields output={output} />
             )}
           </div>
 

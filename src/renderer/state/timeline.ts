@@ -1,4 +1,4 @@
-import type { SessionSnapshot, ToolCall } from "../shared-types";
+import type { FileChange, SessionSnapshot, ToolCall } from "../shared-types";
 
 export type TimelineItem =
   | {
@@ -14,6 +14,7 @@ export type TimelineItem =
       readonly call: ToolCall;
       readonly status: "running" | "completed" | "failed" | "unexecuted";
       readonly output: string;
+      readonly changes?: readonly FileChange[];
     }
   | {
       readonly kind: "error";
@@ -180,6 +181,9 @@ export function reduceTimeline(
                 ? "running"
                 : "unexecuted",
             output: finish?.result.content ?? "",
+            ...(finish?.result.changes?.length
+              ? { changes: finish.result.changes }
+              : {}),
           });
         }
     } else if (message.role === "tool") {
@@ -189,6 +193,7 @@ export function reduceTimeline(
       // Tool messages are ordinary text; invalid JSON does not imply tool failure.
       let output = message.content ?? "";
       let failed = item.status === "failed";
+      let changes: readonly FileChange[] | undefined;
       try {
         const parsed: unknown = JSON.parse(output);
         if (
@@ -199,6 +204,8 @@ export function reduceTimeline(
         ) {
           output = parsed.content;
           failed = "isError" in parsed && parsed.isError === true;
+          if ("changes" in parsed && Array.isArray(parsed.changes))
+            changes = parsed.changes as readonly FileChange[];
         }
       } catch {
         /* native tool results may be plain text */
@@ -207,6 +214,7 @@ export function reduceTimeline(
         ...item,
         output,
         status: failed ? "failed" : "completed",
+        ...(changes?.length ? { changes } : {}),
       };
     }
   }

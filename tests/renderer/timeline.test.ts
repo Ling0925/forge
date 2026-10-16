@@ -81,6 +81,46 @@ describe("chronological execution timeline", () => {
       output: "ok",
     });
   });
+  it("extracts file changes from a persisted tool result for the diff viewer", () => {
+    const call = {
+      id: "e1",
+      type: "function" as const,
+      function: {
+        name: "edit_file",
+        arguments: JSON.stringify({
+          path: "a.ts",
+          old_text: "x",
+          new_text: "y",
+        }),
+      },
+    };
+    const change = {
+      path: "a.ts",
+      kind: "modified" as const,
+      before: "x",
+      after: "y",
+      truncated: false,
+    };
+    const snapshot = sessionSnapshotSchema.parse({
+      ...base,
+      messages: [
+        { role: "user", content: "edit" },
+        { role: "assistant", content: null, tool_calls: [call] },
+        {
+          role: "tool",
+          tool_call_id: "e1",
+          content: JSON.stringify({
+            content: JSON.stringify({ edited: true, replacements: 1 }),
+            isError: false,
+            changes: [change],
+          }),
+        },
+      ],
+      events: [],
+    });
+    const tool = reduceTimeline(snapshot).find((item) => item.kind === "tool");
+    expect(tool).toMatchObject({ status: "completed", changes: [change] });
+  });
   it("retains failure evidence without declaring a later session state failed", () => {
     const failed = {
       ...base,
