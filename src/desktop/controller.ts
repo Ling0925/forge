@@ -46,7 +46,10 @@ export function createWorkerController(
   >();
   const pending = new Map<string, RpcRequest>();
   const operations = new Set<Promise<unknown>>();
+  // Duplicate suppression only needs to cover the request's in-flight lifetime plus
+  // brief replay jitter; the FIFO bound keeps long-lived sessions from growing memory.
   const seen = new Set<string>();
+  const seenLimit = 4096;
   let disposed = false;
   let closing: Promise<void> | undefined;
   const emit = (message: WorkerMessage): void => {
@@ -139,6 +142,12 @@ export function createWorkerController(
     const request = parsed.data;
     if (seen.has(request.id)) return;
     seen.add(request.id);
+    // Set iteration is insertion-ordered, so this evicts the oldest entry.
+    if (seen.size > seenLimit)
+      for (const oldest of seen) {
+        seen.delete(oldest);
+        break;
+      }
     pending.set(request.id, request);
     if (disposed) {
       respond(request, null, safeError);

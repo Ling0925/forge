@@ -24,6 +24,8 @@ import { safeError } from "./controller";
 import { exportSessionToFile } from "./export-session";
 import { createReadyGate, createShutdownController } from "./lifecycle";
 
+let activeWindow: BrowserWindow | undefined;
+
 export function launchDesktop(): void {
   const renderer = join(__dirname, "../renderer/index.html");
   const trustedURL = pathToFileURL(renderer).href;
@@ -55,6 +57,18 @@ export function launchDesktop(): void {
     method: request.method,
     ok: false,
     error: safeError,
+  });
+  // A single unanswered request is a timeout, not proof of a broken protocol;
+  // only genuine protocol violations may trip the global fail() circuit breaker.
+  const timeoutFailure = (request: RpcRequest): RpcResponse => ({
+    id: request.id,
+    method: request.method,
+    ok: false,
+    error: {
+      code: "internal",
+      message: "The desktop service did not answer in time. Try again.",
+      retryable: true,
+    },
   });
   const fail = (): void => {
     if (failed) return;
@@ -160,6 +174,10 @@ export function launchDesktop(): void {
     },
   });
   const contents = window.webContents;
+  activeWindow = window;
+  window.on("closed", () => {
+    if (activeWindow === window) activeWindow = undefined;
+  });
   contents.setWindowOpenHandler(() => ({ action: "deny" }));
   contents.on("will-navigate", (event) => event.preventDefault());
   contents.on("will-frame-navigate", (event) => event.preventDefault());
@@ -186,7 +204,12 @@ export function launchDesktop(): void {
     owner: WebContents,
   ): Promise<RpcResponse> =>
     new Promise((resolve) => {
-      const timer = setTimeout(fail, 660000);
+      const timer = setTimeout(() => {
+        // Normal responses delete the entry first; a stale timer must not
+        // resolve an already-settled request twice.
+        if (!pending.delete(request.id)) return;
+        resolve(timeoutFailure(request));
+      }, 660000);
       pending.set(request.id, { request, owner, resolve, timer });
       try {
         worker.postMessage(request);
@@ -358,6 +381,14 @@ export function launchDesktop(): void {
   });
   void window.loadFile(renderer).catch(fail);
 }
+// Without the single-instance lock, a second launch would fork a second worker
+// and let two HarnessService instances write the same session store concurrently.
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on("second-instance", () => {
+  if (!activeWindow) return;
+  if (activeWindow.isMinimized()) activeWindow.restore();
+  activeWindow.focus();
+});
 void app
   .whenReady()
   .then(launchDesktop)
