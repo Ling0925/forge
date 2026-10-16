@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SessionSnapshot } from "../../src/renderer/shared-types";
 import { reduceTimeline } from "../../src/renderer/state/timeline";
+import { createDiffPatch } from "../../src/shared/diff";
 import {
   sessionIdSchema,
   sessionSnapshotSchema,
@@ -119,7 +120,33 @@ describe("chronological execution timeline", () => {
       events: [],
     });
     const tool = reduceTimeline(snapshot).find((item) => item.kind === "tool");
-    expect(tool).toMatchObject({ status: "completed", changes: [change] });
+    expect(tool).toMatchObject({
+      status: "completed",
+      changes: [{ path: "a.ts", kind: "modified", patch: createDiffPatch("x", "y") }],
+    });
+    if (tool?.kind !== "tool") throw new Error("missing tool item");
+    expect(tool.changes?.[0]).not.toHaveProperty("before");
+    expect(tool.changes?.[0]).not.toHaveProperty("after");
+    expect(tool.changes?.[0]).not.toHaveProperty("truncated");
+  });
+  it("validates patch-only message changes and skips malformed entries independently", () => {
+    const change = { path: "a.ts", kind: "modified", patch: createDiffPatch("x", "y") };
+    const snapshot = sessionSnapshotSchema.parse({
+      ...base,
+      events: [],
+      messages: [
+        base.messages[1],
+        {
+          role: "tool", tool_call_id: "c1",
+          content: JSON.stringify({
+            content: "edited", isError: false,
+            changes: [null, { ...change, patch: { version: 1, hunks: "invalid" } }, change],
+          }),
+        },
+      ],
+    });
+    const tool = reduceTimeline(snapshot).find((item) => item.kind === "tool");
+    expect(tool).toMatchObject({ status: "completed", output: "edited", changes: [change] });
   });
   it("retains failure evidence without declaring a later session state failed", () => {
     const failed = {

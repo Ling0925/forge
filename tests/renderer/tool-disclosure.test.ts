@@ -104,9 +104,7 @@ describe("tool disclosure row", () => {
         {
           path: "src/a.ts",
           kind: "modified",
-          before: "const old = 1;",
-          after: "const next = 2;",
-          truncated: false,
+          patch: createDiffPatch("const old = 1;", "const next = 2;"),
         },
       ],
     });
@@ -128,7 +126,7 @@ describe("tool disclosure row", () => {
       target: "src/a.ts",
       status: "completed",
       changes: [
-        { path: "src/a.ts", kind: "modified", before, after, truncated: false },
+        { path: "src/a.ts", kind: "modified", patch: createDiffPatch(before, after) },
       ],
     });
     // 3 added (new one, new two, extra), 2 removed (old one, old two).
@@ -136,13 +134,10 @@ describe("tool disclosure row", () => {
     expect(html).toContain('class="tool-diff-stat tool-diff-removed">-2<');
   });
 
-  it("prefers the recorded patch over the truncated 8192-character previews", () => {
-    // A late edit: the before/after previews (first 8192 chars) are identical,
-    // which previously produced a bogus "no line-level difference".
+  it("shows a late edit from the patch, never a bogus no-difference message", () => {
     const beforeLines = Array.from({ length: 1800 }, (_, i) => `line ${i}`);
     const beforeFull = beforeLines.join("\n");
     const afterFull = beforeFull.replace("line 1700", "changed late");
-    const preview = beforeFull.slice(0, 8192);
     const html = render({
       toolName: "edit_file",
       target: "src/a.ts",
@@ -151,9 +146,6 @@ describe("tool disclosure row", () => {
         {
           path: "src/a.ts",
           kind: "modified",
-          before: preview,
-          after: preview,
-          truncated: true,
           patch: createDiffPatch(beforeFull, afterFull),
         },
       ],
@@ -162,6 +154,31 @@ describe("tool disclosure row", () => {
     expect(html).toContain("changed late");
     expect(html).toContain('class="tool-diff-stat tool-diff-added">+1<');
     expect(html).toContain('class="tool-diff-stat tool-diff-removed">-1<');
+  });
+
+  it.each([
+    [undefined, "缺少完整内容"],
+    ["budget", "内容超出计算预算"],
+  ] as const)("explains why a patch is unavailable (%s)", (reason, expected) => {
+    const html = renderToStaticMarkup(createElement(DiffViewer, {
+      change: {
+        path: "a.ts", kind: "modified",
+        patch: {
+          version: 1, status: "unavailable", ...(reason ? { reason } : {}),
+          omittedLines: 0, omittedHunks: 0, hunks: [],
+        },
+      },
+    }));
+    expect(html).toContain(expected);
+    expect(html).not.toContain("无文本改动");
+  });
+
+  it("does not label a fully omitted patch as unchanged", () => {
+    const html = renderToStaticMarkup(createElement(DiffViewer, {
+      change: { path: "a.ts", kind: "created", patch: createDiffPatch("", "x".repeat(9000)) },
+    }));
+    expect(html).toContain("差异内容已截断");
+    expect(html).not.toContain("无文本改动");
   });
 
   it("renders an object tool result as parsed rows, not raw JSON", () => {
@@ -185,9 +202,7 @@ describe("tool disclosure row", () => {
         {
           path: "src/a.ts",
           kind: "created",
-          before: null,
-          after,
-          truncated: false,
+          patch: createDiffPatch("", after),
         },
       ],
     });
@@ -207,9 +222,7 @@ describe("tool disclosure row", () => {
         {
           path: "src/a.ts",
           kind: "modified",
-          before: "const old = 1;",
-          after: "const next = 2;",
-          truncated: false,
+          patch: createDiffPatch("const old = 1;", "const next = 2;"),
         },
       ],
     });
@@ -225,9 +238,7 @@ describe("tool disclosure row", () => {
         {
           path: "src/a.ts",
           kind: "modified",
-          before: "keep\nconst old = 1;",
-          after: "keep\nconst next = 2;",
-          truncated: false,
+          patch: createDiffPatch("keep\nconst old = 1;", "keep\nconst next = 2;"),
         },
       ],
     });
@@ -240,8 +251,7 @@ describe("tool disclosure row", () => {
   it("shows only the changed lines and ±5 context, not the whole file", () => {
     const lines = Array.from({ length: 60 }, (_, i) => `line ${i}`);
     const before = lines.join("\n");
-    // Insert one line in the middle; without alignment every later line would
-    // appear changed and the diff would dump the entire file.
+    // Insert one line in the middle; the patch keeps only the change + context.
     const after = [...lines.slice(0, 30), "inserted", ...lines.slice(30)].join(
       "\n",
     );
@@ -249,9 +259,11 @@ describe("tool disclosure row", () => {
     // about context filtering, not the 10-line preview window.
     const html = renderToStaticMarkup(
       createElement(DiffViewer, {
-        path: "src/a.ts",
-        before,
-        after,
+        change: {
+          path: "src/a.ts",
+          kind: "modified",
+          patch: createDiffPatch(before, after),
+        },
         isSuggested: false,
         previewLines: 0,
       }),
@@ -264,7 +276,23 @@ describe("tool disclosure row", () => {
     expect(html).not.toContain("line 35");
     expect(html).not.toContain("line 0<");
     expect(html).not.toContain("line 59");
-    // Unchanged runs collapse into an explicit separator.
+  });
+
+  it("collapses distant unchanged runs into a separator row", () => {
+    // Two far-apart changes force two hunks, so the gap between them is elided.
+    const before = Array.from({ length: 80 }, (_, i) => `line ${i}`).join("\n");
+    const after = before
+      .replace("line 5", "changed early")
+      .replace("line 70", "changed late");
+    const html = renderToStaticMarkup(
+      createElement(DiffViewer, {
+        change: { path: "src/a.ts", kind: "modified", patch: createDiffPatch(before, after) },
+        isSuggested: false,
+        previewLines: 0,
+      }),
+    );
+    expect(html).toContain("changed early");
+    expect(html).toContain("changed late");
     expect(html).toContain("已省略");
   });
 });

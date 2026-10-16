@@ -29,7 +29,9 @@ import {
   SAMPLE_CODE,
   SAMPLE_FILE_CHANGE,
   SAMPLE_MODELS,
+  SAMPLE_PACKAGE_FILE_CHANGE,
   SAMPLE_PERMISSIONS,
+  SAMPLE_TRUNCATED_FILE_CHANGE,
 } from "./showcase-data";
 import "./showcase.css";
 
@@ -823,11 +825,8 @@ export function PrimitiveShowcase() {
                       已截断差异提示示例
                     </h3>
                     <DiffViewer
-                      path="src/large-generated-bundle.js"
-                      before={"console.log('v1');"}
-                      after={"console.log('v2');"}
+                      change={SAMPLE_TRUNCATED_FILE_CHANGE}
                       isSuggested={false}
-                      truncated={true}
                     />
                   </div>
                 </section>
@@ -1120,9 +1119,7 @@ export function PrimitiveShowcase() {
                             </div>
                           </div>
                           <DiffViewer
-                            path="package.json"
-                            before={'{\n  "version": "0.1.0"\n}'}
-                            after={'{\n  "version": "0.2.0"\n}'}
+                            change={SAMPLE_PACKAGE_FILE_CHANGE}
                             isSuggested={true}
                           />
                         </div>

@@ -1,3 +1,4 @@
+import { fileChangeSchema } from "../../shared/schemas";
 import type { FileChange, SessionSnapshot, ToolCall } from "../shared-types";
 
 export type TimelineItem =
@@ -213,8 +214,14 @@ export function reduceTimeline(
         ) {
           output = parsed.content;
           failed = "isError" in parsed && parsed.isError === true;
-          if ("changes" in parsed && Array.isArray(parsed.changes))
-            changes = parsed.changes as readonly FileChange[];
+          if ("changes" in parsed && Array.isArray(parsed.changes)) {
+            // JSON inside message content is not covered by snapshot validation.
+            // Migrate old previews here too, and never trust malformed diff rows.
+            changes = parsed.changes.slice(0, 256).flatMap((value: unknown) => {
+              const change = fileChangeSchema.safeParse(value);
+              return change.success ? [change.data] : [];
+            });
+          }
         }
       } catch {
         /* native tool results may be plain text */
