@@ -18,6 +18,7 @@ import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
 import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
+import { useAutosizePrompt } from "./useAutosizePrompt";
 
 const taskSchema = z.object({
   workspace: z
@@ -57,6 +58,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   } = useWorkbench();
   // Keep one composer mounted across new/history views; drafts never migrate to another session.
   const [drafts, setDrafts] = useState(readDrafts);
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+  const [manualDrafts, setManualDrafts] = useState<
+    Readonly<Record<string, boolean>>
+  >({});
   useEffect(() => {
     try {
       const { new: fresh, ...sessions } = drafts;
@@ -71,12 +77,20 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   }, [drafts]);
   const draftId = isNew ? "new" : (state.activeSessionId ?? "none");
   const prompt = drafts[draftId] ?? "";
+  const manualSend = Boolean(manualDrafts[draftId]) || /[\r\n]/.test(prompt);
   const promptId = isNew ? "new-prompt" : `prompt-${draftId}`;
   const selectedDraft = useRef(draftId);
   selectedDraft.current = draftId;
   const [workspace, setWorkspace] = useState("");
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  useAutosizePrompt(promptRef, prompt);
+  useEffect(() => {
+    if (/[\r\n]/.test(prompt))
+      setManualDrafts((old) =>
+        old[draftId] ? old : { ...old, [draftId]: true },
+      );
+  }, [draftId, prompt]);
   const defaultWorkspace =
     state.activeSnapshot?.workspace ?? state.sessions[0]?.workspace ?? "";
   useEffect(() => {
@@ -136,6 +150,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         setError("消息未被接收，草稿已保留。请检查错误详情后重试。");
       }
       return;
+    }
+    if (draftsRef.current[submission.draftId] === submission.prompt) {
+      setManualDrafts((old) => ({ ...old, [submission.draftId]: false }));
     }
     setDrafts((old) =>
       old[submission.draftId] === submission.prompt
@@ -366,7 +383,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             placeholder={
               isNew
                 ? "想让 Forge 做点什么？输入任务描述或提问…"
-                : "继续对话，或描述要执行的工作… (Ctrl+Enter 发送)"
+                : "继续对话，或描述要执行的工作…"
+            }
+            title={
+              manualSend
+                ? "多行模式：Enter 换行，点击发送"
+                : "Enter 发送，Shift+Enter 换行"
             }
             onChange={(event) => {
               revokeUnrestrictedConsent();
@@ -387,12 +409,20 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 return;
               }
               if (
-                (event.ctrlKey || event.metaKey) &&
                 event.key === "Enter" &&
-                !event.nativeEvent.isComposing
+                !event.nativeEvent.isComposing &&
+                event.nativeEvent.keyCode !== 229
               ) {
-                event.preventDefault();
-                void submit();
+                if (event.ctrlKey || event.metaKey || event.altKey) {
+                  event.preventDefault();
+                  return;
+                }
+                if (event.shiftKey) {
+                  setManualDrafts((old) => ({ ...old, [draftId]: true }));
+                } else if (!manualSend) {
+                  event.preventDefault();
+                  void submit();
+                }
               }
             }}
           />
@@ -505,7 +535,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 loading={busy || !!submission}
                 disabled={!isConfigured || !prompt.trim() || !!submission}
                 aria-label={isNew ? "发送并开始会话" : "运行"}
-                title="发送 · Ctrl/Cmd + Enter"
+                title={manualSend ? "发送消息" : "发送 · Enter"}
               >
                 <ArrowUp size={16} weight="bold" aria-hidden="true" />
               </Button>

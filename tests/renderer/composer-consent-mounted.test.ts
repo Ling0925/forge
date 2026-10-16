@@ -140,7 +140,7 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
       }, id);
     const blocked = async (expected: number) => {
       await submitForm();
-      await page.locator("textarea.composer-textarea").press("Control+Enter");
+      await page.locator("textarea.composer-textarea").press("Enter");
       expect(await calls()).toBe(expected);
       expect(await confirmShown()).toBe(true);
     };
@@ -159,11 +159,11 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     ).toContain("无限制权限需要先确认");
     expect(await calls()).toBe(0);
 
-    await prompt.press("Control+Enter");
+    await prompt.press("Enter");
     await page.locator("form.workbench-composer").evaluate((form) => {
       (form as HTMLFormElement).requestSubmit();
     });
-    await prompt.press("Control+Enter");
+    await prompt.press("Enter");
     expect(await calls()).toBe(0);
     expect(await confirmShown()).toBe(true);
 
@@ -235,19 +235,19 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     await selectSession(sessionB);
     await nextPrompt.fill("another task");
     await page.locator("#run-permission").selectOption("unrestricted");
-    await nextPrompt.press("Control+Enter");
+    await nextPrompt.press("Enter");
     expect(await calls()).toBe(1);
     expect(await confirmShown()).toBe(true);
 
     await page.locator("#run-permission").selectOption("workspace");
     await page.locator("#run-permission").selectOption("unrestricted");
-    await nextPrompt.press("Control+Enter");
-    await nextPrompt.press("Control+Enter");
+    await nextPrompt.press("Enter");
+    await nextPrompt.press("Enter");
     expect(await calls()).toBe(1);
     expect(await confirmShown()).toBe(true);
     await page.locator("#run-mode").selectOption("plan");
     expect(await permission.isDisabled()).toBe(true);
-    await nextPrompt.press("Control+Enter");
+    await nextPrompt.press("Enter");
     await expect.poll(calls).toBe(2);
     expect(
       await page.evaluate(
@@ -302,7 +302,7 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     expect(await fresh.getByText("连接模型后即可开始对话。", { exact: false }).isVisible()).toBe(true);
     await newPrompt.fill("must not create a session");
     await createButton.evaluate((node) => (node as HTMLButtonElement).click());
-    await newPrompt.press("Control+Enter");
+    await newPrompt.press("Enter");
     await fresh.evaluate((node) => (node as HTMLFormElement).requestSubmit());
     expect(await creates()).toBe(1);
     expect(await calls()).toBe(3);
@@ -323,7 +323,7 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
         .getByRole("button", { name: "运行", exact: true })
         .isDisabled(),
     ).toBe(true);
-    await nextPrompt.press("Control+Enter");
+    await nextPrompt.press("Enter");
     await submitForm();
     expect(await creates()).toBe(1);
     expect(await calls()).toBe(3);

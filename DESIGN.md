@@ -142,7 +142,7 @@ Forge 展现的是沉稳、专注、温暖且精密的高级工作台氛围，�
 - 原生窗口框架保留；会话切换不终止任务，关闭窗口行为以宿主真实行为为准。CLI 复用事件和权限语义，不依赖颜色表达状态。
 - 模型精简标签必须保留完整 ID 可查、真实 catalog/datalist 和手动 ID 输入；不得虚构或静默替换模型。baseURL 与来源可查但凭据永不回显。API key 仅一次 masked 输入，提交宿主后清空。
 - workspace 文件操作按核心范围政策，shell 逐次显式批准；unrestricted 扩权必须确认。UI 不声称 OS 沙箱，不绕过核心策略、不复用失效审批。
-- Enter 换行，Cmd/Ctrl+Enter 提交；IME 组合时不提交。失败保留草稿，会话草稿隔离，异步操作以会话键/OperationScope 防止旧结果污染。
+- 初始 Enter 发送，Shift+Enter 换行；草稿一旦出现真实换行（包括粘贴），Enter 改为换行且只能点击发送，删除换行不会恢复快捷发送。成功发送并清空该草稿后重置，失败及会话切换保留模式。Ctrl/Cmd+Enter 不发送；IME 组合时不提交。失败保留草稿，会话草稿隔离，异步操作以会话键/OperationScope 防止旧结果污染。
 - 原语的默认、hover、active、focus、disabled、loading、empty、error 全部覆盖；disabled 保持可读，busy 保留文字和布局并防重复。未知状态不表示成功。
 - Tabs 方向键/Home/End 移动焦点，Enter/Space 手动激活；隐藏内容保持挂载以保留未保存资源/设置输入。模态进入、圈定、恢复焦点，Escape 取消，危险动作不默认获得焦点。Cmd/Ctrl+K 聚焦搜索，跨模态导航先关闭 palette。
 - transcript 距尾部超过64px 停止自动跟随，真实新内容提示查看最新；会话切换重置跟随，证据展开保持阅读位置，所有跳转即时。工具输出不可信，显示脱敏/截断事实、失败退出码及空输出；内部 reconciliation 明确内部且默认折叠。
@@ -168,7 +168,9 @@ Forge retains its own name, controls, session data and permission semantics.
   Desktop controls: 28px; small controls: 24px. Touch controls retain 44px.
   Overview is a flat two-column summary, not nested cards. Composer padding
   6px vertical / 10px horizontal, radius 12px, initial prompt height 36px;
-  long prompts scroll internally. The input alone owns the border/background;
+  prompt height follows content and soft wrapping up to six computed line heights
+  plus padding, then scrolls internally. Empty drafts return to 36px; width changes
+  also recalculate height. The input alone owns the border/background;
   mode, permission, model and send controls live in a separate unbordered toolbar
   below it with a 4px gap. Status and approval messages remain below the toolbar.
   Sidebar sessions: 28px desktop rows, 44px coarse-pointer targets. No inline
