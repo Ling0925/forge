@@ -6,6 +6,10 @@ import "./usage-popover.css";
 
 const percent = (value: number | undefined) =>
   value === undefined ? "—" : `${(value * 100).toFixed(1)}%`;
+const categories = [
+  ["instructions", "指令"], ["memory", "记忆"],
+  ["conversation", "对话"], ["tools", "工具"],
+] as const;
 
 export function UsagePopover({
   events,
@@ -30,6 +34,7 @@ export function UsagePopover({
   const ratio = context?.windowTokens
     ? context.usedTokens / context.windowTokens
     : undefined;
+  const partsTotal = context ? categories.reduce((sum, [key]) => sum + context.parts[key], 0) : 0;
   useEffect(() => {
     if (!open) return;
     const dismiss = (event: PointerEvent) => {
@@ -62,34 +67,22 @@ export function UsagePopover({
       }}
     >
       <summary
-        className="composer-dropdown-trigger usage-trigger"
+        className="usage-trigger"
         aria-label="上下文与用量"
         title="查看上下文与会话用量"
       >
-        {usage.latestCache !== undefined && (
-          <span className="usage-cache-chip">
-            CH {percent(usage.latestCache)}
+        <span className="usage-track" aria-hidden="true">
+          {context && ratio !== undefined && categories.map(([key, label]) => (
+            <span key={key} className={`usage-segment usage-${key}`}
+              title={`${label}：≈${compactTokens(context.parts[key])} tokens`}
+              style={{ width: `${partsTotal ? context.parts[key] / partsTotal * Math.min(1, ratio) * 100 : 0}%` }} />
+          ))}
+        </span>
+        <span className="usage-footer-stats">
+          <span className="usage-cache-chip" title="最近请求缓存命中率">CH {percent(usage.latestCache)}</span>
+          <span className="usage-footer-total">
+            {context ? `${context.estimated ? "≈" : ""}${compactTokens(context.usedTokens)}${context.windowTokens ? ` / ${compactTokens(context.windowTokens)}` : " tokens"}` : "上下文 —"}
           </span>
-        )}
-        <svg className="usage-ring" viewBox="0 0 20 20" aria-hidden="true">
-          <circle cx="10" cy="10" r="7" className="usage-ring-track" />
-          {ratio !== undefined && (
-            <circle
-              cx="10"
-              cy="10"
-              r="7"
-              pathLength="100"
-              className="usage-ring-value"
-              strokeDasharray={`${Math.min(100, ratio * 100)} 100`}
-            />
-          )}
-        </svg>
-        <span>
-          {ratio === undefined
-            ? context
-              ? `${context.estimated ? "≈" : ""}${compactTokens(context.usedTokens)} tokens`
-              : "上下文"
-            : `${context?.estimated ? "≈" : ""}${percent(ratio)}`}
         </span>
       </summary>
       {open && (
@@ -117,6 +110,14 @@ export function UsagePopover({
               ? `窗口 ${compactTokens(context.windowTokens)} tokens`
               : "上下文窗口未知，暂不计算百分比"}
           </p>
+          {context && <dl className="usage-legend">
+            {categories.map(([key, label]) => (
+              <div key={key}>
+                <dt><span className={`usage-legend-dot usage-${key}`} />{label}</dt>
+                <dd>≈{compactTokens(context.parts[key])}</dd>
+              </div>
+            ))}
+          </dl>}
           <h4>会话</h4>
           <dl>
             <dt>费用估算</dt>

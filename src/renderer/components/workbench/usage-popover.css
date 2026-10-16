@@ -1,31 +1,50 @@
 .composer-usage {
+  --context-instructions: #5fafff;
+  --context-memory: #d787ff;
+  --context-conversation: #87d7af;
+  --context-tools: #ffaf5f;
   position: relative;
-  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+}
+[data-theme="light"] .composer-usage {
+  --context-instructions: #005faf;
+  --context-memory: #870087;
+  --context-conversation: #005f5f;
+  --context-tools: #875f00;
 }
 .usage-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+  width: 100%;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 11px;
   list-style: none;
   font-variant-numeric: tabular-nums;
 }
+.usage-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+.usage-trigger:hover { color: var(--text-primary); }
+.usage-track { display: flex; flex: 1; min-width: 24px; height: 3px; overflow: hidden; border-radius: 2px; background: var(--border-subtle); }
+.usage-segment { height: 100%; flex-shrink: 0; }
+.usage-instructions { background: var(--context-instructions); }
+.usage-memory { background: var(--context-memory); }
+.usage-conversation { background: var(--context-conversation); }
+.usage-tools { background: var(--context-tools); }
+.usage-footer-stats { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.usage-footer-total { color: var(--text-primary); }
+.usage-panel .usage-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.usage-legend > div { display: flex; justify-content: space-between; gap: 8px; }
+.usage-legend dt { display: flex; align-items: center; gap: 6px; }
+.usage-legend-dot { width: 6px; height: 6px; border-radius: 2px; }
 .usage-trigger::-webkit-details-marker {
   display: none;
 }
 .usage-cache-chip {
   color: var(--text-secondary);
-}
-.usage-ring {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
-  fill: none;
-  stroke-width: 3;
-  transform: rotate(-90deg);
-}
-.usage-ring-track {
-  stroke: var(--border-subtle);
-}
-.usage-ring-value {
-  stroke: var(--text-secondary);
-  stroke-linecap: round;
 }
 .usage-panel {
   position: absolute;
@@ -94,9 +113,6 @@
   margin: var(--space-2) 0 0;
 }
 @media (max-width: 640px) {
-  .usage-trigger .usage-cache-chip {
-    display: none;
-  }
   .usage-panel {
     position: fixed;
     bottom: var(--space-6);

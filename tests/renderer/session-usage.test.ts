@@ -122,6 +122,8 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     const events = ${JSON.stringify(events)};
     if (location.search === '?unknown-window') {
       events.splice(0, events.length, ${JSON.stringify(context(61597, 58368, null))});
+    } else {
+      events.at(-1).usage.parts = { instructions: 20000, memory: 40000, conversation: 100000, tools: 326400 };
     }
     const snapshot = {version:1,id:events[0].sessionId,title:'test',workspace:'/tmp',model:'model',createdAt:events[0].timestamp,updatedAt:events.at(-1).timestamp,status:'completed',messages:[],changes:[],events};
     if (location.search === '?unknown-window') snapshot.status = 'running';
@@ -160,11 +162,20 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         await page.evaluate((value) => {
           document.documentElement.dataset.theme = value;
         }, theme);
-        const trigger = page.getByText("≈46.4%", { exact: true });
+        const trigger = page.getByLabel("上下文与用量", { exact: true });
+        expect(await trigger.innerText()).toContain("CH 97.6%");
+        expect(await trigger.innerText()).toContain("≈486.4K / 1M");
+        const track = await page.locator(".usage-track").boundingBox();
+        if (!track) throw new Error("Missing context track");
+        expect(track.height).toBe(3);
+        const segments = await page.locator(".usage-segment").evaluateAll(nodes => nodes.map(node => ({ width: node.getBoundingClientRect().width, color: getComputedStyle(node).backgroundColor })));
+        expect(new Set(segments.map(segment => segment.color)).size).toBe(4);
+        expect(segments.reduce((sum, segment) => sum + segment.width, 0) / track.width).toBeCloseTo(486400 / 1048576, 2);
         await trigger.click();
         const panel = page.getByRole("region", { name: "用量详情" });
         expect(await panel.innerText()).toContain("46.4% / 486.4K");
         expect(await panel.innerText()).toContain("97.6%");
+        for (const label of ["指令", "记忆", "对话", "工具"]) expect(await panel.innerText()).toContain(label);
         const rect = await panel.boundingBox();
         if (!rect) throw new Error("Missing usage panel");
         expect(rect.x).toBeGreaterThanOrEqual(0);
@@ -184,7 +195,7 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     );
     expect(saved).toContain('"eventCount":3');
     await page.reload();
-    await page.getByText("≈46.4%", { exact: true }).click();
+    await page.getByLabel("上下文与用量", { exact: true }).click();
     expect(
       await page.getByRole("region", { name: "用量详情" }).innerText(),
     ).toContain("46.4% / 486.4K");

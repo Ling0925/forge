@@ -559,18 +559,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </select>
           </div>
           <div className="composer-toolbar-end">
-            <UsagePopover
-              snapshot={
-                !isNew && state.activeSnapshot?.id === state.activeSessionId
-                  ? state.activeSnapshot
-                  : undefined
-              }
-              events={
-                !isNew && state.activeSnapshot?.id === state.activeSessionId
-                  ? state.activeSnapshot.events
-                  : []
-              }
-            />
             <ModelPicker
               value={model}
               models={[state.settings?.model ?? "", ...availableModels]}
@@ -669,6 +657,10 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             )}
           </div>
         )}
+        <UsagePopover
+          snapshot={!isNew && state.activeSnapshot?.id === state.activeSessionId ? state.activeSnapshot : undefined}
+          events={!isNew && state.activeSnapshot?.id === state.activeSessionId ? state.activeSnapshot.events : []}
+        />
       </div>
     </form>
   );
