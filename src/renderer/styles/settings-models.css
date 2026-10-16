@@ -79,6 +79,19 @@
 .wb-app .composer-model-summary {
   max-width: 220px;
 }
+.model-effort-meter { display: inline-flex; align-items: flex-end; gap: 2px; flex-shrink: 0; color: var(--text-secondary); }
+.model-effort-meter > span { width: 3px; border-radius: 1px; background: var(--border-control); opacity: .45; }
+.model-effort-meter > .is-filled { background: var(--accent-sage); opacity: 1; }
+.model-effort-meter small { font-size: 9px; line-height: 13px; margin-left: 2px; }
+.model-effort-options { border: 0; border-bottom: 1px solid var(--border-subtle); padding: 4px 0 10px; margin: 0 0 8px; min-width: 0; }
+.model-effort-options legend { font-size: var(--text-xs); color: var(--text-primary); }
+.model-effort-options legend span { color: var(--text-secondary); margin-left: 6px; }
+.model-effort-options > div { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; margin-top: 6px; }
+.model-effort-options button { border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 11px; min-height: 30px; cursor: pointer; padding: 3px; }
+.model-effort-options button:hover { background: var(--surface-hover); }
+.model-effort-options button[aria-pressed="true"] { color: var(--text-primary); background: var(--surface-selected); }
+.model-effort-options button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.model-effort-options:disabled { opacity: .5; }
 .wb-app .composer-model-panel {
   padding: var(--space-2);
   border-radius: var(--radius-md);

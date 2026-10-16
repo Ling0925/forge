@@ -1,6 +1,5 @@
 import {
   ArrowUp,
-  Brain,
   CaretDown,
   FolderOpen,
   Lightning,
@@ -566,32 +565,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               onRefresh={() => void listModels()}
               loading={listing}
               error={modelError}
+              reasoning={{ value: state.settings?.reasoningEffort ?? "default", disabled: savingEffort || busy || !!submission, onChange: value => void changeEffort(value) }}
             />
-            <div
-              className="composer-effort"
-              title="思考等级：全局保存，用于后续请求；支持的等级取决于模型服务"
-            >
-              <ComposerDropdown
-                value={state.settings?.reasoningEffort ?? "default"}
-                onChange={(value) => void changeEffort(value)}
-                disabled={savingEffort || busy || !!submission}
-                ariaLabel="思考等级"
-                icon={<Brain size={12} aria-hidden="true" />}
-                options={[
-                  {
-                    value: "default",
-                    label: "默认",
-                    sub: "由模型决定 · 全局保存",
-                  },
-                  { value: "none", label: "关闭", sub: "none" },
-                  { value: "minimal", label: "极低", sub: "minimal" },
-                  { value: "low", label: "低", sub: "low" },
-                  { value: "medium", label: "中", sub: "medium" },
-                  { value: "high", label: "高", sub: "high" },
-                  { value: "xhigh", label: "极高", sub: "xhigh" },
-                ]}
-              />
-            </div>
             {running ? (
               <Button
                 type="button"
