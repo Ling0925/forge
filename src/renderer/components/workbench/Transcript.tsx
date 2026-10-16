@@ -213,7 +213,9 @@ export function Transcript() {
   // Loading a snapshot for the selected session is itself arriving content,
   // and a fresh approval request is arriving content too: the card must be
   // pulled into view like any new message.
-  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.streamingText ?? ""}:${pendingApproval?.id ?? ""}`;
+  // Reasoning deltas grow the live tail too, so they must count as arriving
+  // content or the follow-scroll would stall while the model is still thinking.
+  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning ?? ""}:${run?.streamingText ?? ""}:${pendingApproval?.id ?? ""}`;
   const jumpToLatest = () => {
     navigation.current.reset();
     setHasNewContent(false);
@@ -297,6 +299,22 @@ export function Transcript() {
               </div>
             </article>
           ))}
+          {/* Reasoning renders before the answer: saved-but-unsynchronized
+              thoughts first, then the live block still streaming in. */}
+          {run?.pendingReasoning?.map((output) => (
+            <Reasoning key={output.id} text={output.text} truncated={output.truncated} />
+          ))}
+          {run?.streamingReasoning && (
+            <Reasoning
+              key={`${sessionId}:${run.runId ?? "pending"}:${run.streamingTurn ?? 0}:reasoning`}
+              text={run.streamingReasoning}
+              // The runtime keeps this buffer after the answer starts, so the
+              // "live" state ends with the answer, not the model's reasoning
+              // phase: the block then reads as a normal collapsible 思考过程.
+              live={!run.streamingText}
+              truncated={Boolean(run.reasoningTruncated)}
+            />
+          )}
           {run?.streamingText && (
             <article className="message message-assistant message-streaming">
               <div className="message-header message-author">

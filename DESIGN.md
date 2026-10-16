@@ -255,8 +255,9 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
 
 5. **无障碍与动态**：展开/折叠为键盘可达的原生 disclosure，带 `focus-visible` 焦点环；不使用颜色作为唯一状态表达；尊重 `prefers-reduced-motion`。
 
-6. **当前实现差距（待修，不视为已满足契约）**：
-   - 共享 renderer 的实时区域目前只渲染 `pendingOutputs` 与 `streamingText`，**未渲染** `streamingReasoning` / `pendingReasoning`，因此 Web/桌面在流式思考期间看不到任何实时思考文本（CLI 有单行预览）。
-   - 已保存思考的 `Reasoning` 始终以 `live = false` 调用，`<details>` 默认折叠，且缺少“展开中”的实时态；用户需手动展开才能看到历史思考。
-   - 相关单元测试未覆盖 renderer 的实时/持久思考渲染；`tests/renderer/refresh-events.test.ts` 只断言 `reasoning_delta` 不触发重取。
+6. **实现状态**：
+   - 实时思考已在共享 renderer 渲染：`Transcript` 在助手正文之前渲染 `run.pendingReasoning`（已保存但未同步）与 `run.streamingReasoning`（live）；答案开始后（`streamingText` 非空）同一块自动从“思考中…”折叠为“思考过程”，思考增量也参与自动跟随滚动。CLI 仍为单行 `✻` 预览。
+   - 已保存思考（助手消息 `reasoning`）经 `Reasoning` 以原生 `<details>` 渲染，默认折叠、摘要“思考过程”，与本契约第 3 条一致；截断时顶部提示“已达显示上限”。
+   - 覆盖：`tests/renderer/reasoning-mounted.test.ts` 断言实时块可见且展开、答案开始后折叠、持久思考为独立折叠块。
+   - 仍未覆盖：真实 provider 端到端推理流、窄屏/高对比/读屏矩阵、超长（>131072）思考的真实截断表现。
 
