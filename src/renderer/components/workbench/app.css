@@ -18,14 +18,20 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-8);
+  padding: 0 var(--space-5);
+  height: var(--header-height);
   min-height: var(--header-height);
-  border-bottom: none;
+  max-height: var(--header-height);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--canvas-bg);
+  z-index: 10;
 }
 .wb-app h1 {
-  font-size: var(--text-lg);
-  font-weight: 500;
-  line-height: var(--leading-lg);
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: var(--leading-md);
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -35,11 +41,58 @@
 .wb-app .workbench-task-header > .btn {
   flex-shrink: 0;
 }
+.wb-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.wb-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+.wb-icon-btn.is-active {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+.wb-approval-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.wb-approval-pill:hover {
+  background: var(--warning);
+  color: #fff;
+}
 .wb-app .workbench-conversation-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: var(--content-inset);
+  padding: var(--space-6) var(--space-8);
   display: flex;
   flex-direction: column;
 }
@@ -49,7 +102,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-6);
   flex: 1;
 }
 /* Deliberate welcome hierarchy for the main first-use empty frame */
@@ -227,8 +280,17 @@
   background: var(--surface-body);
 }
 .inspector-header {
-  padding: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
   border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 .wb-app .inspector-scroll {
   flex: 1;

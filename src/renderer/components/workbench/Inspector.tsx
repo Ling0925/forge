@@ -26,7 +26,7 @@ export function Inspector({
   readonly onRequestCollapse?: (() => void) | undefined;
   readonly focusToken?: number | undefined;
 }) {
-  const [section, setSection] = useState("inspector-runtime");
+  const [section, setSection] = useState("inspector-changes");
   const { state, answerApproval, selectSession, refreshActiveSession } =
     useWorkbench();
   const paneRef = useRef<HTMLElement | null>(null);
@@ -174,6 +174,47 @@ export function Inspector({
           keepMounted
           tabs={[
             {
+              id: "inspector-changes",
+              label: "变更 / 检查点",
+              content: (
+                <div className="wb-stack">
+                  {snapshot && (
+                    <ChangeSessionNavigation
+                      key={`changes-navigation:${snapshot.id}`}
+                      sessionId={snapshot.id}
+                      parentSessionId={snapshot.parentSessionId}
+                      sessions={state.sessions}
+                      onOpenChanges={(id) => {
+                        setSection("inspector-changes");
+                        void selectSession(id);
+                      }}
+                    />
+                  )}
+                  <CheckpointPanel
+                    key={`changes-checkpoints:${state.activeSessionId ?? "none"}`}
+                  />
+                  <section className="wb-stack">
+                    <h3>文件变更</h3>
+                    {snapshot?.changes.length ? (
+                      snapshot.changes.map((change, i) => (
+                        <details
+                          key={`${change.path}-${i}`}
+                          className="wb-disclosure"
+                        >
+                          <summary>
+                            {change.path} · {change.kind}
+                          </summary>
+                          <DiffViewer change={change} isSuggested={false} />
+                        </details>
+                      ))
+                    ) : (
+                      <p className="wb-muted">本会话尚无直接文件变更</p>
+                    )}
+                  </section>
+                </div>
+              ),
+            },
+            {
               id: "inspector-runtime",
               label: "概览 / 运行",
               content: (
@@ -237,47 +278,6 @@ export function Inspector({
                   <Button size="sm" onClick={() => void refreshActiveSession()}>
                     刷新保存的记录
                   </Button>
-                </div>
-              ),
-            },
-            {
-              id: "inspector-changes",
-              label: "变更 / 检查点",
-              content: (
-                <div className="wb-stack">
-                  {snapshot && (
-                    <ChangeSessionNavigation
-                      key={`changes-navigation:${snapshot.id}`}
-                      sessionId={snapshot.id}
-                      parentSessionId={snapshot.parentSessionId}
-                      sessions={state.sessions}
-                      onOpenChanges={(id) => {
-                        setSection("inspector-changes");
-                        void selectSession(id);
-                      }}
-                    />
-                  )}
-                  <CheckpointPanel
-                    key={`changes-checkpoints:${state.activeSessionId ?? "none"}`}
-                  />
-                  <section className="wb-stack">
-                    <h3>文件变更</h3>
-                    {snapshot?.changes.length ? (
-                      snapshot.changes.map((change, i) => (
-                        <details
-                          key={`${change.path}-${i}`}
-                          className="wb-disclosure"
-                        >
-                          <summary>
-                            {change.path} · {change.kind}
-                          </summary>
-                          <DiffViewer change={change} isSuggested={false} />
-                        </details>
-                      ))
-                    ) : (
-                      <p className="wb-muted">本会话尚无直接文件变更</p>
-                    )}
-                  </section>
                 </div>
               ),
             },

@@ -1,7 +1,9 @@
 import {
+  Archive,
   CaretRight,
   FolderOpen,
   Gear,
+  MagnifyingGlass,
   Plus,
   WarningCircle,
 } from "@phosphor-icons/react";
@@ -63,12 +65,14 @@ export function Sidebar() {
       aria-label="会话与导航"
     >
       <div className="sidebar-header">
-        <div className="sidebar-brand">
-          <span className="sidebar-title">Forge</span>
-          <Button
-            size="sm"
-            variant="primary"
-            icon={<Plus size={14} weight="bold" />}
+        <div className="sidebar-brand-row">
+          <div className="sidebar-logo">
+            <span className="sidebar-title">Forge</span>
+            <span className="sidebar-badge">Agent</span>
+          </div>
+          <button
+            type="button"
+            className="sidebar-new-btn"
             onClick={() => {
               openNewSession(true);
               setMobileSidebar(false);
@@ -76,8 +80,9 @@ export function Sidebar() {
             title="新建会话 (Ctrl+N / Cmd+N)"
             aria-label="新建会话"
           >
-            新建会话
-          </Button>
+            <Plus size={15} weight="bold" />
+            <span>新任务</span>
+          </button>
         </div>
 
         <div
@@ -94,22 +99,28 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="sidebar-search wb-stack">
-        <Input
-          aria-label="搜索会话"
-          placeholder="搜索任务 / 工作区 / 模型"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <label>
+      <div className="sidebar-search">
+        <div className="sidebar-search-input-wrap">
+          <MagnifyingGlass size={13} className="sidebar-search-icon" />
           <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
+            className="sidebar-search-input"
+            aria-label="搜索会话"
+            placeholder="搜索任务 / 工作区..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
           />
-          显示已归档
-        </label>
+        </div>
+        <button
+          type="button"
+          className={`sidebar-archive-toggle ${showArchived ? "is-active" : ""}`}
+          onClick={() => setShowArchived(!showArchived)}
+          title={showArchived ? "隐藏归档会话" : "显示归档会话"}
+          aria-pressed={showArchived}
+        >
+          <Archive size={13} weight={showArchived ? "fill" : "regular"} />
+        </button>
       </div>
+
       <div className="sidebar-sessions-list">
         {state.isSessionsLoading && state.sessions.length === 0 ? (
           <p className="wb-muted sidebar-empty">正在加载会话...</p>
@@ -117,7 +128,8 @@ export function Sidebar() {
           <p className="wb-muted sidebar-empty">暂无历史任务</p>
         ) : (
           filtered.map((session) => {
-            const isActive = !state.isNewSessionOpen && session.id === state.activeSessionId;
+            const isActive =
+              !state.isNewSessionOpen && session.id === state.activeSessionId;
             const run = state.activeRuns[session.id];
             const hasPendingApproval = Boolean(run?.pendingApproval);
             const currentStatus = run?.status ?? session.status;
@@ -127,9 +139,6 @@ export function Sidebar() {
             const metadata = `${session.model} · ${formatTimestamp(session.updatedAt)} · ${statusLabel(currentStatus)}${hasPendingApproval ? " · 待批准" : ""}`;
 
             return (
-              // One quiet row per session: strong title + tiny accessible
-              // status mark. Full model/time/status metadata stays reachable
-              // via the row tooltip and the disclosure below (never dropped).
               <div
                 key={session.id}
                 className={`session-item ${isActive ? "is-active" : ""}`}
@@ -144,27 +153,35 @@ export function Sidebar() {
                   aria-current={isActive ? "true" : undefined}
                   title={`${session.archived ? "归档 · " : ""}${session.title} · ${metadata}`}
                 >
-                  <span className="session-item-title">
-                    {session.archived ? "归档 · " : ""}
-                    {session.title}
-                  </span>
-                  <span
-                    className={`wb-status-dot${hasPendingApproval ? " is-pending" : ""}`}
-                    data-status={
-                      hasPendingApproval ? "awaiting_approval" : currentStatus
-                    }
-                    role="img"
-                    aria-label={label}
-                  />
+                  <div className="session-item-row">
+                    <span
+                      className={`wb-status-dot${hasPendingApproval ? " is-pending" : ""}`}
+                      data-status={
+                        hasPendingApproval ? "awaiting_approval" : currentStatus
+                      }
+                      role="img"
+                      aria-label={label}
+                    />
+                    <span className="session-item-title">
+                      {session.archived ? "归档 · " : ""}
+                      {session.title}
+                    </span>
+                  </div>
+                  <div className="session-item-sub">
+                    <span className="session-item-time">
+                      {formatTimestamp(session.updatedAt)}
+                    </span>
+                    <span className="session-item-model">
+                      {session.model.split("/").pop()}
+                    </span>
+                  </div>
                 </button>
                 <details className="session-item-meta wb-disclosure">
                   <summary
                     aria-label={`${session.title} 详细信息`}
                     title={`${session.title} 详细信息`}
                   >
-                    {/* Quiet caret icon instead of the repeated visible word
-                        详情; the accessible name above is unchanged. */}
-                    <CaretRight size={12} weight="bold" aria-hidden="true" />
+                    <CaretRight size={11} weight="bold" aria-hidden="true" />
                   </summary>
                   <div className="wb-disclosure-body">
                     <span>{session.model}</span>
@@ -183,7 +200,7 @@ export function Sidebar() {
 
       <div className="sidebar-footer">
         <IconButton
-          icon={<Gear size={16} weight="regular" />}
+          icon={<Gear size={15} weight="regular" />}
           size="sm"
           label="系统设置 (Ctrl+, / Cmd+,)"
           onClick={() => openSettings(true)}

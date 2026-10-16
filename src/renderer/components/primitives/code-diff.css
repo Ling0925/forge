@@ -2,12 +2,12 @@
 .code-block {
   display: flex;
   flex-direction: column;
-  background-color: var(--neutral-1);
-  border: none;
-  border-radius: var(--radius-md);
+  background-color: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: 12.5px;
   line-height: var(--leading-sm);
   max-width: 100%;
 }
@@ -16,8 +16,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  background-color: var(--neutral-2);
+  padding: 6px 12px;
+  background-color: var(--surface-soft);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -131,12 +131,12 @@
 .diff-viewer {
   display: flex;
   flex-direction: column;
-  background-color: var(--neutral-1);
-  border: none;
-  border-radius: var(--radius-md);
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: 12px;
   line-height: var(--leading-sm);
   max-width: 100%;
 }
@@ -145,8 +145,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  background-color: var(--neutral-2);
+  padding: 6px 12px;
+  background-color: var(--surface-soft);
   border-bottom: 1px solid var(--border-subtle);
   flex-wrap: wrap;
   gap: var(--space-2);
