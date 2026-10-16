@@ -1,0 +1,35 @@
+.transcript-stage-header {
+  margin: 0;
+  font-weight: 400;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-sm);
+}
+.transcript-stage-author {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.transcript-stage-title {
+  overflow-wrap: anywhere;
+}
+.transcript-reasoning {
+  margin-bottom: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.transcript-reasoning > summary {
+  padding-block: var(--space-1);
+  cursor: pointer;
+}
+.transcript-reasoning > summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.transcript-reasoning-body {
+  padding-top: var(--space-2);
+  overflow-wrap: anywhere;
+}
