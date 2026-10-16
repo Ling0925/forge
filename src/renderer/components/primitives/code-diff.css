@@ -294,6 +294,14 @@
   color: var(--neutral-5);
 }
 
+/* Unchanged runs between changes are collapsed into one quiet separator row. */
+.diff-line-gap .diff-content {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-style: italic;
+  font-size: var(--text-xs);
+}
+
 .diff-truncated-notice {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-xs);

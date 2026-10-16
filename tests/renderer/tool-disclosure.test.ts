@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { DiffViewer } from "../../src/renderer/components/primitives/DiffViewer";
 import {
   ToolDisclosure,
   type ToolDisclosureProps,
@@ -185,5 +186,36 @@ describe("tool disclosure row", () => {
     const rows = html.match(/class="diff-line diff-line-\w+"/g) ?? [];
     expect(rows.length).toBeGreaterThan(0);
     expect(html.match(/class="diff-line-number"/g)?.length).toBe(rows.length);
+  });
+
+  it("shows only the changed lines and ±5 context, not the whole file", () => {
+    const lines = Array.from({ length: 60 }, (_, i) => `line ${i}`);
+    const before = lines.join("\n");
+    // Insert one line in the middle; without alignment every later line would
+    // appear changed and the diff would dump the entire file.
+    const after = [...lines.slice(0, 30), "inserted", ...lines.slice(30)].join(
+      "\n",
+    );
+    // Render the diff directly with no leading-line preview so the assertion is
+    // about context filtering, not the 10-line preview window.
+    const html = renderToStaticMarkup(
+      createElement(DiffViewer, {
+        path: "src/a.ts",
+        before,
+        after,
+        isSuggested: false,
+        previewLines: 0,
+      }),
+    );
+    // The change and its 5 context lines on each side are present...
+    expect(html).toContain("line 25");
+    expect(html).toContain("inserted");
+    expect(html).toContain("line 34");
+    // ...but one line beyond the context and the far ends of the file are not.
+    expect(html).not.toContain("line 35");
+    expect(html).not.toContain("line 0<");
+    expect(html).not.toContain("line 59");
+    // Unchanged runs collapse into an explicit separator.
+    expect(html).toContain("已省略");
   });
 });
