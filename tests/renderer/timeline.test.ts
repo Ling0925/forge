@@ -6,6 +6,20 @@ import {
   sessionSnapshotSchema,
 } from "../../src/shared/schemas";
 const id = sessionIdSchema.parse("11111111-1111-4111-8111-111111111111");
+it("reuses timeline for the same immutable snapshot and rebuilds replacements", () => {
+  const first = reduceTimeline(base);
+  expect(reduceTimeline(base)).toBe(first);
+  const replaced = {
+    ...base,
+    messages: [
+      ...base.messages,
+      { role: "user" as const, content: "new turn" },
+    ],
+  };
+  const next = reduceTimeline(replaced);
+  expect(next).not.toBe(first);
+  expect(next.at(-1)).toMatchObject({ content: "new turn" });
+});
 const base: SessionSnapshot = {
   version: 1,
   id,

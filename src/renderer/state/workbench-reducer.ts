@@ -10,6 +10,7 @@ import type {
   SessionStatus,
   SessionSummary,
 } from "../shared-types";
+import { appendSessionEvent } from "./session-usage";
 // Draft-only ceiling. Stored snapshots are never sliced by this reducer.
 export const STREAMING_TEXT_LIMIT = 1000000;
 
@@ -305,7 +306,7 @@ export function workbenchReducer(
                 plan:
                   event.type === "plan_updated" ? event.plan : snapshot.plan,
                 updatedAt: event.timestamp,
-                events: [...snapshot.events, event],
+                events: appendSessionEvent(snapshot.events, event),
               }
             : snapshot,
       };

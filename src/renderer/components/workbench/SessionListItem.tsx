@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SessionSummary } from "../../shared-types";
+import { readSessionInfo } from "../../state/session-info-cache";
 import { useWorkbench } from "../../state/workbench-context";
 
 const labels: Readonly<Record<string, string>> = {
@@ -34,30 +35,18 @@ export function SessionListItem({
     let cancelled = false;
     setInfo({ tokens: "读取中…", model: session.model });
     const timer = setTimeout(() => {
-      void window.forge
-        .getSession(session.id)
-        .then((snapshot) => {
+      void readSessionInfo(
+        {
+          id: session.id,
+          updatedAt: session.updatedAt,
+          status: session.status,
+          model: session.model,
+        },
+        () => window.forge.getSession(session.id),
+      )
+        .then((summary) => {
           if (cancelled) return;
-          const runs = snapshot.events.filter(
-            (event) => event.type === "run_finished",
-          );
-          const reported = runs.filter((event) => event.usage !== undefined);
-          const total = reported.reduce(
-            (sum, event) => sum + (event.usage?.totalTokens ?? 0),
-            0,
-          );
-          const partial =
-            reported.length !== runs.length ||
-            runs.some((event) => event.usageComplete === false);
-          const latestModel = snapshot.events
-            .filter((event) => event.type === "run_started")
-            .at(-1)?.model;
-          setInfo({
-            tokens: reported.length
-              ? `${total.toLocaleString()}${partial ? "（部分统计）" : ""}`
-              : "未记录",
-            model: latestModel ?? snapshot.model,
-          });
+          setInfo(summary);
         })
         .catch(() => {
           if (!cancelled)
@@ -73,7 +62,7 @@ export function SessionListItem({
       window.removeEventListener("scroll", dismiss, true);
       window.removeEventListener("resize", dismiss);
     };
-  }, [open, session.id, session.model]);
+  }, [open, session.id, session.model, session.updatedAt, session.status]);
   const reveal = () => {
     const box = anchor.current?.getBoundingClientRect();
     if (!box) return;

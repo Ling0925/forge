@@ -2,7 +2,10 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
-import { sessionUsage } from "../../src/renderer/state/session-usage";
+import {
+  appendSessionEvent,
+  sessionUsage,
+} from "../../src/renderer/state/session-usage";
 import { agentEventSchema } from "../../src/shared/schemas";
 
 const base = {
@@ -46,6 +49,35 @@ const finished = agentEventSchema.parse({
     cachedPromptTokens: 900,
   },
   usageComplete: true,
+});
+
+it("reuses cached usage and processes only appended events without mutating previous totals", () => {
+  let reads = 0;
+  const oldEvent = new Proxy(context(1000, 900), {
+    get(target, key, receiver) {
+      reads++;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const events = [oldEvent];
+  const original = sessionUsage(events);
+  reads = 0;
+  expect(sessionUsage(events)).toBe(original);
+  const next = appendSessionEvent(events, finished);
+  expect(sessionUsage(next).total?.totalTokens).toBe(1100);
+  expect(reads).toBe(0);
+  expect(original.total?.totalTokens).toBe(1100);
+  const irrelevant = appendSessionEvent(
+    next,
+    agentEventSchema.parse({
+      ...base,
+      type: "state_changed",
+      status: "completed",
+    }),
+  );
+  expect(sessionUsage(irrelevant)).toBe(sessionUsage(next));
+  expect(sessionUsage([...next])).toEqual(sessionUsage(next));
+  expect(sessionUsage([context(5000, 0)]).total?.totalTokens).toBe(5100);
 });
 
 it("separates context from session totals, replaces live usage on completion and preserves unknown cache", () => {

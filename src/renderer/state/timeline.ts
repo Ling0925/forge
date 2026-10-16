@@ -27,9 +27,12 @@ function isHumanTurn(message: SessionSnapshot["messages"][number]): boolean {
 }
 
 /** Native message order is authoritative. IDs are only unique within a call occurrence. */
+const timelineCache = new WeakMap<SessionSnapshot, readonly TimelineItem[]>();
 export function reduceTimeline(
   snapshot: SessionSnapshot,
 ): readonly TimelineItem[] {
+  const cached = timelineCache.get(snapshot);
+  if (cached) return cached;
   const items: TimelineItem[] = [];
   const pending = new Map<string, number[]>();
   const runStarts = snapshot.events.flatMap((event, index) =>
@@ -218,5 +221,6 @@ export function reduceTimeline(
         timestamp: event.timestamp,
       });
   });
+  timelineCache.set(snapshot, items);
   return items;
 }
