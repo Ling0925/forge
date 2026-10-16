@@ -166,4 +166,24 @@ describe("tool disclosure row", () => {
     expect(html).not.toContain("展开全部差异");
     expect(html).toContain("const next = 2;");
   });
+
+  it("renders exactly one line-number column per diff row", () => {
+    const html = render({
+      toolName: "edit_file",
+      status: "completed",
+      changes: [
+        {
+          path: "src/a.ts",
+          kind: "modified",
+          before: "keep\nconst old = 1;",
+          after: "keep\nconst next = 2;",
+          truncated: false,
+        },
+      ],
+    });
+    // One number cell per row; the previous double before/after gutter is gone.
+    const rows = html.match(/class="diff-line diff-line-\w+"/g) ?? [];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(html.match(/class="diff-line-number"/g)?.length).toBe(rows.length);
+  });
 });

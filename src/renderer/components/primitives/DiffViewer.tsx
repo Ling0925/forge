@@ -168,10 +168,7 @@ export function DiffViewer({
             return (
               <div key={key} className={`diff-line ${lineClass}`}>
                 <span className="diff-line-number">
-                  {item.beforeNumber ?? ""}
-                </span>
-                <span className="diff-line-number">
-                  {item.afterNumber ?? ""}
+                  {item.afterNumber ?? item.beforeNumber ?? ""}
                 </span>
                 <span className="diff-marker">{marker}</span>
                 <span className="diff-content">{item.text || " "}</span>
