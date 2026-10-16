@@ -1,5 +1,6 @@
-/* Claude Code-style tool row: one quiet, borderless line that expands into
-   grouped monospace evidence. No resting card, border or shadow. */
+/* Claude Code-style tool row: one quiet, borderless line whose expanded
+   evidence is indented under a corner connector. No resting card, border or
+   shadow. */
 .tool-disclosure {
   display: flex;
   flex-direction: column;
@@ -87,26 +88,19 @@
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Status is a quiet coloured dot plus label; colour follows data-status. */
+/* Status collapses to a terminal-style glyph: ✓ completed, ✗ failed, else a
+   spinner while running. Colour follows data-status; the word stays for AT. */
 .tool-disclosure-status {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  white-space: nowrap;
-  color: var(--text-muted);
-}
-
-.tool-disclosure-status::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: currentColor;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
+  color: var(--text-muted);
 }
 
 .tool-disclosure-status[data-status="running"] {
@@ -121,6 +115,21 @@
   color: var(--error);
 }
 
+.tool-disclosure-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  animation: tool-spin 0.7s linear infinite;
+}
+
+@keyframes tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .tool-disclosure-chevron {
   display: flex;
   align-items: center;
@@ -132,13 +141,13 @@
   transform: rotate(90deg);
 }
 
-/* Expanded evidence is grouped under a soft left rail instead of a card. */
+/* Expanded evidence hangs off one corner connector, indented under the row. */
 .tool-disclosure-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin: var(--space-1) 0 var(--space-3);
-  padding: var(--space-1) 0 var(--space-1) var(--space-4);
+  margin: var(--space-1) 0 var(--space-2) var(--space-6);
+  padding-left: var(--space-4);
   border-left: 2px solid var(--border-subtle);
 }
 
@@ -149,8 +158,18 @@
 }
 
 .tool-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--text-2xs);
   font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tool-section-title::before {
+  content: "⎿";
+  font-family: var(--font-mono);
+  font-weight: 400;
   color: var(--text-muted);
 }
 
@@ -201,4 +220,38 @@
 .tool-exit-bad {
   background-color: var(--error-bg);
   color: var(--error);
+}
+
+/* Raw protocol fields are debugging-only and stay collapsed by default. */
+.tool-debug {
+  margin-top: var(--space-1);
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: var(--space-2);
+}
+
+.tool-debug-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.tool-debug-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-debug-summary > svg {
+  transition: transform var(--transition-fast);
+}
+
+.tool-debug[open] > .tool-debug-summary > svg {
+  transform: rotate(90deg);
+}
+
+.tool-debug .tool-section {
+  margin-top: var(--space-2);
 }

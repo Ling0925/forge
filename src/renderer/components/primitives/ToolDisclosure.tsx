@@ -1,10 +1,12 @@
 import {
   CaretRight,
+  Check,
   FileCode,
   GitDiff,
   Globe,
   TerminalWindow,
   Wrench,
+  X,
 } from "@phosphor-icons/react";
 import { useId, useState } from "react";
 import "./tool-disclosure.css";
@@ -70,6 +72,40 @@ function getToolIcon(name: string) {
   return <Wrench size={16} weight="regular" />;
 }
 
+/** Compact, terminal-style durations: 480ms, 1.4s, 25s, 2m 5s. */
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) return `${durationMs}ms`;
+  const seconds = durationMs / 1000;
+  if (seconds < 60)
+    return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
+  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+}
+
+/**
+ * Terminal-style status glyph (✓ / ✗ / spinner) instead of a status word. The
+ * label is preserved for assistive tech only.
+ */
+function StatusGlyph({
+  status,
+  label,
+}: {
+  readonly status: ToolDisclosureProps["status"];
+  readonly label: string;
+}) {
+  return (
+    <span className="tool-disclosure-status" data-status={status}>
+      {status === "completed" ? (
+        <Check size={13} weight="bold" aria-hidden="true" />
+      ) : status === "failed" ? (
+        <X size={13} weight="bold" aria-hidden="true" />
+      ) : (
+        <span className="tool-disclosure-spinner" aria-hidden="true" />
+      )}
+      <span className="visually-hidden">{label}</span>
+    </span>
+  );
+}
+
 export function ToolDisclosure({
   toolName,
   target,
@@ -124,14 +160,14 @@ export function ToolDisclosure({
         </div>
         <div className="tool-disclosure-meta">
           {durationMs !== undefined && (
-            <span className="tool-disclosure-time">{durationMs}ms</span>
+            <span className="tool-disclosure-time">
+              {formatDuration(durationMs)}
+            </span>
           )}
-          {timestamp && !durationMs && (
+          {timestamp && durationMs === undefined && (
             <span className="tool-disclosure-time">{timestamp}</span>
           )}
-          <span className="tool-disclosure-status" data-status={status}>
-            {statusLabel}
-          </span>
+          <StatusGlyph status={status} label={statusLabel} />
           <span
             className={`tool-disclosure-chevron ${expanded ? "is-expanded" : ""}`}
             aria-hidden="true"
@@ -144,17 +180,13 @@ export function ToolDisclosure({
       {expanded && (
         <div id={detailsId} className="tool-disclosure-body">
           <div className="tool-section">
-            <span className="tool-section-title">原生名称</span>
-            <pre className="tool-section-content tool-disclosure-name">
-              {toolName}
-            </pre>
-          </div>
-          {formattedParams && (
-            <div className="tool-section">
-              <span className="tool-section-title">参数输入</span>
+            <span className="tool-section-title">参数输入</span>
+            {formattedParams ? (
               <pre className="tool-section-content">{formattedParams}</pre>
-            </div>
-          )}
+            ) : (
+              <span className="tool-section-empty">无参数</span>
+            )}
+          </div>
 
           {exitCode !== undefined && exitCode !== null && (
             <div className="tool-section">
@@ -187,6 +219,18 @@ export function ToolDisclosure({
               <pre className="tool-section-content">{output}</pre>
             )}
           </div>
+
+          {/* Raw protocol fields stay collapsed by default, out of the main read. */}
+          <details className="tool-debug">
+            <summary className="tool-debug-summary">
+              <CaretRight size={11} weight="bold" aria-hidden="true" />
+              调试信息
+            </summary>
+            <div className="tool-section">
+              <span className="tool-section-title">原生名称</span>
+              <pre className="tool-section-content">{toolName}</pre>
+            </div>
+          </details>
         </div>
       )}
     </section>
