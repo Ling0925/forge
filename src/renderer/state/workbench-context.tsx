@@ -19,6 +19,7 @@ import type {
   Permission,
   SessionId,
 } from "../shared-types";
+import { shouldRefreshTranscript } from "./refresh-events";
 import {
   type WorkbenchAction,
   initialWorkbenchState,
@@ -112,11 +113,10 @@ function useController() {
     const titleRefreshes = new Map<string, ReturnType<typeof setTimeout>>();
     const off = window.forge.onEvent((event) => {
       dispatch({ type: "RUN_EVENT_RECEIVED", event });
-      if (
-        event.event.type === "tool_started" ||
-        event.event.type === "tool_finished" ||
-        event.event.type === "agent_update"
-      ) {
+      if (shouldRefreshTranscript(event.event.type)) {
+        // Refresh on run_started/approval_requested too: the accepted user turn
+        // is persisted before run_started, so without this the message the user
+        // just sent would not appear until the first tool or finish.
         void refreshSession(event.event.sessionId);
         if (event.event.type === "agent_update") {
           void loadSessions();
