@@ -177,15 +177,68 @@
   font-size: var(--prose-size);
 }
 .wb-app .message {
+  display: flex;
+  flex-direction: column;
   padding: 0;
   border: none;
+  width: 100%;
 }
 .wb-app .message-user {
-  background: var(--surface-soft);
   align-self: flex-end;
-  max-width: 85%;
-  padding: var(--user-inset);
-  border-radius: var(--radius-user);
+  max-width: 82%;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px 16px 4px 16px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+.wb-app .message-user .message-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.wb-app .message-user .message-body {
+  color: var(--text-primary);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.wb-app .message-assistant {
+  align-self: flex-start;
+  width: 100%;
+  background: transparent;
+  padding: 4px 0;
+}
+.wb-app .message-assistant .message-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.wb-app .message-assistant .message-header::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+.wb-app .message-assistant.message-streaming .message-header::before {
+  animation: pulse-ring 1.5s infinite ease-out;
+}
+.wb-app .message-assistant .message-body {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--text-primary);
 }
 .message-header {
   color: var(--text-secondary);
@@ -316,35 +369,44 @@
 .native-dialog {
   padding: 0;
   color: var(--text-primary);
-  background: var(--surface-body);
+  background: var(--surface-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
   width: min(640px, calc(100vw - var(--space-6)));
-  max-height: 90dvh;
-  box-shadow: var(--shadow-overlay);
+  max-height: 88dvh;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.25);
 }
 .native-dialog:not([open]) {
   display: none;
 }
 .native-dialog::backdrop {
-  background: rgb(20 25 18 / 30%);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .native-dialog .modal-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: var(--space-6);
-  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.native-dialog .modal-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .native-dialog .modal-content {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-6);
+  padding: var(--space-5);
   overflow: auto;
 }
 .native-dialog .modal-footer {
-  padding: var(--space-4);
-  border-top: none;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-soft);
 }
 .native-dialog .settings-form {
   display: flex;
@@ -692,25 +754,31 @@
 
 /* Integrated continuing-task composer; the new-task modal retains full fields. */
 .composer-surface {
-  padding: 16px 18px 12px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-composer);
+  border-radius: var(--radius-card);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-composer);
+  transition: all var(--transition-fast);
+}
+.composer-surface:focus-within {
+  border-color: var(--border-control);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.1);
 }
 .composer-toolbar,
 .composer-toolbar-start,
 .composer-toolbar-end {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 .composer-toolbar {
   justify-content: space-between;
+  padding-top: 4px;
 }
 .composer-toolbar-start {
-  gap: var(--space-2);
+  gap: 6px;
 }
 .composer-toolbar-end {
   margin-left: auto;
@@ -725,13 +793,33 @@
   font-size: var(--text-xs);
   color: var(--text-secondary);
 }
+.composer-pill {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  transition: all var(--transition-fast);
+}
+.composer-pill:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-control);
+}
 .composer-compact-select {
-  width: auto;
-  background-color: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
   border: none;
-  padding-left: var(--space-1);
-  padding-right: var(--space-6);
-  font-size: var(--type-small);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 4px;
+  cursor: pointer;
+  outline: none;
+}
+.composer-compact-select:hover {
+  color: var(--text-primary);
 }
 .composer-model-picker {
   position: relative;
@@ -740,17 +828,24 @@
 .composer-model-summary {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
-  padding: var(--space-1-5) var(--space-2);
-  min-height: var(--icon-size);
+  gap: 5px;
+  padding: 3px 8px;
+  height: 26px;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--surface-soft);
+  color: var(--text-secondary);
   list-style: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 .composer-model-summary::-webkit-details-marker {
   display: none;
 }
 .composer-model-summary:hover {
   background: var(--hover-bg);
+  color: var(--text-primary);
+  border-color: var(--border-control);
 }
 .composer-model-name,
 .composer-model-short {
@@ -758,7 +853,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--type-small);
+  font-size: 12px;
+  font-weight: 500;
 }
 .composer-model-panel {
   position: absolute;
@@ -768,13 +864,13 @@
   max-width: calc(100vw - var(--space-12));
   max-height: 50dvh;
   overflow: auto;
-  padding: var(--space-5);
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   background: var(--surface-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-overlay);
   z-index: 40;
 }
@@ -785,10 +881,36 @@
 }
 .composer-run,
 .composer-submit {
-  min-width: 40px;
-  min-height: 40px;
-  padding: var(--space-2);
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--run-bg);
+  color: var(--run-ink);
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+.composer-run:hover:not(:disabled),
+.composer-submit:hover:not(:disabled) {
+  background-color: var(--run-hover);
+  transform: scale(1.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.composer-run:active:not(:disabled),
+.composer-submit:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.composer-run:disabled,
+.composer-submit:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 .composer-run:has(.btn-busy-status) {
   padding-inline: var(--space-3);
@@ -1312,8 +1434,7 @@
   }
 }
 
-/* Mode is also announced as text; the arrow is only a secondary cue. */
+/* Mode is also announced as text; clear unnecessary offsets */
 .composer-prompt { position: relative; }
-.composer-prompt .composer-textarea { padding-left: 24px; }
-.composer-mode-arrow { position: absolute; left: 2px; bottom: 18px; color: var(--accent-sage); pointer-events: none; }
-.composer-mode-arrow.is-plan { color: var(--warning); }
+.composer-prompt .composer-textarea { padding: 4px 6px 8px 6px; }
+.composer-mode-arrow { display: inline-block; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none; }
