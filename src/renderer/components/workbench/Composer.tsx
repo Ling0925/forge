@@ -11,6 +11,7 @@ import { z } from "zod";
 import { permissionSchema, settingsFields } from "../../../shared/schemas";
 import type { SessionId } from "../../shared-types";
 import { parseDrafts } from "../../state/drafts";
+import { modelCatalogCache } from "../../state/model-catalog-cache";
 import { useWorkbench } from "../../state/workbench-context";
 import { hostCapabilities } from "../../web-host";
 import { Button } from "../primitives/Button";
@@ -129,6 +130,13 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
+  const modelSource = JSON.stringify([state.settings?.baseUrl ?? "", state.settings?.apiMode ?? "chat-completions"]);
+  const currentModelSource = useRef(modelSource);
+  currentModelSource.current = modelSource;
+  useEffect(() => {
+    setAvailableModels(modelCatalogCache.read(modelSource) ?? []);
+    setModelError("");
+  }, [modelSource]);
   const [savingEffort, setSavingEffort] = useState(false);
   const effortSaving = useRef(false);
   const changeEffort = async (value: string) => {
@@ -297,13 +305,19 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     } else if (selectedDraft.current === draftId)
       setError("未能开始对话，草稿已保留。请检查错误详情后重试。");
   };
-  const listModels = async () => {
+  const listModels = async (refresh = false) => {
     if (listing) return;
+    const cached = modelCatalogCache.read(modelSource);
+    if (cached && !refresh) {
+      setAvailableModels(cached);
+      setModelError("");
+      return;
+    }
     setListing(true);
     setModelError("");
     try {
-      const models = await window.forge.listModels();
-      if (alive.current) setAvailableModels(models);
+      const models = await modelCatalogCache.load(modelSource, () => window.forge.listModels(), refresh);
+      if (alive.current && currentModelSource.current === modelSource) setAvailableModels(models);
     } catch (err) {
       if (alive.current)
         setModelError(err instanceof Error ? err.message : "模型列表读取失败");
@@ -562,7 +576,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               value={model}
               models={[state.settings?.model ?? "", ...availableModels]}
               onSelect={setModel}
-              onRefresh={() => void listModels()}
+              onOpen={() => void listModels()}
+              onRefresh={() => void listModels(true)}
               loading={listing}
               error={modelError}
               reasoning={{ value: state.settings?.reasoningEffort ?? "default", disabled: savingEffort || busy || !!submission, onChange: value => void changeEffort(value) }}

@@ -14,7 +14,8 @@ it("model search requires selection and settings retain drafts and save once", a
       import {Settings} from './src/renderer/components/workbench/Settings';
       import {ModelPicker} from './src/renderer/components/workbench/ModelPicker';
       import {TestProvider, useWorkbench} from './src/renderer/state/workbench-context';
-      window.forge = {listModels: async () => ['provider/alpha','provider/beta']};
+      window.modelReads = 0;
+      window.forge = {listModels: async () => { window.modelReads++; return ['provider/alpha','provider/beta']; }};
       function Harness() {
         const [model,setModel] = useState('provider/alpha');
         const [models,setModels] = useState([]);
@@ -106,6 +107,9 @@ it("model search requires selection and settings retain drafts and save once", a
     ).toBe(true);
     await trigger.click();
     expect(await search.inputValue()).toBe("");
+    expect(await page.evaluate(() => Reflect.get(window, "modelReads"))).toBe(1);
+    await page.getByRole("button", { name: "刷新模型目录" }).click();
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "modelReads"))).toBe(2);
     expect(
       await page.locator(".model-catalog-option[aria-pressed]").count(),
     ).toBe(2);

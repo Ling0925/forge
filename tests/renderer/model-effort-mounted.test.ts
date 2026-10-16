@@ -42,6 +42,9 @@ it("combines model and effort with five readable levels on desktop and mobile", 
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
       const trigger = page.locator(".composer-model-summary");
       await trigger.click();
+      const search = page.getByLabel("搜索模型或输入精确 ID");
+      await search.waitFor();
+      if (width === 390) expect(await search.evaluate(node => node === document.activeElement)).toBe(false);
       const slider = page.getByRole("slider", { name: "思考等级", exact: true });
       await slider.press("Home");
       for (const [index, label] of ["自动", "关闭", "极低", "低", "中", "高", "极高"].entries()) {

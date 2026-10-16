@@ -12,12 +12,14 @@ export function ModelPicker(props: {
   readonly models: readonly string[];
   readonly onSelect: (model: string) => void;
   readonly onRefresh: () => void;
+  readonly onOpen?: () => void;
   readonly loading: boolean;
   readonly error: string;
   readonly reasoning?: { value: string; disabled: boolean; onChange: (value: string) => void };
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
+  const initialized = useRef(false);
   const effortIndex = efforts.findIndex(([value]) => value === props.reasoning?.value);
   const effortLabel = efforts[effortIndex]?.[1] ?? "自动";
   const [draftEffort, setDraftEffort] = useState(Math.max(0, effortIndex));
@@ -38,7 +40,8 @@ export function ModelPicker(props: {
   };
   useEffect(() => {
     if (!open) return;
-    ref.current?.querySelector<HTMLInputElement>("input:not([type=range])")?.focus();
+    if (window.matchMedia("(pointer: fine) and (min-width: 769px)").matches)
+      ref.current?.querySelector<HTMLInputElement>("input:not([type=range])")?.focus();
     const outside = (event: PointerEvent) => {
       if (
         event.target instanceof Node &&
@@ -56,7 +59,11 @@ export function ModelPicker(props: {
       className="composer-model composer-model-picker"
       onToggle={(event) => {
         setOpen(event.currentTarget.open);
-        if (event.currentTarget.open) props.onRefresh();
+        if (event.currentTarget.open) {
+          if (props.onOpen) props.onOpen();
+          else if (!initialized.current) props.onRefresh();
+          initialized.current = true;
+        }
       }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) close();
