@@ -8,7 +8,7 @@ import {
   Wrench,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import "./tool-disclosure.css";
 
 export interface ToolDisclosureProps {
@@ -111,6 +111,120 @@ function StatusGlyph({
   );
 }
 
+/** Human labels for the most common tool argument keys. */
+const paramLabels: Readonly<Record<string, string>> = {
+  path: "路径",
+  file_path: "路径",
+  pattern: "模式",
+  glob: "匹配",
+  query: "查询",
+  needle: "查询",
+  content: "内容",
+  new_text: "新内容",
+  old_text: "原内容",
+  text: "文本",
+  command: "命令",
+  argv: "命令",
+  cwd: "工作目录",
+  url: "网址",
+  selector: "选择器",
+  value: "值",
+  model: "模型",
+  prompt: "提示词",
+  line: "行",
+  limit: "上限",
+  offset: "偏移",
+  recursive: "递归",
+  description: "说明",
+  name: "名称",
+  id: "ID",
+  server: "服务",
+  tool: "工具",
+  mode: "模式",
+  depth: "深度",
+  task: "任务",
+  origin: "来源",
+};
+
+/** Best-effort pretty print for non-scalar argument values. */
+function prettyValue(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/** Argument values stay readable without dumping the whole raw JSON blob. */
+function paramValue(value: unknown): ReactNode {
+  if (value === null || value === undefined)
+    return <span className="tool-param-empty">空</span>;
+  if (typeof value === "string")
+    return value === "" ? (
+      <span className="tool-param-empty">空</span>
+    ) : (
+      <span className="tool-param-text">{value}</span>
+    );
+  if (typeof value === "number" || typeof value === "boolean")
+    return <span className="tool-param-scalar">{String(value)}</span>;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="tool-param-empty">空</span>;
+    if (value.every((item) => typeof item !== "object" || item === null))
+      return (
+        <span className="tool-param-chips">
+          {value.map((item, index) => (
+            <span className="tool-param-chip" key={`${String(item)}-${index}`}>
+              {String(item)}
+            </span>
+          ))}
+        </span>
+      );
+  }
+  return <pre className="tool-param-json">{prettyValue(value)}</pre>;
+}
+
+/** Parse the persisted argument string without throwing on malformed input. */
+function parseParams(parameters: ToolDisclosureProps["parameters"]): unknown {
+  if (typeof parameters !== "string") return parameters ?? null;
+  try {
+    return JSON.parse(parameters);
+  } catch {
+    return parameters;
+  }
+}
+
+/**
+ * Parsed argument card: labelled rows for object arguments instead of one raw
+ * JSON blob. Malformed or non-object parameters fall back to plain text.
+ */
+function ParameterFields({ parameters }: { readonly parameters: unknown }) {
+  const record =
+    typeof parameters === "object" &&
+    parameters !== null &&
+    !Array.isArray(parameters)
+      ? (parameters as Record<string, unknown>)
+      : null;
+  if (!record)
+    return parameters ? (
+      <pre className="tool-param-json">{prettyValue(parameters)}</pre>
+    ) : (
+      <span className="tool-section-empty">无参数</span>
+    );
+  const entries = Object.entries(record);
+  if (entries.length === 0)
+    return <span className="tool-section-empty">无参数</span>;
+  return (
+    <dl className="tool-params">
+      {entries.map(([key, value]) => (
+        <div className="tool-param-row" key={key}>
+          <dt className="tool-param-key">{paramLabels[key] ?? key}</dt>
+          <dd className="tool-param-value">{paramValue(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function ToolDisclosure({
   toolName,
   target,
@@ -144,12 +258,7 @@ export function ToolDisclosure({
     }
   }, [autoCollapsed]);
 
-  const formattedParams =
-    typeof parameters === "string"
-      ? parameters
-      : parameters
-        ? JSON.stringify(parameters, null, 2)
-        : null;
+  const parsedParams = parseParams(parameters);
 
   const statusLabel =
     status === "running" ? "执行中" : status === "completed" ? "完成" : "失败";
@@ -208,11 +317,7 @@ export function ToolDisclosure({
           )}
           <div className="tool-section">
             <span className="tool-section-title">参数输入</span>
-            {formattedParams ? (
-              <pre className="tool-section-content">{formattedParams}</pre>
-            ) : (
-              <span className="tool-section-empty">无参数</span>
-            )}
+            <ParameterFields parameters={parsedParams} />
           </div>
 
           {exitCode !== undefined && exitCode !== null && (

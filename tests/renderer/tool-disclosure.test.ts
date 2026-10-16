@@ -49,4 +49,42 @@ describe("tool disclosure row", () => {
     });
     expect(html).not.toContain("rm -rf /");
   });
+
+  it("renders parsed parameter rows instead of a raw JSON blob", () => {
+    const html = render({
+      toolName: "read_file",
+      parameters: JSON.stringify({ path: "src/a.ts", offset: 40, limit: 80 }),
+      status: "completed",
+      defaultExpanded: true,
+    });
+    expect(html).toContain('class="tool-params"');
+    expect(html).toContain("路径"); // human label for `path`
+    expect(html).toContain("src/a.ts");
+    expect(html).toContain("上限"); // human label for `limit`
+    // The arguments are not dumped as a raw JSON object.
+    expect(html).not.toContain('{"path"');
+  });
+
+  it("lists scalar array arguments as chips", () => {
+    const html = render({
+      toolName: "run_command",
+      command: "node --version",
+      parameters: JSON.stringify({ argv: ["node", "--version"] }),
+      status: "completed",
+      defaultExpanded: true,
+    });
+    expect(html).toContain('class="tool-param-chips"');
+    expect(html).toContain("node");
+    expect(html).toContain("--version");
+  });
+
+  it("falls back to plain text for malformed arguments", () => {
+    const html = render({
+      toolName: "read_file",
+      parameters: "{not json",
+      status: "completed",
+      defaultExpanded: true,
+    });
+    expect(html).toContain("{not json");
+  });
 });
