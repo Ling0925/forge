@@ -47,8 +47,8 @@ body,
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: var(--focus-ring-offset);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 /* Typography elements */

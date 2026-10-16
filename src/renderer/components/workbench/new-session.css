@@ -70,7 +70,10 @@
   box-shadow: var(--shadow-overlay);
 }
 .composer-fresh .composer-textarea {
-  min-height: 112px;
+  min-height: 100px;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
 }
 @media (max-width: 640px) {
   .wb-new-session-intro {

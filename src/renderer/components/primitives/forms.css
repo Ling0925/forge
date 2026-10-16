@@ -91,12 +91,15 @@
   border-color: var(--neutral-5);
 }
 
+.form-input:focus,
 .form-input:focus-visible,
+.form-select:focus,
 .form-select:focus-visible,
+.form-textarea:focus,
 .form-textarea:focus-visible {
   border-color: var(--focus-ring);
-  outline: 2px solid var(--focus-ring);
-  outline-offset: var(--focus-ring-offset);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-sage-soft);
 }
 
 .form-input[readonly],
