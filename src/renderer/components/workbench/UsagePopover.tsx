@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AgentEvent } from "../../shared-types";
+import type { AgentEvent, SessionSnapshot } from "../../shared-types";
+import { persistentUsageCache } from "../../state/persistent-usage-cache";
 import { compactTokens, sessionUsage } from "../../state/session-usage";
 import "./usage-popover.css";
 
@@ -8,8 +9,21 @@ const percent = (value: number | undefined) =>
 
 export function UsagePopover({
   events,
-}: { readonly events: readonly AgentEvent[] }) {
-  const usage = useMemo(() => sessionUsage(events), [events]);
+  snapshot,
+}: {
+  readonly events: readonly AgentEvent[];
+  readonly snapshot?: SessionSnapshot | undefined;
+}) {
+  const usage = useMemo(
+    () =>
+      snapshot &&
+      ["completed", "failed", "cancelled", "interrupted"].includes(
+        snapshot.status,
+      )
+        ? persistentUsageCache.snapshot(snapshot).usage
+        : sessionUsage(events),
+    [events, snapshot],
+  );
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
   const context = usage.context;

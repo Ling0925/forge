@@ -119,7 +119,9 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     import './src/renderer/styles/global.css';
     import './src/renderer/components/workbench/app.css';
     import './src/renderer/styles/workspace-theme.css';
-    createRoot(document.getElementById('root')).render(<div className="wb-app"><UsagePopover events={${JSON.stringify(events)}} /></div>);
+    const events = ${JSON.stringify(events)};
+    const snapshot = {version:1,id:events[0].sessionId,title:'test',workspace:'/tmp',model:'model',createdAt:events[0].timestamp,updatedAt:events.at(-1).timestamp,status:'completed',messages:[],changes:[],events};
+    createRoot(document.getElementById('root')).render(<div className="wb-app"><UsagePopover events={events} snapshot={snapshot} /></div>);
   `,
     },
     bundle: true,
@@ -134,19 +136,20 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
   try {
     const page = await browser.newPage();
     page.setDefaultTimeout(3000);
-    await page.setContent(
-      '<div id="root"></div><button id="outside">外部</button>',
+    const js = bundle.outputFiles.find((file) =>
+      file.path.endsWith(".js"),
+    )?.text;
+    const css = bundle.outputFiles.find((file) =>
+      file.path.endsWith(".css"),
+    )?.text;
+    if (!js || !css) throw new Error("Missing usage bundle");
+    await page.route("http://usage.test/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<style>${css}.wb-app{height:650px!important;align-items:flex-end;justify-content:flex-end;padding:24px}</style><div id="root"></div><button id="outside">外部</button><script>${js.replaceAll("</script", "<\\/script")}</script>`,
+      }),
     );
-    for (const file of bundle.outputFiles) {
-      if (file.path.endsWith(".css"))
-        await page.addStyleTag({ content: file.text });
-      else if (file.path.endsWith(".js"))
-        await page.addScriptTag({ content: file.text });
-    }
-    await page.addStyleTag({
-      content:
-        ".wb-app{height:650px!important;align-items:flex-end;justify-content:flex-end;padding:24px}",
-    });
+    await page.goto("http://usage.test/");
     for (const width of [1440, 390])
       for (const theme of ["dark", "light"]) {
         await page.setViewportSize({ width, height: 900 });
@@ -172,6 +175,18 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         await page.locator("#outside").click();
         expect(await panel.count()).toBe(0);
       }
+    const saved = await page.evaluate(() =>
+      localStorage.getItem("forge-session-usage-v1"),
+    );
+    expect(saved).toContain('"eventCount":3');
+    await page.reload();
+    await page.getByText("≈46.4%", { exact: true }).click();
+    expect(
+      await page.getByRole("region", { name: "用量详情" }).innerText(),
+    ).toContain("46.4% / 486.4K");
+    expect(
+      await page.evaluate(() => localStorage.getItem("forge-session-usage-v1")),
+    ).toBe(saved);
   } finally {
     await browser.close();
   }

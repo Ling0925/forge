@@ -531,6 +531,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           </div>
           <div className="composer-toolbar-end">
             <UsagePopover
+              snapshot={
+                !isNew && state.activeSnapshot?.id === state.activeSessionId
+                  ? state.activeSnapshot
+                  : undefined
+              }
               events={
                 !isNew && state.activeSnapshot?.id === state.activeSessionId
                   ? state.activeSnapshot.events

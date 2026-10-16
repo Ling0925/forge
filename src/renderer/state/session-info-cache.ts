@@ -1,11 +1,8 @@
 import type { SessionSnapshot, SessionSummary } from "../shared-types";
-import { sessionUsage } from "./session-usage";
+import { persistentUsageCache } from "./persistent-usage-cache";
 
 export function summarizeSession(snapshot: SessionSnapshot) {
-  const usage = sessionUsage(snapshot.events);
-  const model =
-    snapshot.events.findLast((event) => event.type === "run_started")?.model ??
-    snapshot.model;
+  const { usage, model } = persistentUsageCache.snapshot(snapshot);
   return {
     tokens: usage.total
       ? `${usage.total.totalTokens.toLocaleString()}${usage.partial ? "（部分统计）" : ""}`
@@ -27,6 +24,14 @@ export function createSessionInfoCache(now = Date.now) {
     session: Pick<SessionSummary, "id" | "updatedAt" | "status" | "model">,
     read: () => Promise<SessionSnapshot>,
   ) => {
+    const persisted = persistentUsageCache.get(session);
+    if (persisted)
+      return Promise.resolve({
+        tokens: persisted.usage.total
+          ? `${persisted.usage.total.totalTokens.toLocaleString()}${persisted.usage.partial ? "（部分统计）" : ""}`
+          : "未记录",
+        model: persisted.model,
+      });
     const version = JSON.stringify([
       session.updatedAt,
       session.status,
