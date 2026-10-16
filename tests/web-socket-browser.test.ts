@@ -96,6 +96,15 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await page.addInitScript(() => {
+      const Native = window.WebSocket;
+      window.WebSocket = class extends Native {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          if (String(url).includes("/api/events")) Reflect.set(window, "testEventSocket", this);
+        }
+      };
+    });
     page.setDefaultTimeout(5000);
     const events: RunEvent[] = [];
     const latencies: number[] = [];
@@ -169,6 +178,12 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
       return window.forge.startRun({ sessionId: session.id, prompt: "survive refresh", permission: "readonly" });
     }, directory);
     await expect.poll(() => events.some((event) => event.event.type === "text_delta")).toBe(true);
+    const socketCount = sockets.filter(url => url.includes("/api/events")).length;
+    await page.evaluate(() => Reflect.get(window, "testEventSocket").close());
+    await expect.poll(() => sockets.filter(url => url.includes("/api/events")).length).toBe(socketCount + 1);
+    await expect.poll(() => page.locator("body > [role=status]").innerText()).toContain("WebSocket 实时连接");
+    expect(events.filter(event => event.event.type === "text_delta")).toHaveLength(1);
+    expect(events.some(event => event.event.type === "run_finished")).toBe(false);
     events.length = 0;
     await page.reload();
     await page.waitForFunction(() => Reflect.get(window, "probeReady") === true);

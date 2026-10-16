@@ -39,7 +39,7 @@ export async function installWebHost(): Promise<void> {
     status.textContent = message;
     status.style.background = "#f7d4cf";
   };
-  async function post(path: string, input: unknown): Promise<unknown> {
+  async function post(path: string, input: unknown, timeout = 125_000): Promise<unknown> {
     if (stopped)
       throw new Error("Web connection stopped. Reload to reconnect.");
     const response = await fetch(path, {
@@ -50,10 +50,11 @@ export async function installWebHost(): Promise<void> {
         "X-Forge-Client": clientId,
       },
       body: JSON.stringify(input),
-      signal: AbortSignal.timeout(125_000),
+      signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) {
-      if ([401, 409, 410].includes(response.status))
+      const details = await response.json().catch(() => null);
+      if ([401, 410].includes(response.status) || (response.status === 409 && details?.error?.startsWith("Another page")))
         fail(
           "Web 连接失效或已被另一页面接管；任务继续在后台运行，请刷新重新连接。",
         );
@@ -75,42 +76,63 @@ export async function installWebHost(): Promise<void> {
       },
     });
     for (const event of handshake.recovery) receive(event);
-    const url = new URL("/api/events", location.href);
-    url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    url.searchParams.set("clientId", clientId);
-    url.searchParams.set("cursor", String(cursor));
-    const socket = new WebSocket(url);
-    eventSocket = socket;
+    const connectedStatus = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 断线自动重连 · 后端修改需重启`;
     await new Promise<void>((ready, reject) => {
-      let connected = false;
-      const timeout = setTimeout(() => disconnect(), 10_000);
-      const disconnect = () => {
-        clearTimeout(timeout);
-        fail(
-          "WebSocket 连接已断开，任务继续在后台运行；请刷新恢复进度。请求不会自动重放。",
-        );
-        if (!connected) reject(new Error("WebSocket connection failed"));
+      let failures = 0;
+      const retry = () => {
+        if (stopped) { reject(new Error("Web connection stopped")); return; }
+        status.textContent = "连接中断，正在自动重连…任务继续在后台运行。";
+        status.style.background = "#eee9d7";
+        setTimeout(() => void connect(true), Math.min(10_000, 500 * 2 ** Math.min(failures++, 5)));
       };
-      socket.onclose = disconnect;
-      socket.onerror = disconnect;
-      socket.onmessage = (message) => {
+      const connect = async (resume: boolean) => {
         if (stopped) return;
         try {
-          const batch = batchSchema.parse(JSON.parse(message.data));
-          if (batch.cursor !== cursor + batch.events.length)
-            throw new Error("Event sequence gap");
-          for (const event of batch.events) receive(event);
-          cursor = batch.cursor;
-          socket.send(JSON.stringify({ cursor }));
-          if (!connected) {
-            connected = true;
-            clearTimeout(timeout);
-            ready();
+          if (resume) {
+            const state = z.object({ resumable: z.boolean() }).parse(await post("/api/connection", { cursor }, 10_000));
+            if (!state.resumable) { location.reload(); return; }
           }
-        } catch {
-          disconnect();
-        }
+          if (stopped) return;
+          const url = new URL("/api/events", location.href);
+          url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+          url.searchParams.set("clientId", clientId);
+          url.searchParams.set("cursor", String(cursor));
+          const socket = new WebSocket(url);
+          eventSocket = socket;
+          let disconnected = false;
+          const timeout = setTimeout(() => disconnect(), 10_000);
+          const disconnect = (code?: number) => {
+            if (disconnected) return;
+            disconnected = true;
+            clearTimeout(timeout);
+            socket.close();
+            if (code === 4001 || code === 1008) {
+              fail(code === 4001 ? "此页面已被另一窗口接管，任务继续运行。" : "事件协议异常，请重新连接。");
+              reject(new Error("WebSocket control ended"));
+              return;
+            }
+            retry();
+          };
+          socket.onclose = event => disconnect(event.code);
+          socket.onerror = () => disconnect();
+          socket.onmessage = message => {
+            if (stopped || disconnected) return;
+            try {
+              const batch = batchSchema.parse(JSON.parse(message.data));
+              if (batch.cursor !== cursor + batch.events.length) throw new Error("Event sequence gap");
+              for (const event of batch.events) receive(event);
+              cursor = batch.cursor;
+              socket.send(JSON.stringify({ cursor }));
+              clearTimeout(timeout);
+              failures = 0;
+              status.textContent = connectedStatus;
+              status.style.background = "#eee9d7";
+              ready();
+            } catch { disconnect(); }
+          };
+        } catch { retry(); }
       };
+      void connect(false);
     });
     Object.defineProperty(window, "forge", {
       value: Object.freeze({
@@ -128,7 +150,6 @@ export async function installWebHost(): Promise<void> {
         },
       }),
     });
-    status.textContent = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 刷新或断线后任务继续运行 · 后端修改需重启`;
   } catch (error) {
     fail("Web 初始化失败，请刷新页面重新登录。");
     throw error;
