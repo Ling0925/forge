@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { createTransportBridge } from "../shared/bridge";
-import { externalUrlSchema, runEventSchema } from "../shared/ipc";
+import { externalUrlSchema, runEventSchema, rpcResponseSchema } from "../shared/ipc";
+import type { SessionSnapshot } from "../shared/schemas";
+import { applySessionDelta, sessionDeltaSchema } from "../shared/session-delta";
 
 const handshakeSchema = z.object({
   workspace: z.string(),
@@ -32,6 +34,7 @@ export async function installWebHost(): Promise<void> {
   let stopped = false;
   let clientId = "";
   let eventSocket: WebSocket | undefined;
+  const snapshots = new Map<string, { readonly revision: string; readonly snapshot: SessionSnapshot; readonly size: number }>();
   const fail = (message: string) => {
     if (stopped) return;
     stopped = true;
@@ -39,15 +42,17 @@ export async function installWebHost(): Promise<void> {
     status.textContent = message;
     status.style.background = "#f7d4cf";
   };
-  async function post(path: string, input: unknown, timeout = 125_000): Promise<unknown> {
+  async function post(path: string, input: unknown, timeout = 125_000, sessionId?: string): Promise<unknown> {
     if (stopped)
       throw new Error("Web connection stopped. Reload to reconnect.");
+    const cached = sessionId ? snapshots.get(sessionId) : undefined;
     const response = await fetch(path, {
       method: "POST",
       credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
         "X-Forge-Client": clientId,
+        ...(cached ? { "X-Forge-Snapshot": cached.revision } : {}),
       },
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(timeout),
@@ -62,7 +67,29 @@ export async function installWebHost(): Promise<void> {
         `Web request failed (${response.status}); inspect state before retrying.`,
       );
     }
-    return response.json();
+    let value: unknown = await response.json();
+    if (sessionId) {
+      const delta = z.object({ id: z.string(), ok: z.literal(true), method: z.literal("getSession"),
+        result: z.object({ sessionDelta: sessionDeltaSchema }) }).safeParse(value);
+      if (delta.success) {
+        if (!cached) throw new Error("Missing session cache base");
+        value = { ...delta.data, result: applySessionDelta(cached.snapshot, cached.revision, delta.data.result.sessionDelta) };
+      }
+      const result = rpcResponseSchema.parse(value);
+      const revision = response.headers.get("X-Forge-Snapshot");
+      if (result.ok && result.method === "getSession" && revision) {
+        snapshots.delete(sessionId);
+        snapshots.set(sessionId, { revision, snapshot: result.result, size: JSON.stringify(result.result).length });
+        let size = 0;
+        let count = 0;
+        for (const [id, entry] of [...snapshots].reverse()) {
+          count++;
+          size += entry.size;
+          if (size > 32 * 1024 * 1024 || count > 8) snapshots.delete(id);
+        }
+      }
+    }
+    return value;
   }
   try {
     const handshake = handshakeSchema.parse(await post("/api/connect", {}));
@@ -70,7 +97,7 @@ export async function installWebHost(): Promise<void> {
     let cursor = handshake.cursor;
     let receive: (raw: unknown) => void = () => {};
     const bridge = createTransportBridge({
-      request: (input) => post("/api/rpc", input),
+      request: (input) => post("/api/rpc", input, 125_000, input.method === "getSession" ? input.sessionId : undefined),
       onEvent: (listener) => {
         receive = listener;
       },

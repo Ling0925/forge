@@ -202,6 +202,34 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
     await page.getByRole("button", { name: "取消", exact: true }).waitFor({ state: "hidden" });
     await page.locator("p").filter({ hasText: /^fixture finished$/ }).waitFor();
     const snapshot = await page.evaluate((sessionId) => window.forge.getSession(sessionId), running.sessionId);
+    const deltaResponse = page.waitForResponse(async response => {
+      if (!response.url().endsWith("/api/rpc")) return false;
+      const value = await response.json();
+      return value.method === "getSession" && Boolean(value.result?.sessionDelta);
+    });
+    const cachedSnapshot = await page.evaluate((sessionId) => window.forge.getSession(sessionId), running.sessionId);
+    const delta = await (await deltaResponse).json();
+    expect(delta.result.sessionDelta.snapshot.messages).toEqual([]);
+    expect(cachedSnapshot.messages).toEqual(snapshot.messages);
+    const sessionButtons = page.locator(".session-item-main");
+    await sessionButtons.nth(1).click();
+    await page.locator("p").filter({ hasText: /^fixture$/ }).waitFor();
+    let resumeRead = () => {};
+    const pausedRead = new Promise<void>(resolve => { resumeRead = resolve; });
+    await page.route("**/api/rpc", async route => {
+      const input = route.request().postDataJSON();
+      if (input.method === "getSession" && input.sessionId === running.sessionId) await pausedRead;
+      await route.continue();
+    });
+    try {
+      await sessionButtons.nth(0).click();
+      await page.locator("p").filter({ hasText: /^survive refresh$/ }).waitFor();
+      expect(await page.getByText("正在读取会话…", { exact: true }).count()).toBe(0);
+      expect(await page.locator("p").filter({ hasText: /^fixture finished$/ }).count()).toBe(1);
+    } finally {
+      resumeRead();
+      await page.unrouteAll({ behavior: "wait" });
+    }
     expect(snapshot.messages.some((message) => message.content === "fixture finished")).toBe(true);
     expect(errors).toEqual([]);
   } finally {

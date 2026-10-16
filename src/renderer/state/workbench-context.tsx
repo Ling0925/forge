@@ -51,30 +51,42 @@ function useController() {
     [dispatch],
   );
   const reads = useRef(new Map<string, number>());
+  const pendingReads = useRef(new Map<string, Promise<void>>());
   const refreshSession = useCallback(
-    async (id: SessionId) => {
+    async (id: SessionId, invalidate = true) => {
+      const pending = pendingReads.current.get(id);
+      if (pending && !invalidate) return pending;
       const version = (reads.current.get(id) ?? 0) + 1;
       reads.current.set(id, version);
-      try {
-        const snapshot = await window.forge.getSession(id);
-        if (reads.current.get(id) === version)
-          dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
-      } catch (err) {
-        if (
-          reads.current.get(id) === version &&
-          current.current.activeSessionId === id
-        ) {
-          dispatch({ type: "SET_SNAPSHOT_LOADING", isLoading: false });
-          fail(err);
-        }
-      }
+      if (pending) return pending;
+      const read = async () => {
+        let observed: number | undefined;
+        do {
+          observed = reads.current.get(id);
+          try {
+            const snapshot = await window.forge.getSession(id);
+            dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
+          } catch (err) {
+            if (current.current.activeSessionId === id) {
+              dispatch({ type: "SET_SNAPSHOT_LOADING", isLoading: false });
+              fail(err);
+            }
+            break;
+          }
+        } while (alive.current && reads.current.get(id) !== observed);
+      };
+      const task = read().finally(() => {
+        pendingReads.current.delete(id);
+      });
+      pendingReads.current.set(id, task);
+      return task;
     },
     [dispatch, fail],
   );
   const selectSession = useCallback(
     async (sessionId: SessionId) => {
       dispatch({ type: "SELECT_SESSION", sessionId });
-      await refreshSession(sessionId);
+      await refreshSession(sessionId, false);
     },
     [dispatch, refreshSession],
   );
@@ -122,11 +134,6 @@ function useController() {
           void loadSessions();
           void refreshSession(event.event.childSessionId);
         } else void loadSessions();
-        if (
-          current.current.activeSessionId &&
-          current.current.activeSessionId !== event.event.sessionId
-        )
-          void refreshSession(current.current.activeSessionId);
       }
       if (event.event.type === "run_finished") {
         starting.current.delete(event.event.sessionId);

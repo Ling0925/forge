@@ -66,7 +66,8 @@ export function mergeTranscript(
     ...incoming,
     messages:
       (persistedAt !== null && incoming.updatedAt < persistedAt) ||
-      current.messages.length > incoming.messages.length
+      (current.messages.length > incoming.messages.length &&
+        (persistedAt === null || incoming.updatedAt <= persistedAt))
         ? current.messages
         : incoming.messages,
     events: missing.length

@@ -23,6 +23,30 @@ const snapshot: SessionSnapshot = {
   changes: [],
 };
 describe("workbench authority", () => {
+  it("restores cached history immediately when switching back and accepts background updates", () => {
+    let state = workbenchReducer(initialWorkbenchState, { type: "SELECT_SESSION", sessionId: sessionA });
+    state = workbenchReducer(state, { type: "SET_ACTIVE_SNAPSHOT", snapshot });
+    state = workbenchReducer(state, { type: "SELECT_SESSION", sessionId: sessionB });
+    const updated: SessionSnapshot = { ...snapshot, messages: [{ role: "assistant", content: "new output" }] };
+    state = workbenchReducer(state, { type: "SET_ACTIVE_SNAPSHOT", snapshot: updated });
+    expect(state.activeSessionId).toBe(sessionB);
+    expect(state.activeSnapshot).toBeNull();
+    state = workbenchReducer(state, { type: "SELECT_SESSION", sessionId: sessionA });
+    expect(state.isSnapshotLoading).toBe(false);
+    expect(state.activeSnapshot?.messages).toEqual(updated.messages);
+  });
+  it("replaces cached messages when a newer persisted revision shortens history", () => {
+    let state = workbenchReducer(initialWorkbenchState, { type: "SELECT_SESSION", sessionId: sessionA });
+    state = workbenchReducer(state, { type: "SET_ACTIVE_SNAPSHOT", snapshot: {
+      ...snapshot, messages: [{ role: "user", content: "old history" }],
+    } });
+    state = workbenchReducer(state, { type: "SELECT_SESSION", sessionId: sessionB });
+    state = workbenchReducer(state, { type: "SET_ACTIVE_SNAPSHOT", snapshot: {
+      ...snapshot, updatedAt: "2026-01-01T00:00:02.000Z", messages: [],
+    } });
+    state = workbenchReducer(state, { type: "SELECT_SESSION", sessionId: sessionA });
+    expect(state.activeSnapshot?.messages).toEqual([]);
+  });
   it("updates live permission and clears only root pending approvals", () => {
     const root = { id: "root", sessionId: sessionA, toolCallId: "tool", toolName: "run_command", description: "test" };
     const child = { ...root, id: "child", childSessionId: sessionB };
@@ -140,7 +164,7 @@ describe("workbench authority", () => {
       type: "SELECT_SESSION",
       sessionId: snapshot.id,
     });
-    expect(reselected.isSnapshotLoading).toBe(true);
+    expect(reselected.isSnapshotLoading).toBe(false);
     const settled = workbenchReducer(reselected, {
       type: "SET_ACTIVE_SNAPSHOT",
       snapshot: { ...snapshot, status: "idle" },

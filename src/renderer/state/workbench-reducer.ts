@@ -51,6 +51,7 @@ export interface WorkbenchState {
   readonly isSessionsLoading: boolean;
   readonly activeSessionId: SessionId | null;
   readonly activeSnapshot: SessionSnapshot | null;
+  readonly snapshotCache: Readonly<Record<string, { readonly snapshot: SessionSnapshot; readonly persistedAt: string | null }>>;
   readonly snapshotPersistedAt: string | null;
   readonly isSnapshotLoading: boolean;
   readonly activeRuns: Readonly<Record<string, ActiveRunState>>;
@@ -105,6 +106,7 @@ export const initialWorkbenchState: WorkbenchState = {
   isSessionsLoading: false,
   activeSessionId: null,
   activeSnapshot: null,
+  snapshotCache: {},
   snapshotPersistedAt: null,
   isSnapshotLoading: false,
   activeRuns: {},
@@ -195,23 +197,26 @@ export function workbenchReducer(
       };
     case "SET_SESSIONS_LOADING":
       return { ...state, isSessionsLoading: action.isLoading };
-    case "SELECT_SESSION":
+    case "SELECT_SESSION": {
+      const cache = { ...state.snapshotCache };
+      if (state.activeSnapshot) {
+        delete cache[state.activeSnapshot.id];
+        cache[state.activeSnapshot.id] = { snapshot: state.activeSnapshot, persistedAt: state.snapshotPersistedAt };
+      }
+      const selected = cache[action.sessionId];
+      for (const id of Object.keys(cache).slice(0, -8)) delete cache[id];
       return {
         ...state,
+        snapshotCache: cache,
         activeSessionId: action.sessionId,
-        snapshotPersistedAt:
-          state.activeSessionId === action.sessionId
-            ? state.snapshotPersistedAt
-            : null,
-        activeSnapshot:
-          state.activeSnapshot?.id === action.sessionId
-            ? state.activeSnapshot
-            : null,
-        isSnapshotLoading: true,
+        snapshotPersistedAt: selected?.persistedAt ?? null,
+        activeSnapshot: selected?.snapshot ?? null,
+        isSnapshotLoading: !selected,
         isNewSessionOpen: false,
         mobileTab: "task",
         isMobileSidebarOpen: false,
       };
+    }
     case "SET_ACTIVE_SNAPSHOT": {
       const snap = action.snapshot;
       if (!snap)
@@ -225,9 +230,9 @@ export function workbenchReducer(
       // Read completion is independent of transcript freshness. Terminal local
       // events may never reach disk (for example, a pre-acceptance busy failure).
       const merged = mergeTranscript(
-        state.activeSnapshot,
+        state.activeSnapshot?.id === snap.id ? state.activeSnapshot : state.snapshotCache?.[snap.id]?.snapshot ?? null,
         snap,
-        state.snapshotPersistedAt,
+        state.activeSnapshot?.id === snap.id ? state.snapshotPersistedAt : state.snapshotCache?.[snap.id]?.persistedAt ?? null,
       );
       const selectedSnapshot =
         run && active(run.status) ? { ...merged, status: run.status } : merged;
@@ -245,7 +250,12 @@ export function workbenchReducer(
           delete runs[snap.id];
         else runs[snap.id] = { ...run, pendingOutputs, pendingReasoning };
       }
-      const next = { ...state, activeRuns: runs };
+      const cache = { ...state.snapshotCache };
+      const persistedAt = cache[snap.id]?.persistedAt;
+      delete cache[snap.id];
+      cache[snap.id] = { snapshot: selectedSnapshot, persistedAt: persistedAt && persistedAt > snap.updatedAt ? persistedAt : snap.updatedAt };
+      for (const id of Object.keys(cache).slice(0, -8)) delete cache[id];
+      const next = { ...state, activeRuns: runs, snapshotCache: cache };
       return {
         ...next,
         snapshotPersistedAt:
