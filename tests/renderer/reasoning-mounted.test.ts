@@ -3,9 +3,10 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-// The web/desktop renderer previously captured streamingReasoning but rendered
-// nothing, so live thoughts were invisible while the model was thinking.
-it("renders live reasoning and collapses it once the answer begins", async () => {
+// The renderer captures streamingReasoning but historically rendered nothing.
+// It now shows a bespoke, non-native reasoning block: a small auto-scrolling
+// viewport while thinking, then a single last-line summary once done.
+it("streams reasoning in a scrolling viewport then keeps only the last line", async () => {
   const bundle = await build({
     stdin: {
       resolveDir: resolve("."),
@@ -27,9 +28,8 @@ it("renders live reasoning and collapses it once the answer begins", async () =>
       const event=data=>dispatch({type:'RUN_EVENT_RECEIVED',event:{runId,event:{sessionId:id,timestamp:'2026-01-01T00:00:03.000Z',...data}}});
       window.testController={state,answerApproval:()=>{},openNewSession:()=>{}};
       window.step=action=>{
-        if(action==='reasoning') event({type:'reasoning_delta',text:'Inspecting the harness'});
+        if(action==='reasoning') event({type:'reasoning_delta',text:'line 1\\nline 2\\nline 3\\nline 4\\nline 5\\nline 6\\nfinal thought'});
         if(action==='answer') event({type:'text_delta',text:'Answer'});
-        if(action==='tool') event({type:'tool_started',call:{id:'tool',type:'function',function:{name:'read_file',arguments:'{}'}}});
         if(action==='saved') dispatch({type:'SET_ACTIVE_SNAPSHOT',snapshot:saved});
       };
       return <div className="wb-app"><main className="workbench-main"><Transcript/></main></div>;
@@ -81,28 +81,40 @@ it("renders live reasoning and collapses it once the answer begins", async () =>
       );
     };
 
-    // Live reasoning is visible and expanded while the model is thinking.
+    // While thinking: a scrolling viewport, never a native <details>.
     await step("reasoning");
-    const live = page.locator("details.transcript-reasoning");
+    const live = page.locator(".reasoning-live");
     await expect.poll(() => live.count()).toBe(1);
-    expect(await live.getAttribute("open")).not.toBeNull();
-    expect(await live.innerText()).toContain("Inspecting the harness");
-    expect(await live.innerText()).toContain("思考中…");
+    expect(await page.locator("details.transcript-reasoning").count()).toBe(0);
+    expect(await live.innerText()).toContain("思考中");
+    const viewport = page.locator(".reasoning-viewport");
+    await expect.poll(() => viewport.count()).toBe(1);
+    // Newest line stays in view: the viewport is scrolled to the bottom.
+    const scrolled = await viewport.evaluate(
+      (node) => node.scrollHeight > node.clientHeight && node.scrollTop > 0,
+    );
+    expect(scrolled).toBe(true);
 
-    // Once the answer streams in, the same block collapses to 思考过程.
+    // Done: the live viewport is gone; one collapsed last-line summary remains.
     await step("answer");
-    await expect.poll(() => live.count()).toBe(1);
-    expect(await live.getAttribute("open")).toBeNull();
-    expect(await live.innerText()).toContain("思考过程");
+    await expect.poll(() => page.locator(".reasoning-live").count()).toBe(0);
+    const done = page.locator(".reasoning-done");
+    await expect.poll(() => done.count()).toBe(1);
+    expect(await done.locator(".reasoning-summary").innerText()).toBe(
+      "final thought",
+    );
+    expect(await page.locator(".reasoning-full").count()).toBe(0);
+    await done.locator(".reasoning-head").click();
+    await expect.poll(() => page.locator(".reasoning-full").count()).toBe(1);
+    expect(await page.locator(".reasoning-full").innerText()).toContain("line 1");
 
-    // Persisted reasoning renders as its own collapsed disclosure.
+    // Persisted reasoning renders as its own collapsed last-line summary.
     await step("saved");
-    await expect.poll(() => page.locator("details.transcript-reasoning").count()).toBe(2);
-    const saved = page
-      .locator("details.transcript-reasoning")
+    await expect.poll(() => page.locator(".reasoning-done").count()).toBe(2);
+    const persisted = page
+      .locator(".reasoning-done")
       .filter({ hasText: "I inspected the persisted file" });
-    await expect.poll(() => saved.count()).toBe(1);
-    expect(await saved.getAttribute("open")).toBeNull();
+    await expect.poll(() => persisted.count()).toBe(1);
 
     expect(errors).toEqual([]);
     await page.close();

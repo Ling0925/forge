@@ -16,20 +16,108 @@
 .transcript-stage-title {
   overflow-wrap: anywhere;
 }
-.transcript-reasoning {
+
+/* Reasoning: bespoke workbench component, never a native disclosure. */
+.reasoning {
   margin-bottom: var(--space-2);
-  color: var(--text-secondary);
   font-size: var(--text-xs);
+  color: var(--text-secondary);
 }
-.transcript-reasoning > summary {
-  padding-block: var(--space-1);
-  cursor: pointer;
+.reasoning-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
-.transcript-reasoning > summary:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+.reasoning-glyph {
+  flex-shrink: 0;
 }
-.transcript-reasoning-body {
-  padding-top: var(--space-2);
+.reasoning-live .reasoning-glyph {
+  color: var(--accent);
+}
+.reasoning-done .reasoning-glyph {
+  color: var(--text-muted);
+}
+.reasoning-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* Live: a small auto-scrolling viewport that shows the newest lines only. */
+.reasoning-viewport {
+  margin-top: var(--space-1);
+  padding-inline: var(--space-2);
+  max-height: calc(var(--leading-xs) * 5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--text-muted);
+}
+.reasoning-text {
+  display: block;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Done: one quiet, clickable summary line plus an on-demand full disclosure. */
+.reasoning-done .reasoning-head {
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+.reasoning-done .reasoning-head:hover {
+  background-color: var(--surface-soft);
+}
+.reasoning-done .reasoning-head:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.reasoning-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.reasoning-caret {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+.reasoning-caret.is-expanded {
+  transform: rotate(90deg);
+}
+.reasoning-full {
+  padding: var(--space-2) var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+
+/* The pulsing glyph signals activity without animating the whole block. */
+@keyframes reasoning-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.reasoning-live .reasoning-glyph {
+  animation: reasoning-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-live .reasoning-glyph {
+    animation: none;
+    opacity: 1;
+  }
 }

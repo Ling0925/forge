@@ -247,17 +247,18 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
    - 持久化思考只来自助手消息的可选 `reasoning` 字段（`schemas.ts` 上限 131072，展示专用）：不进入正文字段、不发送给模型、不进入事件日志、不是 `providerState`。
    - 思考文本是不可信纯文本；渲染必须经 `Markdown`/`StreamingMarkdown` 的安全路径（`skipHtml`、图片只显示替代文字、链接走已校验的 host bridge），不得直接注入 HTML。
 
-2. **实时（live）思考**：运行中应在对话流末尾、助手正文之前，以可展开的单块形式流式显示当前轮的 `streamingReasoning`（`live` 态，标题“思考中…”），随增量原地增长；正文、工具调用、错误或运行结束时结束该块。实时块只显示文本本身，不伪造阶段、不伪造进度。
+2. **实时（live）思考**：思考中在对话流末尾、助手正文之前显示一个**自定义**（非原生 `<details>`）组件：标题行“思考中”（`Brain` 图标，带 `reasoning-pulse` 脉冲，尊重 `prefers-reduced-motion`），下方是一个固定高度（5 行）的**自动滚动视口**，只保留最新的若干行并随增量滚动到底，避免反复刷屏。到达答案正文（`streamingText` 非空）或运行结束时该块结束。实时块只显示文本本身，不伪造阶段、不伪造进度。
 
-3. **持久（历史/已保存）思考**：`reasoning` 经 `Reasoning` 组件渲染为原生 `<details className="transcript-reasoning">`，**默认折叠**，摘要为“思考过程”；`live` 为 true 时才默认展开，并在 `live` 转 false 时收起。截断时在正文顶部给出明确的“已达显示上限”提示，不静默丢失。
+3. **持久（历史/已保存）思考**：结束后**只显示最后一行思考内容**作为静默摘要（单行、省略号截断），保证历史记录紧凑、不反复刷屏；点击标题行可展开查看完整思考（`Markdown` 安全渲染），再次点击收起，并带 `CaretRight` 旋转指示。截断时在展开正文顶部给出明确的“已达显示上限”提示，不静默丢失。
 
 4. **同步与去重**：思考的实时块与已保存消息由 `transcript-sync.ts` 的 `reasoningSaved` 独立判定；已保存消息acknowledge 同一段思考后必须移除对应的 `pendingReasoning`，避免重复显示。思考同步**不**触发整份 transcript 重取（`refresh-events.ts` 中 `reasoning_delta` 不参与 `shouldRefreshTranscript`）。
 
-5. **无障碍与动态**：展开/折叠为键盘可达的原生 disclosure，带 `focus-visible` 焦点环；不使用颜色作为唯一状态表达；尊重 `prefers-reduced-motion`。
+5. **无障碍与动态**：摘要行为为原生 `<button>`（键盘可达、`aria-expanded`、`focus-visible` 焦点环、`aria-label` 保留完整摘要文本），不使用颜色作为唯一状态表达；实时视口脉冲与展开指示在 `prefers-reduced-motion: reduce` 下停止动画。
 
 6. **实现状态**：
-   - 实时思考已在共享 renderer 渲染：`Transcript` 在助手正文之前渲染 `run.pendingReasoning`（已保存但未同步）与 `run.streamingReasoning`（live）；答案开始后（`streamingText` 非空）同一块自动从“思考中…”折叠为“思考过程”，思考增量也参与自动跟随滚动。CLI 仍为单行 `✻` 预览。
-   - 已保存思考（助手消息 `reasoning`）经 `Reasoning` 以原生 `<details>` 渲染，默认折叠、摘要“思考过程”，与本契约第 3 条一致；截断时顶部提示“已达显示上限”。
-   - 覆盖：`tests/renderer/reasoning-mounted.test.ts` 断言实时块可见且展开、答案开始后折叠、持久思考为独立折叠块。
+   - `Reasoning` 已改为自定义组件：思考中渲染 `.reasoning-live`（`Brain` + “思考中” + `.reasoning-viewport` 自动滚动，`REASONING_LIVE_LINES = 5`，DOM 仅保留尾部 `LIVE_TAIL_LINES = 60` 行）；结束后渲染 `.reasoning-done`（`lastReasoningLine` 取最后非空行作摘要，点击展开 `.reasoning-full`）。
+   - `Transcript` 在助手正文之前渲染 `run.pendingReasoning`（已保存但未同步）与 `run.streamingReasoning`（live）；答案开始后同一块由 live 切换为 done；思考增量参与自动跟随滚动。
+   - 覆盖：`tests/renderer/reasoning-mounted.test.ts` 断言实时视口存在且滚动到底、无原生 `<details>`、结束后只留最后一行摘要、点击可展开、持久思考为独立摘要。
    - 仍未覆盖：真实 provider 端到端推理流、窄屏/高对比/读屏矩阵、超长（>131072）思考的真实截断表现。
+
 
