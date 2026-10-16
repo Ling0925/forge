@@ -236,3 +236,25 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
    - 完整保留 390px 视口下输入区模型弹窗的 fixed 定位与视口内部滚动约束，防止弹窗溢出或挤压界面。
    - 保持所有 `:disabled` 状态可读性（对比度 ≥ 4.5:1）、`[hidden]` 原生隐藏守卫、动态减弱媒体查询与 2px 键盘焦点环。
 
+## 9 思考内容显示契约 (Reasoning Display, Web + Desktop)
+
+共享 renderer（`src/renderer/**`）同时服务 Electron 桌面与 Web dev；CLI 走 `src/cli/render/reasoning.ts` 的单行 `✻` 预览，二者语义一致但呈现不同。以下为共享 renderer 的目标契约，标记的是设计意图，**不是**已通过验收的声明。
+
+1. **数据来源与信任边界**：
+   - 实时思考只来自 provider 下发的 `reasoning_delta` 事件（Chat Completions `reasoning_content` / Responses `reasoning_summary_text.delta`），由 `workbench-reducer.ts` 累积到 `ActiveRunState.streamingReasoning`（上限 `STREAMING_REASONING_LIMIT = 131072`，与 `docs/WEB_DEV.md` 的刷新恢复上限一致）。
+   - 持久化思考只来自助手消息的可选 `reasoning` 字段（`schemas.ts` 上限 131072，展示专用）：不进入正文字段、不发送给模型、不进入事件日志、不是 `providerState`。
+   - 思考文本是不可信纯文本；渲染必须经 `Markdown`/`StreamingMarkdown` 的安全路径（`skipHtml`、图片只显示替代文字、链接走已校验的 host bridge），不得直接注入 HTML。
+
+2. **实时（live）思考**：运行中应在对话流末尾、助手正文之前，以可展开的单块形式流式显示当前轮的 `streamingReasoning`（`live` 态，标题“思考中…”），随增量原地增长；正文、工具调用、错误或运行结束时结束该块。实时块只显示文本本身，不伪造阶段、不伪造进度。
+
+3. **持久（历史/已保存）思考**：`reasoning` 经 `Reasoning` 组件渲染为原生 `<details className="transcript-reasoning">`，**默认折叠**，摘要为“思考过程”；`live` 为 true 时才默认展开，并在 `live` 转 false 时收起。截断时在正文顶部给出明确的“已达显示上限”提示，不静默丢失。
+
+4. **同步与去重**：思考的实时块与已保存消息由 `transcript-sync.ts` 的 `reasoningSaved` 独立判定；已保存消息acknowledge 同一段思考后必须移除对应的 `pendingReasoning`，避免重复显示。思考同步**不**触发整份 transcript 重取（`refresh-events.ts` 中 `reasoning_delta` 不参与 `shouldRefreshTranscript`）。
+
+5. **无障碍与动态**：展开/折叠为键盘可达的原生 disclosure，带 `focus-visible` 焦点环；不使用颜色作为唯一状态表达；尊重 `prefers-reduced-motion`。
+
+6. **当前实现差距（待修，不视为已满足契约）**：
+   - 共享 renderer 的实时区域目前只渲染 `pendingOutputs` 与 `streamingText`，**未渲染** `streamingReasoning` / `pendingReasoning`，因此 Web/桌面在流式思考期间看不到任何实时思考文本（CLI 有单行预览）。
+   - 已保存思考的 `Reasoning` 始终以 `live = false` 调用，`<details>` 默认折叠，且缺少“展开中”的实时态；用户需手动展开才能看到历史思考。
+   - 相关单元测试未覆盖 renderer 的实时/持久思考渲染；`tests/renderer/refresh-events.test.ts` 只断言 `reasoning_delta` 不触发重取。
+
