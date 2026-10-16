@@ -189,6 +189,50 @@
   max-width: 100%;
 }
 
+/* Collapsed diffs show a leading preview; expanding reveals the rest under a
+   bounded, scrollable region so a huge file never pushes the row off-screen. */
+.diff-scroll.is-expanded {
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+.diff-more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background-color: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color
+    var(--transition-fast);
+}
+
+.diff-more:hover {
+  background-color: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.diff-more:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.diff-more-caret {
+  flex-shrink: 0;
+  transition: transform var(--transition-fast);
+}
+
+.diff-more-caret.is-expanded {
+  transform: rotate(90deg);
+}
+
 .diff-line {
   display: flex;
   align-items: flex-start;

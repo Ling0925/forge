@@ -291,10 +291,14 @@ export function ToolDisclosure({
   autoCollapsed = false,
   className = "",
 }: ToolDisclosureProps) {
-  // File-writing tools open by default so their diff is visible without a click;
-  // the user can still collapse them, and history phases fold as usual.
+  // Command rows and file edits open by default: a command reads as one
+  // command+result unit, and a file edit shows its diff preview without a
+  // click. The diff itself only previews its leading lines until expanded.
   const writesFiles = toolName === "edit_file" || toolName === "write_file";
-  const [expanded, setExpanded] = useState(defaultExpanded || writesFiles);
+  const isCommand = toolName === "run_command";
+  const [expanded, setExpanded] = useState(
+    defaultExpanded || writesFiles || isCommand,
+  );
   const detailsId = useId();
   const label = friendlyLabel(toolName);
 
@@ -360,66 +364,108 @@ export function ToolDisclosure({
 
       {expanded && (
         <div id={detailsId} className="tool-disclosure-body">
-          {command && (
-            <div className="tool-section">
-              <span className="tool-section-title">命令</span>
-              <pre className="tool-section-content tool-command">{command}</pre>
-              {cwd && <span className="tool-command-cwd">工作目录 {cwd}</span>}
-            </div>
-          )}
-          {changes && changes.length > 0 && (
-            <div className="tool-section">
-              <span className="tool-section-title">
-                文件改动{" "}
-                <span className="tool-diff-count">（{changes.length}）</span>
-              </span>
-              <div className="tool-diffs">
-                {changes.map((change, i) => (
-                  <DiffViewer
-                    change={change}
-                    isSuggested={false}
-                    key={`${change.path}-${i}`}
-                  />
-                ))}
+          {/* A command card stays minimal: the executed command and its raw
+              result only. Parsed argument/result rows would just duplicate the
+              command line and clutter the evidence. */}
+          {isCommand ? (
+            <>
+              {command && (
+                <div className="tool-section">
+                  <span className="tool-section-title">命令</span>
+                  <pre className="tool-section-content tool-command">
+                    {command}
+                  </pre>
+                  {cwd && (
+                    <span className="tool-command-cwd">工作目录 {cwd}</span>
+                  )}
+                </div>
+              )}
+              <div className="tool-section">
+                <span className="tool-section-title">
+                  结果{" "}
+                  {truncated && (
+                    <span className="tool-truncated">（已截断）</span>
+                  )}
+                </span>
+                {output === null || output === undefined || output === "" ? (
+                  <span className="tool-section-empty">工具未返回文本</span>
+                ) : (
+                  <pre className="tool-section-content">{output}</pre>
+                )}
               </div>
-            </div>
-          )}
-          <div className="tool-section">
-            <span className="tool-section-title">参数输入</span>
-            <ParameterFields parameters={parsedParams} />
-          </div>
+            </>
+          ) : (
+            <>
+              {command && (
+                <div className="tool-section">
+                  <span className="tool-section-title">命令</span>
+                  <pre className="tool-section-content tool-command">
+                    {command}
+                  </pre>
+                  {cwd && (
+                    <span className="tool-command-cwd">工作目录 {cwd}</span>
+                  )}
+                </div>
+              )}
+              {changes && changes.length > 0 && (
+                <div className="tool-section">
+                  <span className="tool-section-title">
+                    文件改动{" "}
+                    <span className="tool-diff-count">
+                      （{changes.length}）
+                    </span>
+                  </span>
+                  <div className="tool-diffs">
+                    {changes.map((change, i) => (
+                      <DiffViewer
+                        change={change}
+                        isSuggested={false}
+                        key={`${change.path}-${i}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="tool-section">
+                <span className="tool-section-title">参数输入</span>
+                <ParameterFields parameters={parsedParams} />
+              </div>
 
-          {exitCode !== undefined && exitCode !== null && (
-            <div className="tool-section">
-              <span className="tool-section-title">退出码</span>
-              <span
-                className={`tool-exit tool-exit-${exitCode === 0 ? "ok" : "bad"}`}
-              >
-                {exitCode}
-              </span>
-            </div>
-          )}
+              {exitCode !== undefined && exitCode !== null && (
+                <div className="tool-section">
+                  <span className="tool-section-title">退出码</span>
+                  <span
+                    className={`tool-exit tool-exit-${exitCode === 0 ? "ok" : "bad"}`}
+                  >
+                    {exitCode}
+                  </span>
+                </div>
+              )}
 
-          {error && (
-            <div className="tool-section">
-              <span className="tool-section-title">执行错误</span>
-              <pre className="tool-section-content tool-section-error">
-                {error}
-              </pre>
-            </div>
-          )}
+              {error && (
+                <div className="tool-section">
+                  <span className="tool-section-title">执行错误</span>
+                  <pre className="tool-section-content tool-section-error">
+                    {error}
+                  </pre>
+                </div>
+              )}
 
-          <div className="tool-section">
-            <span className="tool-section-title">
-              输出结果{" "}
-              {truncated && <span className="tool-truncated">（已截断）</span>}
-            </span>
-            {output === null || output === undefined || output === "" ? (
-              <span className="tool-section-empty">工具未返回文本</span>
-            ) : (
-              <ResultFields output={output} />
-            )}
-          </div>
+              <div className="tool-section">
+                <span className="tool-section-title">
+                  输出结果{" "}
+                  {truncated && (
+                    <span className="tool-truncated">（已截断）</span>
+                  )}
+                </span>
+                {output === null || output === undefined || output === "" ? (
+                  <span className="tool-section-empty">工具未返回文本</span>
+                ) : (
+                  <ResultFields output={output} />
+                )}
+              </div>
+            </>
+          )}
 
           {/* Raw protocol fields stay collapsed by default, out of the main read. */}
           <details className="tool-debug">

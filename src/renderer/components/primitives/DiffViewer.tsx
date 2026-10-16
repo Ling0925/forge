@@ -1,6 +1,10 @@
-import { FileCode } from "@phosphor-icons/react";
+import { CaretRight, FileCode } from "@phosphor-icons/react";
+import { useState } from "react";
 import type { FileChange } from "../../shared-types";
 import "./code-diff.css";
+
+/** A diff previews this many leading lines until the user expands it. */
+export const DIFF_PREVIEW_LINES = 10;
 
 export interface DiffViewerProps {
   readonly change?: FileChange;
@@ -9,6 +13,8 @@ export interface DiffViewerProps {
   readonly after?: string | null;
   readonly isSuggested?: boolean;
   readonly truncated?: boolean;
+  /** Leading lines shown while collapsed; 0 disables the preview. */
+  readonly previewLines?: number;
   readonly className?: string;
 }
 
@@ -115,10 +121,16 @@ export function DiffViewer({
   after = change?.after ?? null,
   isSuggested = true,
   truncated = change?.truncated ?? false,
+  previewLines = DIFF_PREVIEW_LINES,
   className = "",
 }: DiffViewerProps) {
   const diff = computeSimpleDiff(before, after);
   const lines = diff.lines;
+  const [expanded, setExpanded] = useState(false);
+  const preview = previewLines > 0 ? previewLines : lines.length;
+  const visible = expanded ? lines : lines.slice(0, preview);
+  const hidden = lines.length - visible.length;
+  const canExpand = lines.length > preview;
 
   return (
     <section
@@ -138,11 +150,11 @@ export function DiffViewer({
           )}
         </div>
       </div>
-      <div className="diff-scroll">
+      <div className={`diff-scroll${expanded ? " is-expanded" : ""}`}>
         <div
           style={{ display: "flex", flexDirection: "column", width: "100%" }}
         >
-          {lines.map((item) => {
+          {visible.map((item) => {
             const key = `${item.type}-${item.beforeNumber ?? 0}-${item.afterNumber ?? 0}`;
             const marker =
               item.type === "added" ? "+" : item.type === "removed" ? "-" : " ";
@@ -168,6 +180,22 @@ export function DiffViewer({
           })}
         </div>
       </div>
+      {canExpand && (
+        <button
+          type="button"
+          className="diff-more"
+          onClick={() => setExpanded((open) => !open)}
+          aria-expanded={expanded}
+        >
+          <CaretRight
+            size={12}
+            weight="bold"
+            className={`diff-more-caret${expanded ? " is-expanded" : ""}`}
+            aria-hidden="true"
+          />
+          {expanded ? "收起差异" : `展开全部差异（还有 ${hidden} 行）`}
+        </button>
+      )}
       {(truncated || diff.truncated) && (
         <div className="diff-truncated-notice">
           提示：文件差异内容过大，已截断显示。

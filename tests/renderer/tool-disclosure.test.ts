@@ -41,13 +41,15 @@ describe("tool disclosure row", () => {
     expect(html).toContain("/tmp/project");
   });
 
-  it("keeps the collapsed view free of the expanded command body", () => {
+  it("opens a command by default so its command and result read as one unit", () => {
     const html = render({
       toolName: "run_command",
       command: "rm -rf /",
       status: "running",
     });
-    expect(html).not.toContain("rm -rf /");
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("rm -rf /");
+    expect(html).toContain("结果");
   });
 
   it("renders parsed parameter rows instead of a raw JSON blob", () => {
@@ -65,17 +67,20 @@ describe("tool disclosure row", () => {
     expect(html).not.toContain('{"path"');
   });
 
-  it("lists scalar array arguments as chips", () => {
+  it("keeps a command card to the command and result, not parsed argument chips", () => {
     const html = render({
       toolName: "run_command",
       command: "node --version",
       parameters: JSON.stringify({ argv: ["node", "--version"] }),
+      output: "v22.0.0",
       status: "completed",
-      defaultExpanded: true,
     });
-    expect(html).toContain('class="tool-param-chips"');
-    expect(html).toContain("node");
-    expect(html).toContain("--version");
+    // The parsed "参数输入" rows are dropped from a command card.
+    expect(html).not.toContain('class="tool-param-chips"');
+    expect(html).not.toContain("参数输入");
+    // The command and its raw result are both shown.
+    expect(html).toContain("node --version");
+    expect(html).toContain("v22.0.0");
   });
 
   it("falls back to plain text for malformed arguments", () => {
@@ -119,5 +124,46 @@ describe("tool disclosure row", () => {
     expect(html).toContain("替换");
     expect(html).toContain("true");
     expect(html).not.toContain('{"edited"');
+  });
+
+  it("previews only the first 10 diff lines and offers an expand control", () => {
+    const after = Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n");
+    const html = render({
+      toolName: "edit_file",
+      status: "completed",
+      changes: [
+        {
+          path: "src/a.ts",
+          kind: "created",
+          before: null,
+          after,
+          truncated: false,
+        },
+      ],
+    });
+    // Only the leading preview lines are rendered while collapsed.
+    expect(html).toContain("line 0");
+    expect(html).toContain("line 9");
+    expect(html).not.toContain("line 10");
+    expect(html).toContain("展开全部差异");
+    expect(html).toContain("还有 20 行");
+  });
+
+  it("shows a small diff in full without an expand control", () => {
+    const html = render({
+      toolName: "edit_file",
+      status: "completed",
+      changes: [
+        {
+          path: "src/a.ts",
+          kind: "modified",
+          before: "const old = 1;",
+          after: "const next = 2;",
+          truncated: false,
+        },
+      ],
+    });
+    expect(html).not.toContain("展开全部差异");
+    expect(html).toContain("const next = 2;");
   });
 });
