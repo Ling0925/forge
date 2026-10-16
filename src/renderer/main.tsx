@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./components/workbench/App";
 import { PrimitiveShowcase } from "./showcase/PrimitiveShowcase";
 import "./styles/global.css";
+import { installWebHost } from "./web-host";
 
 function Root() {
   const [isShowcase, setIsShowcase] = useState(() => {
@@ -39,12 +40,13 @@ function Root() {
   return <App />;
 }
 
-const container = document.getElementById("root");
-if (container) {
-  const root = createRoot(container);
-  root.render(
-    <StrictMode>
-      <Root />
-    </StrictMode>,
-  );
-}
+void installWebHost().then(() => {
+  const container = document.getElementById("root");
+  if (container) {
+    createRoot(container).render(
+      <StrictMode>
+        <Root />
+      </StrictMode>,
+    );
+  }
+}).catch(() => { /* Host status provides reconnect guidance. */ });

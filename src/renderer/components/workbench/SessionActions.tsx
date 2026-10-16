@@ -1,6 +1,7 @@
 import { DotsThreeVertical } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { OperationScope } from "../../state/operation-scope";
+import { hostCapabilities } from "../../web-host";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
 import { Input } from "../primitives/Input";
@@ -120,10 +121,11 @@ export function SessionActions() {
           <Button
             size="sm"
             className="wb-menu-item"
-            disabled={busy}
+            disabled={busy || !hostCapabilities.exportSession}
+            title={hostCapabilities.exportSession ? "导出 JSON" : "Web 开发版暂不支持桌面文件导出"}
             onClick={() => void exportSession()}
           >
-            导出 JSON
+            {hostCapabilities.exportSession ? "导出 JSON" : "导出 JSON（仅桌面端）"}
           </Button>
         </fieldset>
       </details>
