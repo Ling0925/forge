@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
+import react from "@vitejs/plugin-react";
 import { chromium } from "playwright";
 import { createServer as createViteServer } from "vite";
 import { expect, it } from "vitest";
@@ -18,6 +19,9 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
   const port = address.port;
   await new Promise<void>((done) => reservation.close(() => done()));
   const directory = await mkdtemp(join(tmpdir(), "forge-ws-browser-"));
+  let hold = false;
+  let release = () => {};
+  const gate = new Promise<void>((done) => { release = done; });
   const service = await createHarness({
     stateDir: join(directory, "state"),
     providerFactory: () => ({
@@ -25,6 +29,7 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
       complete: async (_messages, _tools, options) => {
         for (let i = 0; i < 5; i++) {
           options.onText(`progress ${i}\n`);
+          if (hold && i === 0) await gate;
           await new Promise((done) => setTimeout(done, 120));
         }
         return { message: { role: "assistant", content: "fixture finished" } };
@@ -44,8 +49,10 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
   const vite = await createViteServer({
     configFile: false,
     root: resolve("src/renderer"),
+    plugins: [react()],
     server: {
       middlewareMode: true,
+      fs: { allow: [resolve(".")] },
       preTransformRequests: false,
       hmr: { server: web.server, host: "127.0.0.1", port },
     },
@@ -70,11 +77,13 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
       if (request.url === "/probe.js") {
         response.setHeader("Content-Type", "text/javascript");
         response.end(bundle.outputFiles[0]?.text);
-      } else if (request.url === "/probe") {
+      } else if (request.url === "/probe" || request.url === "/workbench") {
         void vite
           .transformIndexHtml(
             "/probe",
-            '<html><body><script type="module" src="/probe.js"></script></body></html>',
+            request.url === "/workbench"
+              ? '<html><body><div id="root"></div><script type="module" src="/main.tsx"></script></body></html>'
+              : '<html><body><script type="module" src="/probe.js"></script></body></html>',
           )
           .then((html) => {
             response.setHeader("Content-Type", "text/html");
@@ -87,6 +96,7 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
     const events: RunEvent[] = [];
     const latencies: number[] = [];
     const sockets: string[] = [];
@@ -152,7 +162,35 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
     expect(latencies[2]).toBeLessThan(100);
     console.log("WebSocket browser event latency (ms):", latencies);
     expect(errors).toEqual([]);
+    hold = true;
+    events.length = 0;
+    const running = await page.evaluate(async (workspace) => {
+      const session = await window.forge.createSession({ workspace, model: "fixture" });
+      return window.forge.startRun({ sessionId: session.id, prompt: "survive refresh", permission: "readonly" });
+    }, directory);
+    await expect.poll(() => events.some((event) => event.event.type === "text_delta")).toBe(true);
+    events.length = 0;
+    await page.reload();
+    await page.waitForFunction(() => Reflect.get(window, "probeReady") === true);
+    await expect.poll(() => events.some((event) => event.runId === running.runId && event.event.type === "text_delta" && event.event.text === "progress 0\n")).toBe(true);
+    expect(events.some((event) => event.runId === running.runId && event.event.type === "run_started")).toBe(true);
+    expect(events.some((event) => event.event.type === "run_finished")).toBe(false);
+    await page.goto(`${web.origin}/workbench`);
+    await page.getByText("New session", { exact: true }).click();
+    await page.getByRole("button", { name: "取消", exact: true }).waitFor();
+    await page.getByText("progress 0", { exact: true }).waitFor();
+    await page.reload();
+    await page.getByText("New session", { exact: true }).click();
+    await page.getByRole("button", { name: "取消", exact: true }).waitFor();
+    await page.getByText("progress 0", { exact: true }).waitFor();
+    release();
+    await page.getByRole("button", { name: "取消", exact: true }).waitFor({ state: "hidden" });
+    await page.locator("p").filter({ hasText: /^fixture finished$/ }).waitFor();
+    const snapshot = await page.evaluate((sessionId) => window.forge.getSession(sessionId), running.sessionId);
+    expect(snapshot.messages.some((message) => message.content === "fixture finished")).toBe(true);
+    expect(errors).toEqual([]);
   } finally {
+    release();
     await browser.close();
     await vite.close();
     await web.close();

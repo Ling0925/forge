@@ -4,6 +4,7 @@ import { ForgeError, toErrorInfo } from "../shared/errors";
 import {
   type RpcRequest,
   type RunId,
+  type RunEvent,
   type WorkerMessage,
   projectContextDtoSchema,
   runIdSchema,
@@ -45,6 +46,7 @@ export function createWorkerController(
       finished: boolean;
       permission: Permission | undefined;
       permissionChanged: boolean;
+      recovery: Map<string, AgentEvent>;
     }
   >();
   const pending = new Map<string, RpcRequest>();
@@ -119,6 +121,23 @@ export function createWorkerController(
       kind: "event",
       data: { runId, event: value },
     });
+    if (
+      value.type === "run_started" ||
+      value.type === "state_changed" ||
+      value.type === "permission_changed"
+    )
+      run.recovery.set(value.type, value);
+    if (value.type === "tool_started") {
+      run.recovery.delete("text_delta");
+      run.recovery.delete("reasoning_delta");
+    }
+    if (value.type === "text_delta" || value.type === "reasoning_delta") {
+      const previous = run.recovery.get(value.type);
+      const text = previous && (previous.type === "text_delta" || previous.type === "reasoning_delta")
+        ? previous.text : "";
+      // Keep one extra character so the renderer can still indicate truncation.
+      run.recovery.set(value.type, { ...value, text: (text + value.text).slice(0, 131073) });
+    }
     if (value.type === "run_finished") {
       run.finished = true;
       for (const approval of run.approvals.values()) approval.resolve?.(false);
@@ -288,6 +307,7 @@ export function createWorkerController(
             finished: false,
             permission: undefined as Permission | undefined,
             permissionChanged: false,
+            recovery: new Map<string, AgentEvent>(),
           };
           runs.set(runId, run);
           respond(request, { runId, sessionId: request.input.sessionId });
@@ -428,5 +448,26 @@ export function createWorkerController(
     void operation.finally(() => operations.delete(operation));
     return operation;
   };
-  return { handle: dispatch, dispose };
+  const recoveryEvents = (): RunEvent[] => {
+    const result: RunEvent[] = [];
+    for (const [runId, run] of runs) {
+      if (run.finished) continue;
+      const base = { sessionId: run.input.sessionId, timestamp: new Date().toISOString() };
+      const started = run.recovery.get("run_started");
+      if (started) result.push({ runId, event: started });
+      const permission = run.recovery.get("permission_changed");
+      if (permission) result.push({ runId, event: permission });
+      result.push({ runId, event: run.recovery.get("state_changed") ?? { ...base, type: "state_changed", status: "running" } });
+      for (const type of ["reasoning_delta", "text_delta"]) {
+        const event = run.recovery.get(type);
+        if (event) result.push({ runId, event });
+      }
+      for (const approval of run.approvals.values()) {
+        if (!approval.consumed)
+          result.push({ runId, event: { ...base, type: "approval_requested", request: approval.request } });
+      }
+    }
+    return result;
+  };
+  return { handle: dispatch, dispose, recoveryEvents };
 }

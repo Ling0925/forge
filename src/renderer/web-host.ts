@@ -6,6 +6,7 @@ const handshakeSchema = z.object({
   workspace: z.string(),
   cursor: z.number().int().nonnegative(),
   clientId: z.string().uuid(),
+  recovery: z.array(runEventSchema).default([]),
 });
 const batchSchema = z.object({
   cursor: z.number().int().nonnegative(),
@@ -54,7 +55,7 @@ export async function installWebHost(): Promise<void> {
     if (!response.ok) {
       if ([401, 409, 410].includes(response.status))
         fail(
-          "Web 连接失效或已被另一页面接管；请刷新重新连接。当前任务将被取消。",
+          "Web 连接失效或已被另一页面接管；任务继续在后台运行，请刷新重新连接。",
         );
       throw new Error(
         `Web request failed (${response.status}); inspect state before retrying.`,
@@ -73,6 +74,7 @@ export async function installWebHost(): Promise<void> {
         receive = listener;
       },
     });
+    for (const event of handshake.recovery) receive(event);
     const url = new URL("/api/events", location.href);
     url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("clientId", clientId);
@@ -85,7 +87,7 @@ export async function installWebHost(): Promise<void> {
       const disconnect = () => {
         clearTimeout(timeout);
         fail(
-          "WebSocket 连接已断开，请刷新重新连接；断线约20秒后取消运行。请求不会自动重放。",
+          "WebSocket 连接已断开，任务继续在后台运行；请刷新恢复进度。请求不会自动重放。",
         );
         if (!connected) reject(new Error("WebSocket connection failed"));
       };
@@ -126,7 +128,7 @@ export async function installWebHost(): Promise<void> {
         },
       }),
     });
-    status.textContent = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 刷新/切换控制页/断线超过20秒会取消运行 · 后端修改需重启`;
+    status.textContent = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 刷新或断线后任务继续运行 · 后端修改需重启`;
   } catch (error) {
     fail("Web 初始化失败，请刷新页面重新登录。");
     throw error;

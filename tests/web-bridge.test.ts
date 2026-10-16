@@ -4,6 +4,17 @@ import { createTransportBridge, requestId } from "../src/shared/bridge";
 import { sessionIdSchema } from "../src/shared/schemas";
 
 describe("shared desktop/Web bridge", () => {
+  it("retains recovery events until the UI subscribes", async () => {
+    let receive: (raw: unknown) => void = () => {};
+    const bridge = createTransportBridge({ request: async () => null, onEvent: (listener) => { receive = listener; } });
+    const event = { runId: randomUUID(), event: { type: "text_delta", text: "restored", sessionId: randomUUID(), timestamp: new Date().toISOString() } };
+    receive(event);
+    await new Promise((done) => setTimeout(done, 10));
+    const listener = vi.fn();
+    bridge.onEvent(listener);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(event));
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
   it("generates UUIDs on insecure LAN origins without randomUUID", () => {
     const id = requestId();
     expect(id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
