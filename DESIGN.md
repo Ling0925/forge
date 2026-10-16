@@ -163,7 +163,14 @@ Forge retains its own name, controls, session data and permission semantics.
 - Ink: light primary `#292824`, secondary `#68665f`; dark primary `#eeede8`,
   secondary `#aaa79f`. Terracotta accent `#a54f35` / `#dc9477`, used sparingly.
 - Desktop rail: 264px. Main reading/home measure: 880px. Home overview: 560px.
-  Greeting: 28px / 1.4, weight 500. Main gutter: 48px, mobile: 16px.
+  Compact revision: rail 232px, header 44px, reading measure 760px, overview
+  420px. Greeting: 22px / 1.4, weight 500. Main gutter: 32px, mobile: 16px.
+  Desktop controls: 28px; small controls: 24px. Touch controls retain 44px.
+  Overview is a flat two-column summary, not nested cards. Composer padding
+  10px, radius 12px, initial prompt height 44px; long prompts scroll internally.
+  Mode/permission menus support arrow navigation, Home/End, Escape, Tab exit,
+  pointer dismissal and focus restoration. Focus rings belong to the focused
+  control; input focus uses one quiet container border, never nested rings.
 - Home greeting sits near the top; a single quiet overview shows actual unarchived
   session and workspace counts. Unknown/loading values use an em dash. No invented
   token totals, heatmaps or activity. The composer sits near the bottom with open

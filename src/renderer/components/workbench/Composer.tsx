@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   Stop,
 } from "@phosphor-icons/react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { permissionSchema, settingsFields } from "../../../shared/schemas";
 import type { SessionId } from "../../shared-types";
@@ -19,7 +19,7 @@ import { hostCapabilities } from "../../web-host";
 import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
-import { Select } from "../primitives/Select";
+import { ComposerDropdown } from "./ComposerDropdown";
 
 const taskSchema = z.object({
   workspace: z
@@ -35,11 +35,6 @@ const taskSchema = z.object({
   model: settingsFields.model,
   prompt: z.string().trim().min(1).max(1000000),
 });
-const shortPermission = {
-  readonly: "只读",
-  workspace: "工作区",
-  unrestricted: "无限制",
-} as const;
 function shortModelName(model: string): string {
   const leaf = model.trim().split("/").filter(Boolean).at(-1) ?? "未选择模型";
   return leaf.length > 28 ? `${leaf.slice(0, 27)}…` : leaf;
@@ -54,100 +49,6 @@ function readDrafts(): Readonly<Record<string, string>> {
   } catch {
     return {};
   }
-}
-
-function ComposerDropdown<T extends string>({
-  value,
-  onChange,
-  options,
-  icon,
-  ariaLabel,
-  disabled = false,
-}: {
-  readonly value: T;
-  readonly onChange: (value: T) => void;
-  readonly options: readonly { value: T; label: string; sub?: string }[];
-  readonly icon?: ReactNode;
-  readonly ariaLabel: string;
-  readonly disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const current = options.find((o) => o.value === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) return;
-    const handleOutside = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", handleOutside);
-    return () => window.removeEventListener("mousedown", handleOutside);
-  }, [open]);
-
-  return (
-    <div
-      className={`composer-dropdown ${open ? "is-open" : ""}`}
-      ref={containerRef}
-    >
-      <button
-        type="button"
-        className="composer-dropdown-trigger"
-        onClick={() => !disabled && setOpen(!open)}
-        disabled={disabled}
-        aria-label={ariaLabel}
-        aria-expanded={open}
-      >
-        {icon && <span className="composer-dropdown-icon">{icon}</span>}
-        <span className="composer-dropdown-label">{current?.label}</span>
-        <CaretDown
-          size={10}
-          className={`composer-dropdown-caret ${open ? "is-open" : ""}`}
-        />
-      </button>
-
-      {open && (
-        <div className="composer-dropdown-menu">
-          {options.map((opt) => {
-            const isSelected = opt.value === value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                className={`composer-dropdown-item ${isSelected ? "is-selected" : ""}`}
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-              >
-                <div className="composer-dropdown-item-main">
-                  <span className="composer-dropdown-item-title">
-                    {opt.label}
-                  </span>
-                  {opt.sub && (
-                    <span className="composer-dropdown-item-sub">
-                      {opt.sub}
-                    </span>
-                  )}
-                </div>
-                {isSelected && (
-                  <Check
-                    size={12}
-                    weight="bold"
-                    className="composer-dropdown-check"
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
