@@ -16,18 +16,20 @@ pnpm dev:web --host 192.168.8.108 --port 5173 --workspace /home/ling/services/de
 - 共享核心、Web 后端与启动脚本修改后，需要结束当前任务并重启此命令；不会在代理改代码时自动重启后端。
 - 只有一个控制页面。刷新页面或新页面连接会取消旧运行；事件连接停止约 20 秒后也会取消运行。后台标签页/设备休眠可能触发这一保护。取消不能撤销已完成的文件或命令副作用。
 - 请求失败不会自动重放。检查会话、文件和命令状态后再决定是否重新操作。
-- 事件缓冲有大小上限；超过上限会取消运行并要求重新连接。
+- 模型输出、工具进度和审批事件通过 `/api/events` WebSocket 即时推送，使用顺序编号和接收确认，不再每 300ms 轮询。普通 RPC 操作仍使用 HTTP POST。
+- WebSocket 每 5 秒进行协议心跳，约 20 秒没有存活确认会取消运行。事件连接断开后页面明确提示刷新，不自动重放操作；Vite HMR 使用另一条独立连接。
+- 未确认事件缓冲最多 5000 条或 8 MiB，发送积压也受限；超过上限会取消运行并要求重新连接。
 
 ## 安全边界
 
 这是可信局域网中的单用户 **HTTP 开发入口**，不是公网部署方案、多租户服务或 OS 沙箱。口令、会话、代码等在 HTTP 网络上传输，没有 TLS 加密；不要端口转发到公网，不要在不可信网络使用。
 
-页面、源码、API 和 HMR WebSocket 均要求认证，API 额外校验精确 Host/Origin、JSON POST 和控制页标识。认证 cookie 为 HttpOnly、SameSite=Strict，最长 12 小时；WebSocket 另保留 Vite token 校验。只有 Web dev 的 HTML 放宽 CSP 以支持 HMR，桌面生产 HTML 的 CSP 不变。认证用户仍具有与本机使用 Forge 类似的强大能力（包括配置 Provider/MCP 和批准命令）；固定工作区不把命令变成沙箱。
+页面、源码、API 和所有 WebSocket 均要求认证。HTTP API 额外校验精确 Host/Origin、JSON POST 和控制页标识；事件 WebSocket 校验 Host/Origin、认证 cookie、控制页标识和事件游标。认证 cookie 为 HttpOnly、SameSite=Strict，最长 12 小时；HMR WebSocket 另保留 Vite token 校验。只有 Web dev 的 HTML 放宽 CSP 以支持 HMR，桌面生产 HTML 的 CSP 不变。认证用户仍具有与本机使用 Forge 类似的强大能力（包括配置 Provider/MCP 和批准命令）；固定工作区不把命令变成沙箱。
 
 ## 聚焦检查
 
 ```sh
-pnpm exec vitest run tests/web-host.test.ts tests/web-bridge.test.ts tests/desktop/controller.test.ts tests/desktop/extended-ipc.test.ts
+pnpm exec vitest run tests/web-host.test.ts tests/web-bridge.test.ts tests/web-socket-browser.test.ts
 ```
 
 浏览器冒烟必须先使用临时 `FORGE_HOME` 启动独立 dev 服务，避免读取真实配置或改动用户会话，然后运行：
