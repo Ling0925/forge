@@ -519,34 +519,35 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 type="button"
                 variant="danger"
                 size="sm"
-                className="composer-cancel"
+                className="composer-cancel composer-action"
                 loading={Boolean(run?.isCancelling)}
+                aria-label={run?.isCancelling ? "正在取消" : "取消"}
+                title={run?.isCancelling ? "正在取消…" : "停止生成"}
+                icon={<Stop size={14} weight="fill" aria-hidden="true" />}
                 onClick={() => void cancelRun()}
-              >
-                <Stop size={14} aria-hidden="true" />
-                {run?.isCancelling ? "正在取消…" : "取消"}
-              </Button>
+              />
             ) : (
               <Button
                 type="submit"
                 variant="primary"
                 size="sm"
-                className="composer-submit composer-run"
+                className="composer-submit composer-run composer-action"
                 loading={busy || !!submission}
                 disabled={!isConfigured || !prompt.trim() || !!submission}
                 aria-label={isNew ? "发送并开始会话" : "运行"}
-                title={manualSend ? "发送消息" : "发送 · Enter"}
-              >
-                <ArrowUp size={16} weight="bold" aria-hidden="true" />
-              </Button>
+                title={
+                  busy || submission
+                    ? "正在发送…"
+                    : manualSend
+                      ? "发送消息"
+                      : "发送 · Enter"
+                }
+                icon={<ArrowUp size={16} weight="bold" aria-hidden="true" />}
+              />
             )}
           </div>
         </div>
-        {(!isConfigured ||
-          mode === "plan" ||
-          busy ||
-          error ||
-          confirmRequested) && (
+        {(!isConfigured || mode === "plan" || error || confirmRequested) && (
           <div className="composer-status" aria-live="polite">
             {!isConfigured && (
               <span className="wb-muted">
@@ -566,7 +567,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 规划模式只读，不执行修改或 MCP 操作。
               </span>
             )}
-            {busy && <span className="composer-busy">正在提交…</span>}
             {error && (
               <span role="alert" className="form-error composer-error">
                 {error}

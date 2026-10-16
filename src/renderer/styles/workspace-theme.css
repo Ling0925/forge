@@ -228,6 +228,33 @@
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
 }
+.wb-app .composer-action {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: var(--radius-full);
+  transition: background-color var(--transition-fast), color
+    var(--transition-fast);
+  transform: none;
+}
+.wb-app .composer-action:hover:not(:disabled),
+.wb-app .composer-action:active:not(:disabled) {
+  transform: none;
+}
+.wb-app .composer-action .btn-busy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.wb-app .composer-action .btn-spinner {
+  flex: 0 0 14px;
+}
 .wb-app .composer-dropdown-trigger:disabled,
 .wb-app .composer-submit:disabled {
   opacity: 1;

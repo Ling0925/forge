@@ -15,9 +15,10 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       import './src/renderer/styles/global.css';
       import './src/renderer/components/workbench/app.css';
       import './src/renderer/styles/workspace-theme.css';
-      function Harness(){const {calls,switchSession,toggleFailure}=useWorkbench();return <>
+      function Harness(){const {calls,switchSession,toggleFailure,holdSend,acceptSend,finishRun}=useWorkbench();return <>
         <div className="wb-app"><Composer/></div><output id="calls">{calls}</output>
         <button onClick={switchSession}>切换</button><button onClick={toggleFailure}>切换失败</button>
+        <button onClick={holdSend}>延迟发送</button><button onClick={acceptSend}>接收</button><button onClick={finishRun}>完成运行</button>
       </>}
       createRoot(document.getElementById('root')).render(<TestProvider><Harness/></TestProvider>);
     `,
@@ -37,15 +38,21 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
             resolveDir: resolve("."),
             loader: "tsx",
             contents: `
-        import {createContext,useContext,useState} from 'react';
+        import {createContext,useContext,useState,useRef} from 'react';
         import {defaultPublicSettings} from './src/shared/schemas';
         const Context=createContext(null);export const useWorkbench=()=>useContext(Context);
         export function TestProvider({children}){
           const [id,setId]=useState('a');const [calls,setCalls]=useState(0);
           const [failure,setFailure]=useState(false);const [runs,setRuns]=useState({});
+          const hold=useRef(false);const resolveSend=useRef(null);
           const startRun=async()=>{setCalls(n=>n+1);if(failure)return false;
+            if(hold.current) return new Promise(resolve=>{resolveSend.current=resolve;});
             setRuns(old=>({...old,[id]:{accepted:true,status:'completed'}}));return true;};
           return <Context.Provider value={{calls,startRun,toggleFailure:()=>setFailure(v=>!v),
+            holdSend:()=>{hold.current=true;},
+            acceptSend:()=>{setRuns({[id]:{accepted:true,status:'running'}});resolveSend.current?.(true);},
+            cancelRun:()=>setRuns({[id]:{accepted:true,status:'running',isCancelling:true}}),
+            finishRun:()=>setRuns({[id]:{accepted:true,status:'completed'}}),
             switchSession:()=>setId(v=>v==='a'?'b':'a'),selectSession:()=>{},
             state:{activeSessionId:id,activeSnapshot:{model:'provider/model',workspace:'/tmp'},sessions:[],
               settings:{...defaultPublicSettings,model:'provider/model',isConfigured:true},activeRuns:runs}}}>{children}</Context.Provider>
@@ -133,6 +140,57 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     expect(await calls()).toBe("4");
     await input.press("Enter");
     await expect.poll(calls).toBe("5");
+    await expect.poll(() => input.inputValue()).toBe("");
+    await page.getByRole("button", { name: "延迟发送", exact: true }).click();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await input.fill("animation check");
+      await page.evaluate(async () => {
+        await Promise.all(
+          document.getAnimations().map((animation) => animation.finished),
+        );
+      });
+      const action = page.locator(".composer-action");
+      const initial = await action.boundingBox();
+      const formHeight = await page
+        .locator("form")
+        .evaluate((node) => node.getBoundingClientRect().height);
+      await action.click();
+      await expect.poll(() => action.getAttribute("aria-busy")).toBe("true");
+      for (const reducedMotion of ["no-preference", "reduce"] as const) {
+        await page.emulateMedia({ reducedMotion });
+        const spinner = action.locator(".btn-spinner");
+        await spinner.waitFor();
+        const centered = await spinner.evaluate((node) => {
+          const icon = node.getBoundingClientRect();
+          const parent = node.closest("button");
+          if (!parent) throw new Error("Missing spinner button");
+          const button = parent.getBoundingClientRect();
+          return (
+            Math.abs(icon.x + icon.width / 2 - button.x - button.width / 2) +
+            Math.abs(icon.y + icon.height / 2 - button.y - button.height / 2)
+          );
+        });
+        expect(centered).toBeLessThan(1);
+        expect(await action.boundingBox()).toEqual(initial);
+      }
+      expect(await page.locator(".composer-status").count()).toBe(0);
+      expect(
+        await page
+          .locator("form")
+          .evaluate((node) => node.getBoundingClientRect().height),
+      ).toBe(formHeight);
+      await page.screenshot({ path: `/tmp/forge-send-${width}.png` });
+      await page.getByRole("button", { name: "接收", exact: true }).click();
+      await expect.poll(() => action.getAttribute("aria-label")).toBe("取消");
+      expect(await action.boundingBox()).toEqual(initial);
+      await action.click();
+      await expect.poll(() => action.getAttribute("aria-busy")).toBe("true");
+      expect(await action.boundingBox()).toEqual(initial);
+      await page.getByRole("button", { name: "完成运行", exact: true }).click();
+      await expect.poll(() => action.getAttribute("aria-label")).toBe("运行");
+      expect(await action.boundingBox()).toEqual(initial);
+    }
   } finally {
     await browser.close();
   }
