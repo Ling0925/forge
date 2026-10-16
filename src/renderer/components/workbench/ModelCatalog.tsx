@@ -25,9 +25,11 @@ export function ModelCatalog({
   const listRef = useRef<HTMLDivElement>(null);
   const needle = query.trim();
   const catalog = [...new Set([value, ...models].filter(Boolean))];
-  const filtered = catalog.filter((model) =>
-    model.toLowerCase().includes(needle.toLowerCase()),
-  );
+  const filtered = needle
+    ? catalog.filter((model) =>
+        model.toLowerCase().includes(needle.toLowerCase()),
+      )
+    : catalog;
   const custom = needle.length > 0 && !catalog.includes(needle);
   return (
     <div
@@ -123,7 +125,7 @@ export function ModelCatalog({
         {loading
           ? "正在读取模型目录…"
           : filtered.length
-            ? `${filtered.length} 个匹配模型`
+            ? `${filtered.length} 个${needle ? "匹配" : "可用"}模型`
             : needle
               ? "目录中没有匹配项，可确认使用输入的精确 ID。"
               : "暂无模型目录，请刷新或输入精确 ID。"}

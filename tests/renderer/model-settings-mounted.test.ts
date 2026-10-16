@@ -17,10 +17,11 @@ it("model search requires selection and settings retain drafts and save once", a
       window.forge = {listModels: async () => ['provider/alpha','provider/beta']};
       function Harness() {
         const [model,setModel] = useState('provider/alpha');
+        const [models,setModels] = useState([]);
         const {openSettings, saves} = useWorkbench();
         return <>
-          <ModelPicker value={model} models={['provider/alpha','provider/beta']}
-            onSelect={setModel} onRefresh={()=>{}} loading={false} error="" />
+          <ModelPicker value={model} models={models}
+            onSelect={setModel} onRefresh={()=>{void window.forge.listModels().then(setModels)}} loading={false} error="" />
           <output id="selected">{model}</output><output id="saves">{saves}</output>
           <button onClick={()=>openSettings(true)}>打开设置</button>
           <Settings />
@@ -80,6 +81,18 @@ it("model search requires selection and settings retain drafts and save once", a
     const trigger = page.locator(".composer-model-summary");
     await trigger.click();
     const search = page.getByLabel("搜索模型或输入精确 ID");
+    await expect
+      .poll(() => page.locator(".model-catalog-option[aria-pressed]").count())
+      .toBe(2);
+    expect(await search.inputValue()).toBe("");
+    await search.fill("beta");
+    expect(
+      await page.locator(".model-catalog-option[aria-pressed]").count(),
+    ).toBe(1);
+    await search.fill("");
+    expect(
+      await page.locator(".model-catalog-option[aria-pressed]").count(),
+    ).toBe(2);
     await search.fill("beta");
     expect(await page.locator("#selected").innerText()).toBe("provider/alpha");
     expect(
@@ -92,6 +105,10 @@ it("model search requires selection and settings retain drafts and save once", a
       await trigger.evaluate((node) => node === document.activeElement),
     ).toBe(true);
     await trigger.click();
+    expect(await search.inputValue()).toBe("");
+    expect(
+      await page.locator(".model-catalog-option[aria-pressed]").count(),
+    ).toBe(2);
     await search.fill("custom/exact-model");
     await page.getByRole("button", { name: /使用此模型 ID/ }).click();
     expect(await page.locator("#selected").innerText()).toBe(

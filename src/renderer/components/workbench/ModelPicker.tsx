@@ -33,7 +33,10 @@ export function ModelPicker(props: {
     <details
       ref={ref}
       className="composer-model composer-model-picker"
-      onToggle={(event) => setOpen(event.currentTarget.open)}
+      onToggle={(event) => {
+        setOpen(event.currentTarget.open);
+        if (event.currentTarget.open) props.onRefresh();
+      }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) close();
       }}
