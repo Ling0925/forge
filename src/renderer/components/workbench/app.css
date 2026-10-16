@@ -46,29 +46,8 @@
   align-items: center;
   gap: 6px;
 }
-.wb-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.wb-icon-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-subtle);
-}
-.wb-icon-btn.is-active {
-  background: var(--surface-selected);
-  color: var(--text-primary);
-  border-color: var(--border-subtle);
-}
+/* Single authoritative `.wb-icon-btn` owner lives further below; the earlier
+   duplicate (30px + --radius-sm + border) conflicted with it and is removed. */
 .wb-approval-pill {
   display: inline-flex;
   align-items: center;
@@ -536,12 +515,9 @@
   }
 }
 
-.sidebar-search {
-  padding: 0 var(--space-4) var(--space-2-5) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
+/* `.sidebar-search` is owned by workbench.css (row flex matching the actual
+   input-wrap + archive-toggle markup); the former column-flex duplicate here
+   conflicted with it. */
 .session-actions {
   padding: 0;
   border: none;
@@ -1294,8 +1270,7 @@
 .wb-menu-item.is-danger {
   color: var(--error);
 }
-.wb-dirty-dot,
-.wb-status-dot {
+.wb-dirty-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
@@ -1303,17 +1278,8 @@
   background: var(--text-secondary);
   flex-shrink: 0;
 }
-.wb-status-dot[data-status="completed"],
-.wb-status-dot[data-status="ready"] {
-  background: var(--success);
-}
-.wb-status-dot[data-status="awaiting_approval"] {
-  background: var(--warning);
-}
-.wb-status-dot[data-status="failed"],
-.wb-status-dot[data-status="error"] {
-  background: var(--error);
-}
+/* `.wb-status-dot` is owned by workbench.css; the duplicate status->color
+   mapping here (6px, different status keys) conflicted with it. */
 .wb-sidebar-header {
   padding: var(--space-6) var(--space-5) var(--space-3);
 }
