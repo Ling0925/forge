@@ -3,14 +3,12 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-// Mounted browser run: consent is a DOM click on the explicit button.
-// Server markup cannot prove that a later submit/Ctrl+Enter stayed blocked.
 const executablePath = process.env.FORGE_BROWSER_EXECUTABLE;
 const sessionA = "11111111-1111-4111-8111-111111111111";
 const sessionB = "22222222-2222-4222-8222-222222222222";
 const runId = "33333333-3333-4333-8333-333333333333";
 
-it("mounted consent is explicit, single-use and revoked by task changes; picker Escape respects the dialog boundary", async () => {
+it("selecting unrestricted permits immediate sending; plan and configuration checks remain enforced", async () => {
   const bundle = await build({
     stdin: {
       contents: `
@@ -125,7 +123,6 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
             }
           ).startRunCalls.length,
       );
-    const confirmShown = () => confirm.isVisible();
     const submitForm = () =>
       page.locator("form.workbench-composer").evaluate((form) => {
         (form as HTMLFormElement).requestSubmit();
@@ -138,66 +135,24 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
           }
         ).testController.selectSession(sessionId);
       }, id);
-    const blocked = async (expected: number) => {
-      await submitForm();
-      await page.locator("textarea.composer-textarea").press("Enter");
-      expect(await calls()).toBe(expected);
-      expect(await confirmShown()).toBe(true);
-    };
 
     await selectSession(sessionB);
     await page.locator(`#prompt-${sessionB}`).fill("preserved session B draft");
     await selectSession(sessionA);
     await prompt.fill("ship the change");
     await permission.selectOption("unrestricted");
-    await page.locator("form.workbench-composer").evaluate((form) => {
-      (form as HTMLFormElement).requestSubmit();
-    });
-    await expect.poll(confirmShown).toBe(true);
-    expect(
-      await page.getByRole("alert").evaluate((node) => node.textContent),
-    ).toContain("无限制权限需要先确认");
-    expect(await calls()).toBe(0);
-
-    await prompt.press("Enter");
-    await page.locator("form.workbench-composer").evaluate((form) => {
-      (form as HTMLFormElement).requestSubmit();
-    });
-    await prompt.press("Enter");
-    expect(await calls()).toBe(0);
-    expect(await confirmShown()).toBe(true);
-
-    // Each revocation starts with real, unconsumed explicit consent.
-    await confirm.click();
-    await expect.poll(confirmShown).toBe(false);
     await permission.selectOption("workspace");
     await permission.selectOption("unrestricted");
-    await blocked(0);
-
-    await confirm.click();
-    await expect.poll(confirmShown).toBe(false);
     await selectSession(sessionB);
     const otherPrompt = page.locator(`#prompt-${sessionB}`);
     expect(await otherPrompt.inputValue()).toBe("preserved session B draft");
     await selectSession(sessionA);
     expect(await prompt.inputValue()).toBe("ship the change");
-    await blocked(0);
-
-    await confirm.click();
-    await expect.poll(confirmShown).toBe(false);
     await prompt.fill("edited task");
-    await blocked(0);
     await prompt.fill("ship the change");
-    await blocked(0);
-
-    await confirm.click();
-    await expect.poll(confirmShown).toBe(false);
     await page.locator("#run-mode").selectOption("plan");
     await page.locator("#run-mode").selectOption("build");
-    await blocked(0);
-
-    await confirm.click();
-    await expect.poll(confirmShown).toBe(false);
+    expect(await confirm.count()).toBe(0);
     await page.locator('button[aria-label="运行"]').click();
     await expect.poll(calls).toBe(1);
     const started = await page.evaluate(
@@ -236,19 +191,20 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     await nextPrompt.fill("another task");
     await page.locator("#run-permission").selectOption("unrestricted");
     await nextPrompt.press("Enter");
-    expect(await calls()).toBe(1);
-    expect(await confirmShown()).toBe(true);
-
-    await page.locator("#run-permission").selectOption("workspace");
-    await page.locator("#run-permission").selectOption("unrestricted");
-    await nextPrompt.press("Enter");
-    await nextPrompt.press("Enter");
-    expect(await calls()).toBe(1);
-    expect(await confirmShown()).toBe(true);
+    await expect.poll(calls).toBe(2);
+    expect(await confirm.count()).toBe(0);
+    await page.evaluate((id) => {
+      (
+        window as unknown as {
+          testController: { clearRun: (id: string) => void };
+        }
+      ).testController.clearRun(id);
+    }, sessionB);
+    await nextPrompt.fill("plan task");
     await page.locator("#run-mode").selectOption("plan");
     expect(await permission.isDisabled()).toBe(true);
     await nextPrompt.press("Enter");
-    await expect.poll(calls).toBe(2);
+    await expect.poll(calls).toBe(3);
     expect(
       await page.evaluate(
         () =>
@@ -256,7 +212,7 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
             window as unknown as {
               startRunCalls: { permission: string; mode: string }[];
             }
-          ).startRunCalls[1],
+          ).startRunCalls[2],
       ),
     ).toMatchObject({ permission: "readonly", mode: "plan" });
 
@@ -270,8 +226,13 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     await fresh.locator("#run-model").press("Escape");
     expect(await picker.getAttribute("open")).toBeNull();
     expect(await fresh.isVisible()).toBe(true);
-    expect(await summary.evaluate((node) => node === document.activeElement)).toBe(true);
-    const createButton = fresh.getByRole("button", { name: "发送并开始会话", exact: true });
+    expect(
+      await summary.evaluate((node) => node === document.activeElement),
+    ).toBe(true);
+    const createButton = fresh.getByRole("button", {
+      name: "发送并开始会话",
+      exact: true,
+    });
     const newPrompt = fresh.locator("#new-prompt");
     const creates = () =>
       page.evaluate(
@@ -283,10 +244,10 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     await fresh.evaluate((node) => (node as HTMLFormElement).requestSubmit());
     expect(await fresh.getByRole("alert").isVisible()).toBe(true);
     expect(await creates()).toBe(0);
-    expect(await calls()).toBe(2);
+    expect(await calls()).toBe(3);
     await newPrompt.fill("configured new task");
     await createButton.click();
-    await expect.poll(calls).toBe(3);
+    await expect.poll(calls).toBe(4);
     expect(await creates()).toBe(1);
     await expect.poll(() => fresh.count()).toBe(0);
 
@@ -299,13 +260,17 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     );
     await page.getByRole("button", { name: "New task", exact: true }).click();
     expect(await createButton.isDisabled()).toBe(true);
-    expect(await fresh.getByText("连接模型后即可开始对话。", { exact: false }).isVisible()).toBe(true);
+    expect(
+      await fresh
+        .getByText("连接模型后即可开始对话。", { exact: false })
+        .isVisible(),
+    ).toBe(true);
     await newPrompt.fill("must not create a session");
     await createButton.evaluate((node) => (node as HTMLButtonElement).click());
     await newPrompt.press("Enter");
     await fresh.evaluate((node) => (node as HTMLFormElement).requestSubmit());
     expect(await creates()).toBe(1);
-    expect(await calls()).toBe(3);
+    expect(await calls()).toBe(4);
     await selectSession(sessionB);
     await expect.poll(() => fresh.count()).toBe(0);
     await page.evaluate(
@@ -326,7 +291,7 @@ it("mounted consent is explicit, single-use and revoked by task changes; picker 
     await nextPrompt.press("Enter");
     await submitForm();
     expect(await creates()).toBe(1);
-    expect(await calls()).toBe(3);
+    expect(await calls()).toBe(4);
     expect(warnings).toEqual([]);
   } finally {
     await browser.close();

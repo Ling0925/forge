@@ -198,17 +198,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     model: string;
   } | null>(null);
   const [error, setError] = useState("");
-  const [confirmRequested, setConfirmRequested] = useState(false);
-  const [unrestrictedConsent, setUnrestrictedConsent] = useState(false);
-  const revokeUnrestrictedConsent = () => {
-    setUnrestrictedConsent(false);
-    setConfirmRequested(false);
-  };
   useEffect(() => {
     if (!draftId) return;
     setError("");
-    setUnrestrictedConsent(false);
-    setConfirmRequested(false);
   }, [draftId]);
   const alive = useRef(true);
   useEffect(() => {
@@ -236,14 +228,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     if (!alive.current || selectedDraft.current !== draftId) return;
     permissionTouched.current = true;
     setPermission(selected);
-    revokeUnrestrictedConsent();
   };
   const displayedPermission = running
     ? (run?.permission ?? permission)
     : permission;
   const changeMode = (next: "build" | "plan") => {
     setMode(next);
-    revokeUnrestrictedConsent();
   };
   const isConfigured = state.settings?.isConfigured === true;
   const configurationHint = "连接模型后即可开始对话。";
@@ -252,15 +242,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       return;
     if (!isConfigured) {
       setError(configurationHint);
-      return;
-    }
-    if (
-      permission === "unrestricted" &&
-      mode !== "plan" &&
-      !unrestrictedConsent
-    ) {
-      setConfirmRequested(true);
-      setError("无限制权限需要先确认。");
       return;
     }
     const parsed = taskSchema.safeParse({
@@ -313,7 +294,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setBusy(false);
     if (ok && id) {
       setSubmission({ id, draftId, prompt });
-      revokeUnrestrictedConsent();
     } else if (selectedDraft.current === draftId)
       setError("未能开始对话，草稿已保留。请检查错误详情后重试。");
   };
@@ -434,7 +414,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 : "Enter 发送，Shift+Enter 换行"
             }
             onChange={(event) => {
-              revokeUnrestrictedConsent();
               setDrafts((old) => ({ ...old, [draftId]: event.target.value }));
             }}
             onKeyDown={(event) => {
@@ -640,7 +619,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             )}
           </div>
         </div>
-        {(!isConfigured || mode === "plan" || error || confirmRequested) && (
+        {(!isConfigured || mode === "plan" || error) && (
           <div className="composer-status" aria-live="polite">
             {!isConfigured && (
               <span className="wb-muted">
@@ -663,25 +642,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             {error && (
               <span role="alert" className="form-error composer-error">
                 {error}
-              </span>
-            )}
-            {confirmRequested && mode !== "plan" && (
-              <span className="composer-confirm">
-                无限制允许执行命令，且不是操作系统沙箱。
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="danger"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setUnrestrictedConsent(true);
-                    setConfirmRequested(false);
-                    setError("");
-                  }}
-                >
-                  我已理解并确认无限制
-                </Button>
               </span>
             )}
           </div>
