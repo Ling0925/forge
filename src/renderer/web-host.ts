@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { createTransportBridge } from "../shared/bridge";
-import { externalUrlSchema, runEventSchema, rpcResponseSchema } from "../shared/ipc";
+import { htmlPreviewResponseSchema } from "../shared/html-preview";
+import {
+  externalUrlSchema,
+  rpcResponseSchema,
+  runEventSchema,
+} from "../shared/ipc";
 import type { SessionSnapshot } from "../shared/schemas";
 import { applySessionDelta, sessionDeltaSchema } from "../shared/session-delta";
 
@@ -242,6 +247,14 @@ export async function installWebHost(): Promise<void> {
         exportSession: async () => {
           throw new Error("Web 开发版暂不支持桌面文件导出。");
         },
+        // Preview documents are served by this host; the page only learns the
+        // URL. `post` already carries the session cookie and page id.
+        previewHtml: async (html: string) =>
+          htmlPreviewResponseSchema.parse(await post("/api/preview", { html })),
+        previewFile: async (path: string) =>
+          htmlPreviewResponseSchema.parse(
+            await post("/api/preview/file", { path }),
+          ),
       }),
     });
   } catch (error) {

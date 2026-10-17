@@ -1,6 +1,8 @@
 import { CaretRight, FileCode } from "@phosphor-icons/react";
 import { useState } from "react";
+import { isHtmlPath } from "../../../shared/html-preview";
 import type { FileChange } from "../../shared-types";
+import { HtmlPreview } from "./HtmlPreview";
 import "./code-diff.css";
 
 /** A diff previews this many leading lines until the user expands it. */
@@ -15,6 +17,12 @@ export interface DiffViewerProps {
   /** Leading lines shown while collapsed; 0 disables the preview. */
   readonly previewLines?: number;
   readonly className?: string;
+  /**
+   * Offer a preview of the resulting file. HTML paths are detected
+   * automatically; set false to suppress it for a caller that knows the file
+   * is not readable (for example a deleted file).
+   */
+  readonly previewHtml?: boolean;
 }
 
 interface DiffLineItem {
@@ -120,6 +128,7 @@ export function DiffViewer({
   isSuggested = true,
   previewLines = DIFF_PREVIEW_LINES,
   className = "",
+  previewHtml = change?.kind !== "deleted",
 }: DiffViewerProps) {
   const model: DiffModel = change?.patch
     ? rowsFromPatch(change.patch)
@@ -142,6 +151,13 @@ export function DiffViewer({
           <span>{path}</span>
         </div>
         <div className="diff-header-meta">
+          {isHtmlPath(path) && previewHtml && (
+            <HtmlPreview
+              path={path}
+              label="预览 HTML"
+              className="diff-preview-action"
+            />
+          )}
           {isSuggested ? (
             <span className="diff-badge-suggested">建议差异</span>
           ) : (

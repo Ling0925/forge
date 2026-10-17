@@ -6,6 +6,7 @@ import {
   splitHighlightTokensIntoLines,
 } from "../../state/code-highlight";
 import { Button } from "./Button";
+import { HtmlPreview } from "./HtmlPreview";
 import "./code-diff.css";
 
 export interface CodeBlockProps {
@@ -15,6 +16,8 @@ export interface CodeBlockProps {
   readonly showLineNumbers?: boolean;
   readonly highlight?: boolean;
   readonly className?: string;
+  /** Offer a sandboxed HTML preview; only rendered when the host supports it. */
+  readonly previewHtml?: boolean;
 }
 
 export function CodeBlock({
@@ -24,6 +27,7 @@ export function CodeBlock({
   showLineNumbers = true,
   highlight = true,
   className = "",
+  previewHtml = false,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
@@ -58,24 +62,33 @@ export function CodeBlock({
           {language && <span className="code-block-lang">{language}</span>}
           {fileName && <span>{fileName}</span>}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          // Present only while the confirmation check is shown: the keyframe
-          // runs once on the swap and is never re-triggered by later renders.
-          className={copied ? "copy-success-bounce" : ""}
-          icon={
-            copied ? (
-              <Check size={14} weight="bold" />
-            ) : (
-              <Copy size={14} weight="regular" />
-            )
-          }
-          onClick={handleCopy}
-          aria-label={copied ? "已复制原文" : "复制全文"}
-        >
-          {copied ? "已复制" : "复制"}
-        </Button>
+        <div className="code-block-actions">
+          {previewHtml && (
+            <HtmlPreview
+              html={code}
+              label="预览"
+              className="code-block-preview"
+            />
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            // Present only while the confirmation check is shown: the keyframe
+            // runs once on the swap and is never re-triggered by later renders.
+            className={copied ? "copy-success-bounce" : ""}
+            icon={
+              copied ? (
+                <Check size={14} weight="bold" />
+              ) : (
+                <Copy size={14} weight="regular" />
+              )
+            }
+            onClick={handleCopy}
+            aria-label={copied ? "已复制原文" : "复制全文"}
+          >
+            {copied ? "已复制" : "复制"}
+          </Button>
+        </div>
       </div>
       <div className="code-block-scroll">
         <div className="code-block-table">

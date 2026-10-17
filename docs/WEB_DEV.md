@@ -45,16 +45,25 @@ node .build/migrate-session-storage.mjs --home /absolute/path/to/forge-state --a
 所选模型需要支持图片输入；图片按对应 API 的原生图片内容发送，不转换成文字。
 后端需要包含图片协议支持，仅热更新 renderer 不足以启用图片发送。
 
+## HTML 预览
+
+Web 工作台可以把两类 HTML 渲染成真实页面：会话中围栏标记为 `html`/`htm`/`xhtml` 的代码块，以及文件变更中路径以 `.html`/`.htm` 结尾的文件（删除的变更不提供预览）。代码块右上角的「预览」按钮与差异卡片标题栏的「预览 HTML」按钮会打开预览对话框。
+
+- 预览文档由后端单独返回（`POST /api/preview`、`POST /api/preview/file` 取得一次性 URL，`GET /preview/document?id=…` 返回内容），因此和主页面同源，也要求同样的认证 cookie；URL 中的 id 为 24 字节随机值，保留最近 24 个文档、30 分钟、合计 8 MiB。
+- 预览文档只以 `sandbox="allow-scripts"` 嵌入（没有 `allow-same-origin`），所以脚本在预览内运行，但读不到工作台 DOM、cookie 或工作区文件；文档 CSP 为 `default-src 'none'`、`connect-src 'none'`、`form-action 'none'`，图片/字体/媒体只允许 `data:`/`blob:`，无法访问网络。`X-Frame-Options` 仅对这个端点放宽为 `SAMEORIGIN`，工作台其余页面仍是 `DENY`。
+- 文件预览只读取工作区内、非符号链接、非隐藏路径（`.git`、`.env*` 等一律拒绝）、UTF-8、不超过 1 MiB 的 `.html`/`.htm` 文件；这是读取文件的快捷方式，不会写入或执行工作区内容。
+- 该能力依赖 Web 后端端点，桌面 Electron 宿主没有对应实现，因此共享 renderer 在桌面端不显示预览按钮。修改后端或共享契约后需要重启 `pnpm dev:web`；只改 renderer 时热更新即可。
+
 ## 安全边界
 
 这是可信局域网中的单用户 **HTTP 开发入口**，不是公网部署方案、多租户服务或 OS 沙箱。口令、会话、代码等在 HTTP 网络上传输，没有 TLS 加密；不要端口转发到公网，不要在不可信网络使用。
 
-页面、源码、API 和所有 WebSocket 均要求认证。HTTP API 额外校验精确 Host/Origin、JSON POST 和已登记的页面标识；事件 WebSocket 校验 Host/Origin、认证 cookie、页面标识和事件游标。认证 cookie 为 HttpOnly、SameSite=Strict，最长 12 小时；HMR WebSocket 另保留 Vite token 校验。只有 Web dev 的 HTML 放宽 CSP 以支持 HMR，桌面生产 HTML 的 CSP 不变。认证用户仍具有与本机使用 Forge 类似的强大能力（包括配置 Provider/MCP 和批准命令）；固定工作区不把命令变成沙箱。
+页面、源码、API 和所有 WebSocket 均要求认证。HTTP API 额外校验精确 Host/Origin、JSON POST 和已登记的页面标识；事件 WebSocket 校验 Host/Origin、认证 cookie、页面标识和事件游标。认证 cookie 为 HttpOnly、SameSite=Strict，最长 12 小时；HMR WebSocket 另保留 Vite token 校验。只有 Web dev 的 HTML 放宽 CSP 以支持 HMR，桌面生产 HTML 的 CSP 不变；HTML 预览文档有独立的严格 CSP，并只在无 `allow-same-origin` 的沙箱中嵌入。认证用户仍具有与本机使用 Forge 类似的强大能力（包括配置 Provider/MCP 和批准命令）；固定工作区不把命令变成沙箱。
 
 ## 聚焦检查
 
 ```sh
-pnpm exec vitest run tests/web-host.test.ts tests/web-bridge.test.ts tests/web-socket-browser.test.ts
+pnpm exec vitest run tests/web-host.test.ts tests/web-bridge.test.ts tests/web-socket-browser.test.ts tests/renderer/html-preview.test.ts tests/renderer/html-preview-mounted.test.ts
 ```
 
 浏览器冒烟必须先使用临时 `FORGE_HOME` 启动独立 dev 服务，避免读取真实配置或改动用户会话，然后运行：

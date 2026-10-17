@@ -1,6 +1,7 @@
 import { Component, type ReactNode, memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { isHtmlLanguage } from "../../../shared/html-preview";
 import { externalUrlSchema } from "../../../shared/ipc";
 import { CodeBlock } from "../primitives/CodeBlock";
 
@@ -76,7 +77,15 @@ function components(highlight: boolean): Components {
         )?.[1] ?? "text";
       return (
         <div className="markdown-code">
-          <CodeBlock code={code} language={language} highlight={highlight} />
+          <CodeBlock
+            code={code}
+            language={language}
+            highlight={highlight}
+            // A streamed block (highlight disabled) is still changing, so it
+            // offers no preview; a settled block offers one when the host has
+            // a preview endpoint. The host probe decides the rest.
+            previewHtml={highlight && isHtmlLanguage(language)}
+          />
         </div>
       );
     },
