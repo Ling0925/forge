@@ -7,7 +7,9 @@
   border-radius: var(--radius-card);
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  /* DESIGN.md §3 sets code at 13px/20px; 12.5px read a full step below the
+     16px body and made code the least legible block in an answer. */
+  font-size: 13px;
   line-height: var(--leading-sm);
   max-width: 100%;
 }
