@@ -1,4 +1,4 @@
-// Temporary pixel check: confirm the title's right edge really fades to the
+// Archived pixel check: confirm the title's right edge really fades to the
 // sidebar background instead of being cut off with a hard edge.
 import { resolve } from "node:path";
 import { inflateSync } from "node:zlib";

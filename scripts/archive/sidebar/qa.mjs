@@ -1,4 +1,5 @@
 // Temporary QA harness: mounts the real Sidebar with real CSS in Chromium.
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 import { chromium } from "playwright";
@@ -319,7 +320,8 @@ try {
   );
 
   check("no console/page errors", errors.length === 0, errors.join(" | "));
-  await page.screenshot({ path: "tmp.sidebar-qa.png" });
+  await mkdir(".build/sidebar-qa", { recursive: true });
+  await page.screenshot({ path: ".build/sidebar-qa/sidebar-qa.png" });
 } finally {
   await browser.close();
 }

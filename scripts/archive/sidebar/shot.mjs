@@ -1,4 +1,5 @@
 // Temporary visual capture of the redesigned sidebar folder list.
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 import { chromium } from "playwright";
@@ -103,6 +104,7 @@ const browser = await chromium.launch({
     : {}),
 });
 try {
+  await mkdir(".build/sidebar-qa", { recursive: true });
   for (const theme of ["light", "dark"]) {
     for (const width of [1440, 390]) {
       const page = await browser.newPage({
@@ -116,9 +118,9 @@ try {
       await page.waitForTimeout(120);
       const sidebar = page.locator(".workbench-sidebar");
       await sidebar.screenshot({
-        path: `tmp.sidebar-${theme}-${width}.png`,
+        path: `.build/sidebar-qa/sidebar-${theme}-${width}.png`,
       });
-      console.log(`captured tmp.sidebar-${theme}-${width}.png`);
+      console.log(`captured .build/sidebar-qa/sidebar-${theme}-${width}.png`);
       await page.close();
     }
   }

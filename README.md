@@ -123,22 +123,50 @@ forge resume <session-uuid>
 
 ### 源码开发（仅限源码检出仓库）
 
-如需在本机基于源码开发或调试，请执行以下命令：
+本机 CLI 开发流程是：**改代码 → 编译 CLI → 重开 `forge`**。首次检出或依赖变更时执行 `pnpm install`，日常修改 CLI 或共享核心后，在仓库根目录执行：
 
 ```sh
-# 安装依赖
-pnpm install
-
-# 编译共享核心与前端产物
-pnpm build
-
-# 运行全量单元测试与类型检查
-pnpm test
-pnpm typecheck
-
-# 启动桌面端调试
-pnpm dev
+node scripts/build-core.mjs
 ```
+
+当前这台机器的 `~/.local/bin/forge` 直接运行 `/home/ling/services/desktop-harness/dist/cli.mjs`；编译成功后，下次启动加载新产物，已运行的进程不会热更新，无需重新安装。此入口是本机配置，其他机器应先检查自己的启动器；也可直接运行 `node dist/cli.mjs`。
+
+只改文档无需编译。代码改动按涉及的功能做聚焦检查；全量测试、类型检查和桌面打包不是本机 CLI 更新的前置步骤。验证启动时使用临时 `FORGE_HOME`，避免读取真实配置或改动会话：
+
+```sh
+node --check dist/cli.mjs
+(
+  forge_check_home=$(mktemp -d) || exit 1
+  trap 'rm -rf -- "$forge_check_home"' EXIT
+  FORGE_HOME="$forge_check_home" node dist/cli.mjs --help
+)
+```
+
+其他开发入口按需要使用：
+
+| 任务 | 命令与说明 |
+| :--- | :--- |
+| Web 界面开发 | `pnpm dev:web`；默认监听 `127.0.0.1:5173`，详见 [Web 开发工作台](docs/WEB_DEV.md) |
+| Electron 开发 | `pnpm dev`；执行完整构建后启动 Electron |
+| 完整构建 | `pnpm build`；重新生成 CLI、桌面宿主和渲染端产物 |
+| 聚焦测试 | `pnpm exec vitest run tests/cli/markdown-bundle.test.ts`；按改动选择对应测试文件 |
+| 全量检查 | 按任务需要运行 `pnpm test`、`pnpm typecheck`、`pnpm lint` |
+| 发布与安装 | 仅在需要分发时按 [交付指南](docs/DELIVERY.md) 执行 |
+
+### 项目目录
+
+| 路径 | 职责 |
+| :--- | :--- |
+| `src/core/`、`src/store/` | 共享代理运行时、会话与设置持久化 |
+| `src/provider/`、`src/tools/`、`src/mcp/`、`src/context/` | 模型协议、工具执行、MCP、项目指令与技能发现 |
+| `src/cli/` | CLI 入口与 Ink 终端交互 |
+| `src/desktop/`、`src/renderer/`、`src/web/` | Electron 宿主、共享 React 界面、Web 开发宿主 |
+| `src/shared/` | 跨入口类型、协议、校验与共享逻辑 |
+| `tests/` | 按模块组织的测试与 fixture |
+| `scripts/` | 构建、开发、验证和显式维护脚本；历史探针见 [QA 归档](scripts/archive/sidebar/README.md) |
+| `docs/` | [分类文档索引](docs/README.md)，区分使用说明、需求与历史记录 |
+| `examples/`、`website/`、`patches/` | 示例、独立网页资源与依赖补丁 |
+| `dist/`、`release/`、`.build/` | 构建产物、发布产物与本地开发证据，均由 Git 忽略 |
 
 ---
 
@@ -202,12 +230,13 @@ forge mcp enable <name>                            # 显式启用该服务
 
 ## 📚 文档导航
 
-详细的设计规格、接口协议与使用指南分类如下：
+完整清单见 **[分类文档索引](docs/README.md)**；需求与历史验收记录的适用范围也在索引中说明。常用入口如下：
 
 | 文档分类 | 关键文档 | 主要内容 |
 | :--- | :--- | :--- |
 | **🚀 进阶工作流** | **[docs/WORKFLOWS.md](docs/WORKFLOWS.md)** | 端到端全流程运行示例、桌面与终端联动实战 |
 | **💻 命令行参考** | **[docs/CLI.md](docs/CLI.md)** | 完整命令、参数标志、输入流及环境变量定义 |
+| **Web 开发** | **[docs/WEB_DEV.md](docs/WEB_DEV.md)** | 启动、热更新、宿主差异与聚焦验证 |
 | **🏛️ 架构与设计** | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**<br>**[DESIGN.md](DESIGN.md)** | 核心运行时架构分解、桌面端视觉语素与交互规范 |
 | **🌐 模型与协议** | **[docs/PROVIDERS.md](docs/PROVIDERS.md)** | Chat Completions 与 Responses 协议支持、断点续传语义 |
 | **🧩 扩展与集成** | **[docs/CONTEXT.md](docs/CONTEXT.md)**<br>**[docs/MCP.md](docs/MCP.md)**<br>**[docs/BROWSER_TOOLS.md](docs/BROWSER_TOOLS.md)** | 项目指令 (AGENTS.md) 与技能包发现、stdio MCP 服务、Playwright 浏览器工具 |
