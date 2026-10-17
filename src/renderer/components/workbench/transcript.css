@@ -1,20 +1,28 @@
+/* Phase marker: a plan step name, not a second author line. It is a quiet
+   label on a hairline rule so a long run reads as sections without every
+   section shouting in 12px uppercase-adjacent weight. */
 .transcript-stage-header {
   margin: 0;
-  font-weight: 400;
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
   color: var(--text-secondary);
   font-size: var(--text-xs);
+  font-weight: 500;
   line-height: var(--leading-sm);
 }
-.transcript-stage-author {
-  font-weight: 600;
-  color: var(--text-primary);
+/* The rule is decorative: it only extends the label to the column edge and is
+   never the sole carrier of any information. */
+.transcript-stage-header::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  min-width: var(--space-4);
+  background: var(--border-subtle);
 }
 .transcript-stage-title {
   overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 /* Reasoning: bespoke workbench component, never a native disclosure. */

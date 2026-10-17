@@ -273,6 +273,18 @@
   color: var(--text-muted);
   margin-bottom: var(--space-1);
 }
+/* The assistant row carries the author label and the whole-answer copy action;
+   it spans the reading column so the action can sit at the far edge without
+   wrapping the label. */
+.wb-app .message-header.message-author-row {
+  display: flex;
+  width: 100%;
+  gap: var(--space-2);
+  /* One 22px row: the copy button is 22px tall on fine pointers so the author
+     line keeps the exact height it had before the action existed (no shift). */
+  min-height: 22px;
+  margin-bottom: var(--space-1);
+}
 .wb-app .message-header::before {
   content: "";
   display: block;
@@ -288,6 +300,50 @@
 .wb-app .message-assistant.message-streaming .message-header::before {
   background: var(--accent);
   animation: pulse-ring 1.5s infinite ease-out;
+}
+/* Quiet, always-available copy action. Muted until hover/focus so it reads as
+   metadata, never as a primary control competing with the answer. */
+.wb-app .message-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color
+    var(--transition-fast);
+}
+.wb-app .message-copy:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.wb-app .message-copy:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.wb-app .message-copy.is-copied {
+  color: var(--success);
+}
+/* Touch pointers get a real target without growing the author row on desktop. */
+@media (pointer: coarse) {
+  .wb-app .message-copy {
+    height: var(--touch-min-target);
+    min-width: var(--touch-min-target);
+    justify-content: center;
+    padding: 0 var(--space-2);
+  }
+  .wb-app .message-header.message-author-row {
+    min-height: var(--touch-min-target);
+  }
 }
 .wb-stack {
   display: flex;

@@ -279,9 +279,50 @@ export function workbenchReducer(
         const pendingReasoning = (run.pendingReasoning ?? []).filter(
           (output) => !reasoningSaved(output, selectedSnapshot),
         );
-        if (!active(run.status) && !pendingOutputs.length && !pendingReasoning.length && !run.streamingText && !run.streamingReasoning)
+        // A snapshot that already contains this turn's streamed text is the
+        // authority for it. Keeping `streamingText` would render the same prose
+        // twice — once as the saved message and once as the live draft — until
+        // the run's terminal event clears the buffer. Only drop it when the
+        // saved content actually covers what is on screen (prefix match), so a
+        // lagging snapshot can never hide text the user is still watching.
+        //
+        // Reasoning is deliberately NOT cleared here: the live thought block
+        // and the persisted reasoning summary are separate surfaces by design
+        // (DESIGN.md §9), and clearing the buffer would remove the finished
+        // thought the reader is still looking at.
+        const liveSaved =
+          run.streamingText.length > 0 &&
+          (selectedSnapshot.messages.some(
+            (message) =>
+              message.role === "assistant" &&
+              Boolean(message.content?.startsWith(run.streamingText)),
+          ) ||
+            outputSaved(
+              {
+                id: "live",
+                text: run.streamingText,
+                truncated: Boolean(run.streamingTruncated),
+                afterMessage: run.streamStartMessage ?? 0,
+              },
+              selectedSnapshot,
+            ));
+        if (
+          !active(run.status) &&
+          !pendingOutputs.length &&
+          !pendingReasoning.length &&
+          (!run.streamingText || liveSaved) &&
+          !run.streamingReasoning
+        )
           delete runs[snap.id];
-        else runs[snap.id] = { ...run, pendingOutputs, pendingReasoning };
+        else
+          runs[snap.id] = {
+            ...run,
+            pendingOutputs,
+            pendingReasoning,
+            ...(liveSaved
+              ? { streamingText: "", streamingTruncated: false }
+              : {}),
+          };
       }
       const cache = { ...state.snapshotCache };
       const persistedAt = cache[snap.id]?.persistedAt;

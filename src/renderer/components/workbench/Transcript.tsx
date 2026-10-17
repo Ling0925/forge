@@ -1,4 +1,5 @@
-import { Fragment, memo, useLayoutEffect, useRef, useState } from "react";
+import { Check, Copy } from "@phosphor-icons/react";
+import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
 import type {
   ApprovalRequest,
@@ -51,15 +52,59 @@ function ToolPreviews({
   );
 }
 
-function StageHeader({ stage }: { readonly stage: TranscriptStage }) {
+/**
+ * Whole-answer copy. Sits in the quiet author row rather than floating over the
+ * prose, so it never covers text and never shifts the message when it appears.
+ * The confirmation is exposed through the button's own label, and the icon swap
+ * is the only motion (reduced-motion already collapses transitions globally).
+ */
+function MessageCopyButton({ text }: { readonly text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useLayoutEffect(() => () => clearTimeout(timer.current), []);
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // The clipboard can be unavailable (insecure origin, denied permission).
+      // Leave the label unchanged rather than claiming a copy that did not
+      // happen.
+    }
+  }, [text]);
   return (
-    <h3 className="transcript-stage-header">
-      <span className="transcript-stage-author">Forge</span>
-      {stage.title && <span className="transcript-stage-title">{stage.title}</span>}
-    </h3>
+    <button
+      type="button"
+      className={`message-copy${copied ? " is-copied" : ""}`}
+      onClick={() => void copy()}
+      aria-label={copied ? "已复制整段回答" : "复制整段回答"}
+      title={copied ? "已复制" : "复制整段回答"}
+    >
+      {copied ? (
+        <Check size={13} weight="bold" aria-hidden="true" />
+      ) : (
+        <Copy size={13} aria-hidden="true" />
+      )}
+      <span>{copied ? "已复制" : "复制"}</span>
+    </button>
   );
 }
 
+/**
+ * Phase marker. Only a real AI plan step produces one, and it then carries that
+ * step's title — a bare "Forge" line above every answer duplicated the author
+ * label that the message itself now owns, so an unnamed stage renders nothing.
+ */
+function StageHeader({ stage }: { readonly stage: TranscriptStage }) {
+  if (!stage.title) return null;
+  return (
+    <h3 className="transcript-stage-header">
+      <span className="transcript-stage-title">{stage.title}</span>
+    </h3>
+  );
+}
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
 }: { readonly snapshot: SessionSnapshot }) {
@@ -99,6 +144,12 @@ export const StoredTranscript = memo(function StoredTranscript({
               {headers[index] && <StageHeader stage={headers[index]} />}
               <article className={`message message-${item.role}`}>
                 {item.role === "user" && <div className="message-header">你</div>}
+                {item.role === "assistant" && (
+                  <div className="message-header message-author-row">
+                    <span>Forge</span>
+                    {item.content && <MessageCopyButton text={item.content} />}
+                  </div>
+                )}
                 {item.role === "user" && item.images && item.images.length > 0 && (
                   <ImageAttachments key={snapshot.id} images={item.images} />
                 )}
@@ -250,6 +301,13 @@ export function Transcript() {
   // Reasoning deltas grow the live tail too, so they must count as arriving
   // content or the follow-scroll would stall while the model is still thinking.
   const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning ?? ""}:${run?.streamingText ?? ""}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
+  // Has this turn produced answer prose yet? Either the live draft is still
+  // streaming, or the snapshot already persisted it and the draft was cleared
+  // on sync. Both mean the model has left its reasoning phase.
+  const answerStarted =
+    Boolean(run?.streamingText) ||
+    (snapshot?.messages.at(-1)?.role === "assistant" &&
+      Boolean(snapshot?.messages.at(-1)?.content));
   const jumpToLatest = () => {
     navigation.current.reset();
     setHasNewContent(false);
@@ -351,9 +409,11 @@ export function Transcript() {
               key={`${sessionId}:${run.runId ?? "pending"}:${run.streamingTurn ?? 0}:reasoning`}
               text={run.streamingReasoning}
               // The runtime keeps this buffer after the answer starts, so the
-              // "live" state ends with the answer, not the model's reasoning
-              // phase: the block then reads as a normal collapsible 思考过程.
-              live={!run.streamingText}
+              // "live" state ends with the answer, not with the model's
+              // reasoning phase. "Answer started" must therefore include an
+              // answer that has already been persisted: clearing the live draft
+              // on sync must not flip a finished thought back to 思考中.
+              live={!run.streamingText && !answerStarted}
               truncated={Boolean(run.reasoningTruncated)}
             />
           )}
