@@ -95,7 +95,8 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
   await new Promise<void>((done) => web.server.listen(port, "127.0.0.1", done));
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    const page = await context.newPage();
     await page.addInitScript(() => {
       const Native = window.WebSocket;
       window.WebSocket = class extends Native {
@@ -178,10 +179,31 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
       return window.forge.startRun({ sessionId: session.id, prompt: "survive refresh", permission: "readonly" });
     }, directory);
     await expect.poll(() => events.some((event) => event.event.type === "text_delta")).toBe(true);
+    const other = await page.context().newPage();
+    const otherEvents: RunEvent[] = [];
+    other.on("pageerror", error => errors.push(error.message));
+    await other.exposeFunction("recordEvent", (raw: unknown) => otherEvents.push(runEventSchema.parse(raw)));
+    await other.goto(`${web.origin}/probe`);
+    await other.waitForFunction(() => Reflect.get(window, "probeReady") === true);
+    expect((await page.evaluate(() => window.forge.getSettings())).isConfigured).toBe(true);
+    expect((await other.evaluate(() => window.forge.getSettings())).isConfigured).toBe(true);
+    let blockedResumes = 0;
+    await page.route("**/api/connection", route => {
+      blockedResumes++;
+      return route.abort("internetdisconnected");
+    });
     const socketCount = sockets.filter(url => url.includes("/api/events")).length;
     await page.evaluate(() => Reflect.get(window, "testEventSocket").close());
+    await expect.poll(() => blockedResumes).toBeGreaterThan(0);
+    expect((await other.evaluate(sessionId => window.forge.getSession(sessionId), running.sessionId)).status).toBe("running");
+    await page.unroute("**/api/connection");
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event("online"));
+      window.dispatchEvent(new Event("pageshow"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
     await expect.poll(() => sockets.filter(url => url.includes("/api/events")).length).toBe(socketCount + 1);
-    await expect.poll(() => page.locator("body > [role=status]").innerText()).toContain("WebSocket 实时连接");
+    await expect.poll(() => page.locator("body > [role=status]").innerText()).toContain("已连接");
     expect(events.filter(event => event.event.type === "text_delta")).toHaveLength(1);
     expect(events.some(event => event.event.type === "run_finished")).toBe(false);
     events.length = 0;
@@ -201,6 +223,8 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
     release();
     await page.getByRole("button", { name: "取消", exact: true }).waitFor({ state: "hidden" });
     await page.locator("p").filter({ hasText: /^fixture finished$/ }).waitFor();
+    await expect.poll(() => otherEvents.some(event => event.event.type === "run_finished")).toBe(true);
+    expect(otherEvents.filter(event => event.event.type === "text_delta").map(event => event.event.type === "text_delta" ? event.event.text : "")).toEqual(Array.from({ length: 5 }, (_, i) => `progress ${i}\n`));
     const snapshot = await page.evaluate((sessionId) => window.forge.getSession(sessionId), running.sessionId);
     const deltaResponse = page.waitForResponse(async response => {
       if (!response.url().endsWith("/api/rpc")) return false;
@@ -239,4 +263,4 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
     await web.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 20_000);
+}, 30_000);

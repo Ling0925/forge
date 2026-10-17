@@ -34,12 +34,22 @@ export async function installWebHost(): Promise<void> {
   let stopped = false;
   let clientId = "";
   let eventSocket: WebSocket | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let connecting = false;
+  let socketGeneration = 0;
+  let cleanupForeground = () => {};
   const snapshots = new Map<string, { readonly revision: string; readonly snapshot: SessionSnapshot; readonly size: number }>();
   const fail = (message: string) => {
     if (stopped) return;
     stopped = true;
     status.title = "";
-    eventSocket?.close();
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
+    socketGeneration++;
+    const socket = eventSocket;
+    eventSocket = undefined;
+    socket?.close();
+    cleanupForeground();
     status.textContent = message;
     status.style.background = "#f7d4cf";
   };
@@ -59,11 +69,10 @@ export async function installWebHost(): Promise<void> {
       signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) {
-      const details = await response.json().catch(() => null);
-      if ([401, 410].includes(response.status) || (response.status === 409 && details?.error?.startsWith("Another page")))
-        fail(
-          "Web 连接失效或已被另一页面接管；任务继续在后台运行，请刷新重新连接。",
-        );
+      if (response.status === 401)
+        fail("Web 登录已过期，请刷新页面重新登录；任务继续在后台运行。");
+      else if (response.status === 410)
+        fail("Web 连接已过期，请刷新页面重新连接；任务继续在后台运行。");
       throw new Error(
         `Web request failed (${response.status}); inspect state before retrying.`,
       );
@@ -106,23 +115,32 @@ export async function installWebHost(): Promise<void> {
     for (const event of handshake.recovery) receive(event);
     const connectedTitle = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 断线自动重连 · 后端修改需重启`;
     const connectedStatus = "Web Dev · 已连接";
+    let wake = () => {};
     await new Promise<void>((ready, reject) => {
       let failures = 0;
       const retry = () => {
-        if (stopped) { reject(new Error("Web connection stopped")); return; }
+        if (stopped || retryTimer !== undefined) return;
         status.title = "";
         status.textContent = "连接中断，正在自动重连…任务继续在后台运行。";
         status.style.background = "#eee9d7";
-        setTimeout(() => void connect(true), Math.min(10_000, 500 * 2 ** Math.min(failures++, 5)));
+        retryTimer = setTimeout(() => {
+          retryTimer = undefined;
+          void connect(true);
+        }, Math.min(10_000, 500 * 2 ** Math.min(failures++, 5)));
       };
       const connect = async (resume: boolean) => {
-        if (stopped) return;
+        if (stopped || connecting) return;
+        connecting = true;
+        const generation = ++socketGeneration;
         try {
           if (resume) {
-            const state = z.object({ resumable: z.boolean() }).parse(await post("/api/connection", { cursor }, 10_000));
+            const state = z.object({ resumable: z.boolean() }).parse(
+              await post("/api/connection", { cursor }, 10_000),
+            );
+            if (stopped || generation !== socketGeneration) return;
             if (!state.resumable) { location.reload(); return; }
           }
-          if (stopped) return;
+          if (stopped || generation !== socketGeneration) return;
           const url = new URL("/api/events", location.href);
           url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
           url.searchParams.set("clientId", clientId);
@@ -135,10 +153,14 @@ export async function installWebHost(): Promise<void> {
             if (disconnected) return;
             disconnected = true;
             clearTimeout(timeout);
+            if (generation !== socketGeneration) return;
+            connecting = false;
+            if (eventSocket === socket) eventSocket = undefined;
             socket.close();
-            if (code === 4001 || code === 1008) {
-              fail(code === 4001 ? "此页面已被另一窗口接管，任务继续运行。" : "事件协议异常，请重新连接。");
-              reject(new Error("WebSocket control ended"));
+            if (stopped) return;
+            if (code === 1008) {
+              fail("事件协议异常，请刷新页面重新连接；任务继续在后台运行。");
+              reject(new Error("WebSocket protocol ended"));
               return;
             }
             retry();
@@ -146,14 +168,17 @@ export async function installWebHost(): Promise<void> {
           socket.onclose = event => disconnect(event.code);
           socket.onerror = () => disconnect();
           socket.onmessage = message => {
-            if (stopped || disconnected) return;
+            if (stopped || disconnected || generation !== socketGeneration) return;
             try {
               const batch = batchSchema.parse(JSON.parse(message.data));
               if (batch.cursor !== cursor + batch.events.length) throw new Error("Event sequence gap");
-              for (const event of batch.events) receive(event);
-              cursor = batch.cursor;
+              for (const event of batch.events) {
+                receive(event);
+                cursor++;
+              }
               socket.send(JSON.stringify({ cursor }));
               clearTimeout(timeout);
+              connecting = false;
               failures = 0;
               status.title = connectedTitle;
               status.textContent = connectedStatus;
@@ -161,10 +186,48 @@ export async function installWebHost(): Promise<void> {
               ready();
             } catch { disconnect(); }
           };
-        } catch { retry(); }
+        } catch {
+          if (generation !== socketGeneration) {
+            if (stopped) reject(new Error("Web connection stopped"));
+            return;
+          }
+          connecting = false;
+          if (stopped) {
+            reject(new Error("Web connection stopped"));
+            return;
+          }
+          retry();
+        }
+      };
+      wake = () => {
+        if (stopped) return;
+        if (retryTimer !== undefined) {
+          clearTimeout(retryTimer);
+          retryTimer = undefined;
+        }
+        if (connecting) return;
+        socketGeneration++;
+        const previous = eventSocket;
+        eventSocket = undefined;
+        previous?.close();
+        connecting = false;
+        void connect(true);
       };
       void connect(false);
     });
+    const onVisible = () => {
+      if (document.visibilityState === "visible") wake();
+    };
+    const onPageShow = () => wake();
+    const onOnline = () => wake();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+    cleanupForeground = () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+    };
     Object.defineProperty(window, "forge", {
       value: Object.freeze({
         ...bridge,
