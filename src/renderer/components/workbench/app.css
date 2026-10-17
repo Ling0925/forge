@@ -391,6 +391,9 @@
 .wb-mobile-nav {
   display: none;
 }
+.wb-sidebar-backdrop {
+  display: none;
+}
 .native-dialog {
   padding: 0;
   color: var(--text-primary);
@@ -527,18 +530,74 @@
   .wb-app.mobile-inspector .workbench-main {
     display: none;
   }
-  .wb-app .workbench-sidebar {
-    display: none;
+  .wb-sidebar-backdrop {
+    display: block;
     position: fixed;
-    top: var(--space-12);
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 28;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-normal);
+  }
+  .wb-sidebar-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .wb-app .workbench-sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
     bottom: 0;
     left: 0;
-    height: auto;
-    width: min(320px, 90vw);
+    height: 100dvh;
+    width: min(320px, 85vw);
+    max-width: 85vw;
+    z-index: 30;
+    background-color: var(--sidebar-bg);
     box-shadow: var(--shadow-overlay);
+    transform: translateX(-100%);
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform var(--transition-normal),
+      visibility 0s linear var(--transition-normal);
+    will-change: transform;
+    overscroll-behavior: contain;
   }
   .wb-app .workbench-sidebar.is-open {
-    display: flex;
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition: transform var(--transition-normal);
+  }
+  .wb-app.sidebar-open .workbench-main {
+    overflow: hidden;
+  }
+  .sidebar-sessions-list {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sidebar-mobile-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+  }
+  .sidebar-mobile-close:hover {
+    background-color: var(--surface-hover);
+    color: var(--text-primary);
+  }
+  .session-item-main {
+    min-height: 38px;
+  }
+  .session-folder-header {
+    min-height: 38px;
   }
   .wb-app .workbench-conversation-scroll {
     padding: var(--space-5);

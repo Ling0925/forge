@@ -68,26 +68,48 @@ function Workbench() {
   };
   return (
     <div
-      className={`workbench wb-app mobile-${state.mobileTab}${inspectorCollapsed ? " inspector-collapsed" : ""}`}
+      className={`workbench wb-app mobile-${state.mobileTab}${inspectorCollapsed ? " inspector-collapsed" : ""}${state.isMobileSidebarOpen ? " sidebar-open" : ""}`}
     >
       <nav className="wb-mobile-nav" aria-label="工作台导航">
-        <Button onClick={() => setMobileSidebar(!state.isMobileSidebarOpen)}>
+        <Button
+          onClick={() => setMobileSidebar(!state.isMobileSidebarOpen)}
+          aria-pressed={state.isMobileSidebarOpen}
+          aria-expanded={state.isMobileSidebarOpen}
+        >
           会话
         </Button>
         <Button
-          onClick={() => setMobileTab("task")}
-          aria-pressed={state.mobileTab === "task"}
+          onClick={() => {
+            setMobileSidebar(false);
+            setMobileTab("task");
+          }}
+          aria-pressed={state.mobileTab === "task" && !state.isMobileSidebarOpen}
         >
           任务
         </Button>
         <Button
-          onClick={revealInspector}
+          onClick={() => {
+            setMobileSidebar(false);
+            revealInspector();
+          }}
           aria-pressed={state.mobileTab === "inspector"}
         >
           详情{pending ? ` · 待批准 ${pending}` : ""}
         </Button>
-        <Button onClick={() => openSettings(true)}>设置</Button>
+        <Button
+          onClick={() => {
+            setMobileSidebar(false);
+            openSettings(true);
+          }}
+        >
+          设置
+        </Button>
       </nav>
+      <div
+        className={`wb-sidebar-backdrop${state.isMobileSidebarOpen ? " is-open" : ""}`}
+        onClick={() => setMobileSidebar(false)}
+        aria-hidden="true"
+      />
       <Sidebar />
       <main className={`workbench-main${isNew ? " wb-new-session" : ""}`}>
         <header className="workbench-task-header">

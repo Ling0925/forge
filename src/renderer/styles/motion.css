@@ -31,23 +31,7 @@
   --ease-in-out-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 1. Narrow sidebar opening & wide on-demand inspector reveal */
-@media (max-width: 1000px) {
-  .wb-app .workbench-sidebar.is-open {
-    animation: sidebar-slide-in var(--motion-duration-md) var(--motion-ease-out);
-  }
-}
-
-@keyframes sidebar-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(calc(-1 * var(--motion-distance-lg)));
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
+/* 1. Wide on-demand inspector reveal (narrow sidebar transition is handled smoothly via two-way transform in app.css) */
 
 @media (min-width: 1001px) {
   .wb-app:not(.inspector-collapsed) .workbench-inspector {

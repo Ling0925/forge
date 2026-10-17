@@ -42,6 +42,16 @@
   gap: var(--space-2);
 }
 
+.sidebar-brand-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.sidebar-mobile-close {
+  display: none;
+}
+
 .sidebar-logo {
   display: flex;
   align-items: center;

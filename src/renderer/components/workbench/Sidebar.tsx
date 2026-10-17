@@ -7,6 +7,7 @@ import {
   MagnifyingGlass,
   Plus,
   WarningCircle,
+  X,
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { SessionSummary } from "../../shared-types";
@@ -77,19 +78,30 @@ export function Sidebar() {
             <span className="sidebar-title">Forge</span>
             <span className="sidebar-badge">Agent</span>
           </div>
-          <button
-            type="button"
-            className="sidebar-new-btn"
-            onClick={() => {
-              openNewSession(true);
-              setMobileSidebar(false);
-            }}
-            title="新建会话 (Ctrl+N / Cmd+N)"
-            aria-label="新建会话"
-          >
-            <Plus size={15} weight="bold" />
-            <span>新任务</span>
-          </button>
+          <div className="sidebar-brand-actions">
+            <button
+              type="button"
+              className="sidebar-new-btn"
+              onClick={() => {
+                openNewSession(true);
+                setMobileSidebar(false);
+              }}
+              title="新建会话 (Ctrl+N / Cmd+N)"
+              aria-label="新建会话"
+            >
+              <Plus size={15} weight="bold" />
+              <span>新任务</span>
+            </button>
+            <button
+              type="button"
+              className="wb-icon-btn sidebar-mobile-close"
+              onClick={() => setMobileSidebar(false)}
+              aria-label="关闭侧边栏"
+              title="关闭侧边栏"
+            >
+              <X size={15} weight="bold" />
+            </button>
+          </div>
         </div>
 
         <div
