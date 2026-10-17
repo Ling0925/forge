@@ -23,6 +23,7 @@ export const STREAMING_TEXT_LIMIT = 1000000;
 export const STREAMING_REASONING_LIMIT = 131072;
 
 export interface ActiveRunState {
+  readonly providerRetry?: number | undefined;
   readonly streamingReasoning?: string;
   readonly reasoningTruncated?: boolean;
   readonly reasoningStartMessage?: number;
@@ -327,6 +328,18 @@ export function workbenchReducer(
         runId,
       };
       let next = run;
+      if (event.type === "retry_reset")
+        next = {
+          ...run,
+          streamingText: "",
+          streamingReasoning: "",
+          streamingTruncated: false,
+          reasoningTruncated: false,
+        };
+      if (event.type === "provider_retry")
+        next = { ...run, providerRetry: event.attempt };
+      if (event.type === "context_usage")
+        next = { ...run, providerRetry: undefined };
       if (event.type === "run_started")
         next = { ...run, accepted: true, permission: event.permission };
       if (event.type === "permission_changed") {
@@ -413,6 +426,7 @@ export function workbenchReducer(
       if (event.type === "run_finished")
         next = {
           ...run,
+          providerRetry: undefined,
           pendingOutputs: retainOutput(run, state.activeSnapshot),
           pendingReasoning: retainReasoning(run, state.activeSnapshot),
           streamingReasoning: "",
@@ -427,7 +441,7 @@ export function workbenchReducer(
         };
       if (event.type === "error") next = { ...run, error: event.error };
       const result = putRun(state, next);
-      if (event.type === "text_delta" || event.type === "reasoning_delta")
+      if (event.type === "text_delta" || event.type === "reasoning_delta" || event.type === "retry_reset" || event.type === "provider_retry")
         return result; // transient text never copies the stored transcript
       const snapshot = state.activeSnapshot;
       return {

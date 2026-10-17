@@ -8,6 +8,7 @@ import {
   createShutdownController,
 } from "../../src/desktop/lifecycle";
 import type { HarnessService } from "../../src/shared/contracts";
+import type { EventSink } from "../../src/shared/contracts";
 import { ForgeError } from "../../src/shared/errors";
 import type { RunId, WorkerMessage } from "../../src/shared/ipc";
 import {
@@ -69,6 +70,31 @@ function handle(messages: WorkerMessage[]): RunId {
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("worker controller", () => {
+  it("recovers retry status without resurrecting a discarded partial generation", async () => {
+    let emit: EventSink | undefined;
+    let finish = () => {};
+    const messages: WorkerMessage[] = [];
+    const controller = createWorkerController(service({ run: async (_input, onEvent) => {
+      emit = onEvent;
+      onEvent({ type: "run_started", sessionId, timestamp: snapshot.updatedAt, model: "test", permission: "workspace" });
+      await new Promise<void>(resolve => { finish = resolve; });
+      return snapshot;
+    } }), message => messages.push(message));
+    try {
+      await controller.handle({ id: randomUUID(), method: "startRun", input: { sessionId, prompt: "test" } });
+      await tick();
+      if (!emit) throw new Error("Missing active generation");
+      const base = { sessionId, timestamp: snapshot.updatedAt };
+      emit({ ...base, type: "text_delta", text: "discarded" });
+      emit({ ...base, type: "reasoning_delta", text: "discarded reasoning" });
+      emit({ ...base, type: "retry_reset" });
+      emit({ ...base, type: "provider_retry", attempt: 2, maxAttempts: 5, reason: "protocol" });
+      expect(controller.recoveryEvents().some(item => item.event.type === "text_delta" || item.event.type === "reasoning_delta")).toBe(false);
+      expect(controller.recoveryEvents().find(item => item.event.type === "provider_retry")?.event).toMatchObject({ attempt: 2 });
+      emit({ ...base, type: "text_delta", text: "replacement" });
+      expect(controller.recoveryEvents().find(item => item.event.type === "text_delta")?.event).toMatchObject({ text: "replacement" });
+    } finally { finish(); await tick(); await controller.dispose(); }
+  });
   for (const permission of ["unrestricted", "readonly"] as const) {
     it(`changes live permission to ${permission} and settles root approval`, async () => {
       const messages: WorkerMessage[] = [];

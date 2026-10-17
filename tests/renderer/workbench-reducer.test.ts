@@ -5,6 +5,7 @@ const sessionB = sessionIdSchema.parse("22222222-2222-4222-8222-222222222222");
 const runA = runIdSchema.parse("33333333-3333-4333-8333-333333333333");
 import { describe, expect, it } from "vitest";
 import type { SessionSnapshot } from "../../src/renderer/shared-types";
+import type { WorkbenchState } from "../../src/renderer/state/workbench-reducer";
 import {
   initialWorkbenchState,
   workbenchReducer,
@@ -23,6 +24,23 @@ const snapshot: SessionSnapshot = {
   changes: [],
 };
 describe("workbench authority", () => {
+  it("resets only the failed live attempt and keeps earlier unsynchronized output", () => {
+    const previous = { id: "prior", text: "prior completed response", afterMessage: 0, truncated: false };
+    let state: WorkbenchState = { ...initialWorkbenchState, activeSessionId: sessionA, activeSnapshot: snapshot,
+      activeRuns: { [sessionA]: { sessionId: sessionA, runId: runA, status: "running" as const,
+        streamingText: "failed text", streamingReasoning: "failed thought", streamingTruncated: true,
+        reasoningTruncated: true, pendingOutputs: [previous], pendingReasoning: [previous] } } };
+    const timestamp = "2026-01-01T00:00:02.000Z";
+    state = workbenchReducer(state, { type: "RUN_EVENT_RECEIVED", event: { runId: runA, event: { type: "retry_reset", sessionId: sessionA, timestamp } } });
+    expect(state.activeRuns[sessionA]?.streamingText).toBe("");
+    expect(state.activeRuns[sessionA]?.streamingReasoning).toBe("");
+    expect(state.activeRuns[sessionA]?.pendingOutputs).toEqual([previous]);
+    expect(state.activeRuns[sessionA]?.pendingReasoning).toEqual([previous]);
+    expect(state.activeSnapshot).toBe(snapshot);
+    state = workbenchReducer(state, { type: "RUN_EVENT_RECEIVED", event: { runId: runA, event: { type: "provider_retry", attempt: 2, maxAttempts: 5, reason: "protocol", sessionId: sessionA, timestamp } } });
+    expect(state.activeRuns[sessionA]?.providerRetry).toBe(2);
+    expect(state.activeSnapshot).toBe(snapshot);
+  });
   it("restores cached history immediately when switching back and accepts background updates", () => {
     let state = workbenchReducer(initialWorkbenchState, { type: "SELECT_SESSION", sessionId: sessionA });
     state = workbenchReducer(state, { type: "SET_ACTIVE_SNAPSHOT", snapshot });

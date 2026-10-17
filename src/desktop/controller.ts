@@ -133,13 +133,16 @@ export function createWorkerController(
     if (
       value.type === "run_started" ||
       value.type === "state_changed" ||
-      value.type === "permission_changed"
+      value.type === "permission_changed" ||
+      value.type === "provider_retry"
     )
       run.recovery.set(value.type, value);
-    if (value.type === "tool_started") {
+    if (value.type === "tool_started" || value.type === "retry_reset") {
       run.recovery.delete("text_delta");
       run.recovery.delete("reasoning_delta");
     }
+    if (value.type === "context_usage" || value.type === "tool_started" || value.type === "retry_reset")
+      run.recovery.delete("provider_retry");
     if (value.type === "text_delta" || value.type === "reasoning_delta") {
       const previous = run.recovery.get(value.type);
       const text = previous && (previous.type === "text_delta" || previous.type === "reasoning_delta")
@@ -487,6 +490,8 @@ export function createWorkerController(
       if (started) result.push({ runId, event: started });
       const permission = run.recovery.get("permission_changed");
       if (permission) result.push({ runId, event: permission });
+      const retry = run.recovery.get("provider_retry");
+      if (retry) result.push({ runId, event: retry });
       result.push({ runId, event: run.recovery.get("state_changed") ?? { ...base, type: "state_changed", status: "running" } });
       for (const type of ["reasoning_delta", "text_delta"]) {
         const event = run.recovery.get(type);
