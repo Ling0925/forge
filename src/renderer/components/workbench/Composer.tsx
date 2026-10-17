@@ -726,7 +726,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 loading={Boolean(run?.isCancelling)}
                 aria-label={run?.isCancelling ? "正在取消" : "取消"}
                 title={run?.isCancelling ? "正在取消…" : "停止生成"}
-                icon={<Stop size={14} weight="fill" aria-hidden="true" />}
+                icon={<Stop size={16} weight="fill" aria-hidden="true" />}
                 onClick={() => void cancelRun()}
               />
             ) : (
@@ -770,9 +770,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               iconOnly={true}
               icon={
                 mode === "plan" ? (
-                  <Compass size={14} weight="fill" />
+                  <Compass size={16} weight="fill" />
                 ) : (
-                  <Lightning size={14} weight="fill" />
+                  <Lightning size={16} weight="fill" />
                 )
               }
               ariaLabel="运行模式"
@@ -821,11 +821,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               iconOnly={true}
               icon={
                 (mode === "plan" ? "readonly" : displayedPermission) === "readonly" ? (
-                  <Lock size={14} />
+                  <Lock size={16} />
                 ) : (mode === "plan" ? "readonly" : displayedPermission) === "unrestricted" ? (
-                  <ShieldWarning size={14} />
+                  <ShieldWarning size={16} />
                 ) : (
-                  <ShieldCheck size={14} />
+                  <ShieldCheck size={16} />
                 )
               }
               ariaLabel="执行权限"

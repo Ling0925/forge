@@ -105,7 +105,7 @@ export function ModelPicker(props: {
         className="composer-dropdown-trigger composer-model-summary"
         title={`${props.value || "尚未选择模型"}${props.reasoning ? ` · 思考：${effortLabel}` : ""}`}
       >
-        <Cpu size={12} aria-hidden="true" />
+        <Cpu size={16} aria-hidden="true" />
         <span className="composer-dropdown-label">
           {props.value.split("/").at(-1) || "选择模型"}
         </span>
@@ -125,7 +125,7 @@ export function ModelPicker(props: {
             )}
           </span>
         )}
-        <CaretDown size={10} aria-hidden="true" />
+        <CaretDown size={16} aria-hidden="true" />
       </summary>
       {open && (
         <div className="composer-model-panel">

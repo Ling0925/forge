@@ -144,6 +144,21 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
       expect(actionBox.width).toBeGreaterThanOrEqual(44);
       expect(actionBox.height).toBeGreaterThanOrEqual(44);
       expect(toolbarBox.height).toBeLessThanOrEqual(48);
+      expect(Math.abs(promptBox.height - actionBox.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(promptBox.y - actionBox.y)).toBeLessThanOrEqual(1);
+      const iconSizes = await page.locator(
+        '.composer-action svg, .composer-toolbar-start button svg, .composer-model-summary > svg',
+      ).evaluateAll(nodes => nodes.map(node => {
+        const box = node.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      }));
+      expect(iconSizes.length).toBe(5);
+      for (const icon of iconSizes) {
+        expect(icon.width).toBeGreaterThanOrEqual(16);
+        expect(icon).toEqual(iconSizes[0]);
+      }
+      const modelFont = await modelSummary.evaluate(node => getComputedStyle(node).fontSize);
+      expect(modelFont).toBe(await input.evaluate(node => getComputedStyle(node).fontSize));
       const modelAlignment = await modelSummary.evaluate(node => {
         const edge = node.closest(".composer-toolbar-end")?.getBoundingClientRect().right;
         const caret = node.querySelector("svg:last-child")?.getBoundingClientRect().right;
@@ -157,6 +172,10 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
         if (!box) throw new Error(`Missing ${name}`);
         expect(box.width).toBeGreaterThanOrEqual(44);
         expect(box.height).toBeGreaterThanOrEqual(44);
+        if (name !== "运行中消息") {
+          expect(Math.abs(box.height - toolbarBox.height)).toBeLessThanOrEqual(1);
+          expect(Math.abs(box.y - toolbarBox.y)).toBeLessThanOrEqual(1);
+        }
       }
       const resume = await page.getByRole("button", { name: "继续队列", exact: true }).boundingBox();
       const clear = await page.getByRole("button", { name: "清空队列", exact: true }).boundingBox();

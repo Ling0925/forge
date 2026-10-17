@@ -9,6 +9,8 @@
 .wb-app .composer-split .composer-input-row .composer-prompt {
   min-width: 0;
   margin: 0;
+  padding-top: calc((var(--touch-min-target, 44px) - 36px - 2px) / 2);
+  padding-bottom: calc((var(--touch-min-target, 44px) - 36px - 2px) / 2);
 }
 
 .wb-app .composer-split .composer-submit-col {
@@ -79,6 +81,8 @@
   width: auto;
   max-width: 100%;
   min-width: 0;
+  height: var(--touch-min-target, 44px);
+  font-size: var(--text-base, 14px);
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -131,4 +135,13 @@
     height: 44px;
     min-height: 44px;
   }
+}
+
+.wb-app .composer-split .composer-submit-col .btn,
+.wb-app .composer-split .composer-toolbar .composer-dropdown-trigger {
+  border-radius: var(--radius-composer, 12px);
+}
+
+.wb-app .composer-split .composer-toolbar svg {
+  flex-shrink: 0;
 }
