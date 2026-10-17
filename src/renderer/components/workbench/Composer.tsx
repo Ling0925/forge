@@ -21,6 +21,7 @@ import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
 import { UsagePopover } from "./UsagePopover";
 import { useAutosizePrompt } from "./useAutosizePrompt";
+import { useSlashCommands } from "./useSlashCommands";
 import "./composer-activity.css";
 
 const taskSchema = z.object({
@@ -245,7 +246,20 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   };
   const isConfigured = state.settings?.isConfigured === true;
   const configurationHint = "连接模型后即可开始对话。";
+  const { openNewSession } = useWorkbench();
+  const slash = useSlashCommands({
+    prompt, draftId, input: promptRef, running,
+    busy: busy || !!submission || savingEffort,
+    setPrompt: value => {
+      setDrafts(old => ({ ...old, [draftId]: value }));
+      setManualDrafts(old => ({ ...old, [draftId]: false }));
+    },
+    openNew: () => openNewSession(true),
+    openSettings: () => openSettings(true),
+    stop: cancelRun,
+  });
   const submit = async () => {
+    if (slash.isCommand) { await slash.execute(); return; }
     if (submitting.current || effortSaving.current || running || submission)
       return;
     if (!isConfigured) {
@@ -255,7 +269,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     const parsed = taskSchema.safeParse({
       workspace: isNew ? workspace : state.activeSnapshot?.workspace,
       model,
-      prompt,
+      prompt: prompt.trimStart().startsWith("//") ? prompt.replace("//", "/") : prompt,
     });
     if (!parsed.success) {
       setError(parsed.error.issues.map((issue) => issue.message).join("；"));
@@ -421,6 +435,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </output>
           )}
         </div>
+        {slash.view}
         <div className="composer-prompt composer-surface is-quiet">
           <label htmlFor={promptId} className="visually-hidden">
             {isNew ? "新会话消息" : "继续任务"}
@@ -452,7 +467,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             onChange={(event) => {
               setDrafts((old) => ({ ...old, [draftId]: event.target.value }));
             }}
+            {...slash.inputProps}
             onKeyDown={(event) => {
+              if (slash.onKeyDown(event)) return;
               if (
                 event.key === "Tab" &&
                 event.shiftKey &&
@@ -602,7 +619,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 className="composer-submit composer-run composer-action"
                 loading={busy || !!submission}
                 disabled={
-                  !isConfigured ||
+                  (!isConfigured && !slash.isCommand) ||
                   !prompt.trim() ||
                   !!submission ||
                   savingEffort
