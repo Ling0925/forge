@@ -33,11 +33,15 @@ export function reasoningSaved(
   snapshot: SessionSnapshot | null,
 ): boolean {
   return (
-    snapshot?.messages.slice(output.afterMessage).some((message) =>
-      message.role === "assistant" &&
-      Boolean(message.reasoning?.startsWith(output.text)) &&
-      (!output.toolCallId || message.tool_calls?.some((call) => call.id === output.toolCallId)),
-    ) ?? false
+    snapshot?.messages
+      .slice(output.afterMessage)
+      .some(
+        (message) =>
+          message.role === "assistant" &&
+          Boolean(message.reasoning?.startsWith(output.text)) &&
+          (!output.toolCallId ||
+            message.tool_calls?.some((call) => call.id === output.toolCallId)),
+      ) ?? false
   );
 }
 
@@ -72,7 +76,7 @@ export function mergeTranscript(
         : incoming.messages,
     events: missing.length
       ? [...incoming.events, ...missing].sort((a, b) =>
-          a.timestamp.localeCompare(b.timestamp),
+          (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
         )
       : incoming.events,
     updatedAt: newerLocal ? current.updatedAt : incoming.updatedAt,

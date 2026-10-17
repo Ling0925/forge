@@ -11,6 +11,7 @@ export function ModelCatalog({
   loading,
   error,
   inputId,
+  hideSearch = false,
 }: {
   readonly value: string;
   readonly models: readonly string[];
@@ -19,18 +20,20 @@ export function ModelCatalog({
   readonly loading: boolean;
   readonly error: string;
   readonly inputId?: string;
+  readonly hideSearch?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const id = useId();
   const listRef = useRef<HTMLDivElement>(null);
   const needle = query.trim();
   const catalog = [...new Set([value, ...models].filter(Boolean))];
-  const filtered = needle
-    ? catalog.filter((model) =>
-        model.toLowerCase().includes(needle.toLowerCase()),
-      )
-    : catalog;
-  const custom = needle.length > 0 && !catalog.includes(needle);
+  const filtered =
+    needle && !hideSearch
+      ? catalog.filter((model) =>
+          model.toLowerCase().includes(needle.toLowerCase()),
+        )
+      : catalog;
+  const custom = !hideSearch && needle.length > 0 && !catalog.includes(needle);
   return (
     <div
       className="model-catalog"
@@ -66,32 +69,54 @@ export function ModelCatalog({
         items[next]?.focus();
       }}
     >
-      <div className="model-catalog-search">
-        <Input
-          id={inputId ?? id}
-          aria-label="搜索模型或输入精确 ID"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索模型或输入精确 ID…"
-          autoComplete="off"
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          loading={loading}
-          onClick={onRefresh}
-          aria-label="刷新模型目录"
-          title="刷新模型目录"
-        >
-          {!loading && <ArrowClockwise size={14} aria-hidden="true" />}
-        </Button>
-      </div>
+      {!hideSearch ? (
+        <div className="model-catalog-search">
+          <Input
+            id={inputId ?? id}
+            aria-label="搜索模型或输入精确 ID"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索模型或输入精确 ID…"
+            autoComplete="off"
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={loading}
+            onClick={onRefresh}
+            aria-label="刷新模型目录"
+            title="刷新模型目录"
+          >
+            {!loading && <ArrowClockwise size={14} aria-hidden="true" />}
+          </Button>
+        </div>
+      ) : (
+        <div className="model-catalog-header">
+          <span>可用模型</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={loading}
+            onClick={onRefresh}
+            aria-label="刷新模型目录"
+            title="刷新模型目录"
+          >
+            {!loading && <ArrowClockwise size={14} aria-hidden="true" />}
+          </Button>
+        </div>
+      )}
       {error && (
         <p role="alert" className="form-error">
           {error}
         </p>
       )}
-      <div className="model-catalog-list" ref={listRef} aria-label="模型目录">
+      <div
+        className="model-catalog-list"
+        ref={listRef}
+        id={hideSearch ? (inputId ?? id) : undefined}
+        tabIndex={hideSearch ? -1 : undefined}
+        aria-label="模型目录"
+      >
         {filtered.map((model) => (
           <button
             key={model}
@@ -125,10 +150,8 @@ export function ModelCatalog({
         {loading
           ? "正在读取模型目录…"
           : filtered.length
-            ? `${filtered.length} 个${needle ? "匹配" : "可用"}模型`
-            : needle
-              ? "目录中没有匹配项，可确认使用输入的精确 ID。"
-              : "暂无模型目录，请刷新或输入精确 ID。"}
+            ? `${filtered.length} 个可用模型`
+            : "暂无可用模型，请在设置中配置"}
       </output>
     </div>
   );

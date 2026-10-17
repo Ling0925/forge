@@ -1,12 +1,13 @@
 import {
   ArrowUp,
+  Brain,
   CaretDown,
   FolderOpen,
   Lightning,
   ShieldCheck,
   Stop,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { permissionSchema, settingsFields } from "../../../shared/schemas";
 import type { SessionId } from "../../shared-types";
@@ -131,13 +132,44 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
-  const modelSource = JSON.stringify([state.settings?.activeSourceId ?? "legacy", state.settings?.baseUrl ?? "", state.settings?.apiMode ?? "chat-completions", state.settings?.environmentOverride ?? false]);
+  const modelSource = JSON.stringify([
+    state.settings?.activeSourceId ?? "legacy",
+    state.settings?.baseUrl ?? "",
+    state.settings?.apiMode ?? "chat-completions",
+    state.settings?.environmentOverride ?? false,
+  ]);
   const currentModelSource = useRef(modelSource);
   currentModelSource.current = modelSource;
   useEffect(() => {
     setAvailableModels(modelCatalogCache.read(modelSource) ?? []);
     setModelError("");
+    void listModels();
   }, [modelSource]);
+  const allKnownModels = useMemo(() => {
+    const list = [
+      model,
+      state.settings?.model,
+      ...(state.settings?.providerSources?.map((s) => s.model) ?? []),
+      ...Object.keys(state.settings?.modelContextWindows ?? {}),
+      "cbcn/deepseek-v4.1-flash",
+      ...availableModels,
+    ];
+    return Array.from(
+      new Set(
+        list
+          .filter(
+            (m): m is string => typeof m === "string" && m.trim().length > 0,
+          )
+          .map((m) => m.trim()),
+      ),
+    );
+  }, [
+    model,
+    state.settings?.model,
+    state.settings?.providerSources,
+    state.settings?.modelContextWindows,
+    availableModels,
+  ]);
   const [savingEffort, setSavingEffort] = useState(false);
   const effortSaving = useRef(false);
   const changeEffort = async (value: string) => {
@@ -248,29 +280,51 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const configurationHint = "连接模型后即可开始对话。";
   const { dispatch, loadSessions } = useWorkbench();
   const slash = useSlashCommands({
-    prompt, draftId, input: promptRef,
+    prompt,
+    draftId,
+    input: promptRef,
     busy: busy || !!submission || savingEffort,
-    setPrompt: value => {
-      setDrafts(old => ({ ...old, [draftId]: value }));
-      setManualDrafts(old => ({ ...old, [draftId]: false }));
+    setPrompt: (value) => {
+      setDrafts((old) => ({ ...old, [draftId]: value }));
+      setManualDrafts((old) => ({ ...old, [draftId]: false }));
     },
     host: {
       bridge: window.forge,
-      sessionId: isNew ? undefined : state.activeSessionId ?? undefined,
-      workspace: isNew ? workspace : state.activeSnapshot?.workspace ?? "",
-      model, mode, permission, running,
-      setModel, setMode: changeMode, setPermission: changePermission,
-      setReasoning: value => updateSettings({ settings: { reasoningEffort: settingsFields.reasoningEffort.unwrap().parse(value) } }),
+      sessionId: isNew ? undefined : (state.activeSessionId ?? undefined),
+      workspace: isNew ? workspace : (state.activeSnapshot?.workspace ?? ""),
+      model,
+      mode,
+      permission,
+      running,
+      setModel,
+      setMode: changeMode,
+      setPermission: changePermission,
+      setReasoning: (value) =>
+        updateSettings({
+          settings: {
+            reasoningEffort: settingsFields.reasoningEffort
+              .unwrap()
+              .parse(value),
+          },
+        }),
       openModel: () => {
-        const trigger = promptRef.current?.closest("form")?.querySelector<HTMLElement>(".composer-model-picker > summary");
+        const trigger = promptRef.current
+          ?.closest("form")
+          ?.querySelector<HTMLElement>(".composer-model-picker > summary");
         trigger?.focus();
         trigger?.click();
       },
       applySnapshot: async (snapshot, switchSession) => {
         // The operation targeted the captured session, not whichever session is now selected.
         if (alive.current && selectedDraft.current === draftId) {
-          setDrafts(old => old[draftId] === prompt ? { ...old, [draftId]: "" } : old);
-          if (switchSession) setModelsByDraft(old => ({ ...old, [snapshot.id]: snapshot.model }));
+          setDrafts((old) =>
+            old[draftId] === prompt ? { ...old, [draftId]: "" } : old,
+          );
+          if (switchSession)
+            setModelsByDraft((old) => ({
+              ...old,
+              [snapshot.id]: snapshot.model,
+            }));
           dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
           dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
         }
@@ -279,8 +333,17 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     },
   });
   const submit = async () => {
-    if (slash.isCommand) { await slash.execute(); return; }
-    if (submitting.current || effortSaving.current || running || submission || slash.executing)
+    if (slash.isCommand) {
+      await slash.execute();
+      return;
+    }
+    if (
+      submitting.current ||
+      effortSaving.current ||
+      running ||
+      submission ||
+      slash.executing
+    )
       return;
     if (!isConfigured) {
       setError(configurationHint);
@@ -350,8 +413,13 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setListing(true);
     setModelError("");
     try {
-      const models = await modelCatalogCache.load(modelSource, () => window.forge.listModels(), refresh);
-      if (alive.current && currentModelSource.current === modelSource) setAvailableModels(models);
+      const models = await modelCatalogCache.load(
+        modelSource,
+        () => window.forge.listModels(state.settings?.activeSourceId),
+        refresh,
+      );
+      if (alive.current && currentModelSource.current === modelSource)
+        setAvailableModels(models);
     } catch (err) {
       if (alive.current)
         setModelError(err instanceof Error ? err.message : "模型列表读取失败");
@@ -554,14 +622,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
 
             {/* Custom Permission Selector */}
             <ComposerDropdown
-              value={
-                !running && mode === "plan" ? "readonly" : displayedPermission
-              }
+              value={mode === "plan" ? "readonly" : displayedPermission}
               disabled={
-                (!running && mode === "plan") ||
-                changingPermission ||
-                busy ||
-                !!submission
+                mode === "plan" || changingPermission || busy || !!submission
               }
               onChange={(next) => void changePermission(next)}
               options={[
@@ -592,14 +655,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               className="visually-hidden"
               tabIndex={-1}
               aria-hidden="true"
-              value={
-                !running && mode === "plan" ? "readonly" : displayedPermission
-              }
+              value={mode === "plan" ? "readonly" : displayedPermission}
               disabled={
-                (!running && mode === "plan") ||
-                changingPermission ||
-                busy ||
-                !!submission
+                mode === "plan" || changingPermission || busy || !!submission
               }
               onChange={(event) => void changePermission(event.target.value)}
             >
@@ -609,19 +667,53 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </select>
           </div>
           <div className="composer-toolbar-end">
-            {state.settings?.activeSourceId && <Button size="sm" variant="ghost" onClick={() => openSettings(true)} title="当前模型来源；在设置中切换。已有会话请确认模型 ID 在此来源可用。">
-              {state.settings.providerSources?.find(source => source.id === state.settings?.activeSourceId)?.label ?? state.settings.activeSourceId}
-            </Button>}
+            {state.settings?.activeSourceId && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => openSettings(true)}
+                title="当前模型来源；在设置中切换。已有会话请确认模型 ID 在此来源可用。"
+              >
+                {state.settings.providerSources?.find(
+                  (source) => source.id === state.settings?.activeSourceId,
+                )?.label ?? state.settings.activeSourceId}
+              </Button>
+            )}
             <ModelPicker
               value={model}
-              models={[state.settings?.model ?? "", ...availableModels]}
+              models={allKnownModels}
+              hideSearch={true}
               onSelect={setModel}
               onOpen={() => void listModels()}
               onRefresh={() => void listModels(true)}
               loading={listing}
               error={modelError}
-              reasoning={{ value: state.settings?.reasoningEffort ?? "default", disabled: savingEffort || busy || !!submission, onChange: value => void changeEffort(value) }}
             />
+            <div
+              className="composer-effort"
+              title="思考等级：全局保存，用于后续请求；支持的等级取决于模型服务"
+            >
+              <ComposerDropdown
+                value={state.settings?.reasoningEffort ?? "default"}
+                onChange={(value) => void changeEffort(value)}
+                disabled={savingEffort || busy || !!submission}
+                ariaLabel="思考等级"
+                icon={<Brain size={12} aria-hidden="true" />}
+                options={[
+                  {
+                    value: "default",
+                    label: "默认",
+                    sub: "由模型决定 · 全局保存",
+                  },
+                  { value: "none", label: "关闭", sub: "none" },
+                  { value: "minimal", label: "极低", sub: "minimal" },
+                  { value: "low", label: "低", sub: "low" },
+                  { value: "medium", label: "中", sub: "medium" },
+                  { value: "high", label: "高", sub: "high" },
+                  { value: "xhigh", label: "极高", sub: "xhigh" },
+                ]}
+              />
+            </div>
             {running ? (
               <Button
                 type="button"
@@ -688,8 +780,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           </div>
         )}
         <UsagePopover
-          snapshot={!isNew && state.activeSnapshot?.id === state.activeSessionId ? state.activeSnapshot : undefined}
-          events={!isNew && state.activeSnapshot?.id === state.activeSessionId ? state.activeSnapshot.events : []}
+          snapshot={
+            !isNew && state.activeSnapshot?.id === state.activeSessionId
+              ? state.activeSnapshot
+              : undefined
+          }
+          events={
+            !isNew && state.activeSnapshot?.id === state.activeSessionId
+              ? state.activeSnapshot.events
+              : []
+          }
         />
       </div>
     </form>
