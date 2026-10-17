@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { contextDisplayLabel } from "../../../shared/context-display";
 import type { AgentEvent, SessionSnapshot } from "../../shared-types";
 import { persistentUsageCache } from "../../state/persistent-usage-cache";
 import { compactTokens, sessionUsage } from "../../state/session-usage";
@@ -69,7 +70,7 @@ export function UsagePopover({
       <summary
         className="usage-trigger"
         aria-label="上下文与用量"
-        title="查看上下文与会话用量"
+        title={`${contextDisplayLabel(context, usage.compacted)}；点击查看本地预估和累计用量`}
       >
         <span className="usage-track" aria-hidden="true">
           {context && ratio !== undefined && categories.map(([key, label]) => (
@@ -81,6 +82,7 @@ export function UsagePopover({
         <span className="usage-footer-stats">
           <span className="usage-cache-chip" title="最近请求缓存命中率">CH {percent(usage.latestCache)}</span>
           <span className="usage-footer-total">
+            {usage.compacted ? "压缩后 " : context?.basis === "request" ? "输入 " : "预估 "}
             {context ? `${context.estimated ? "≈" : ""}${compactTokens(context.usedTokens)}${context.windowTokens ? ` / ${compactTokens(context.windowTokens)}` : " tokens"}` : "上下文 —"}
           </span>
         </span>
@@ -89,7 +91,7 @@ export function UsagePopover({
         <section className="usage-panel" aria-label="用量详情" tabIndex={-1}>
           <strong>用量</strong>
           <dl>
-            <dt>上下文{context?.estimated ? "（估算）" : ""}</dt>
+            <dt>{contextDisplayLabel(context, usage.compacted)}</dt>
             <dd>
               {context
                 ? ratio === undefined
@@ -97,7 +99,15 @@ export function UsagePopover({
                   : `${percent(ratio)} / ${compactTokens(context.usedTokens)}`
                 : "尚无数据"}
             </dd>
+            {usage.projected && context?.basis === "request" && <>
+              <dt>本地上下文预估</dt><dd>≈{compactTokens(usage.projected.usedTokens)} tokens</dd>
+            </>}
           </dl>
+          <p className="usage-caption">{usage.compacted
+            ? "上下文已压缩；当前是压缩后预估，等待下次请求实报。累计用量不清零。"
+            : context?.basis === "request"
+              ? "主数值为最近请求的输入实报（含缓存），不含输出或思考消耗。分项是估算；本地预估不会覆盖实报。"
+              : "暂无服务端输入实报，显示本地估算；不等同于模型分词器计数。"}</p>
           {ratio !== undefined && (
             <progress
               aria-label="上下文占用"

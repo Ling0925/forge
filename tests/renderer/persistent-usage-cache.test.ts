@@ -90,10 +90,21 @@ it("invalidates changed versions and event counts and never persists active sess
   ).toBe(240);
 });
 
+it("ignores pre-fix cached summaries and persists the new accounting version", () => {
+  const disk = storage();
+  const stale = createPersistentUsageCache(() => disk).snapshot(snapshot);
+  disk.values.clear();
+  disk.setItem("forge-session-usage-v1", JSON.stringify([stale]));
+  const current = createPersistentUsageCache(() => disk);
+  expect(current.get(snapshot)).toBeUndefined();
+  expect(current.snapshot(snapshot).usage.compacted).toBe(false);
+  expect(disk.getItem("forge-session-usage-v2")).not.toBeNull();
+});
+
 it("falls back on corrupt data or unavailable storage and bounds saved summaries", () => {
   const disk = storage();
   const cache = createPersistentUsageCache(() => disk);
-  disk.setItem("forge-session-usage-v1", "broken json");
+  disk.setItem("forge-session-usage-v2", "broken json");
   expect(cache.snapshot(snapshot).usage.total?.totalTokens).toBe(120);
   const blocked = createPersistentUsageCache(() => {
     throw new Error("blocked");
@@ -109,6 +120,6 @@ it("falls back on corrupt data or unavailable storage and bounds saved summaries
   }
   expect(cache.get(snapshot)).toBeUndefined();
   expect(
-    JSON.parse(disk.getItem("forge-session-usage-v1") ?? "[]"),
+    JSON.parse(disk.getItem("forge-session-usage-v2") ?? "[]"),
   ).toHaveLength(100);
 });

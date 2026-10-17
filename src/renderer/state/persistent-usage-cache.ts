@@ -4,11 +4,14 @@ import type { SessionSnapshot, SessionSummary } from "../shared-types";
 import { sessionUsage } from "./session-usage";
 
 type Identity = Pick<SessionSummary, "id" | "updatedAt" | "status" | "model">;
-const key = "forge-session-usage-v1";
+// v2 invalidates summaries computed with alternating input+output/estimate totals.
+const key = "forge-session-usage-v2";
 const number = z.number().finite().nonnegative();
 const resultSchema = z
   .object({
     context: contextUsageSchema.optional(),
+    projected: contextUsageSchema.optional(),
+    compacted: z.boolean(),
     total: usageSchema.optional(),
     partial: z.boolean(),
     latestCache: number.optional(),

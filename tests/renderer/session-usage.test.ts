@@ -92,7 +92,7 @@ it("separates context from session totals, replaces live usage on completion and
     completionTokens: 200,
     totalTokens: 3200,
   });
-  expect(result.context?.usedTokens).toBe(2100);
+  expect(result.context?.usedTokens).toBe(2000);
   expect(result.latestCache).toBeUndefined();
   expect(result.averageCache).toBe(0.9);
   expect(result.cachePartial).toBe(true);
@@ -127,7 +127,10 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     }
     const snapshot = {version:1,id:events[0].sessionId,title:'test',workspace:'/tmp',model:'model',createdAt:events[0].timestamp,updatedAt:events.at(-1).timestamp,status:'completed',messages:[],changes:[],events};
     if (location.search === '?unknown-window') snapshot.status = 'running';
-    createRoot(document.getElementById('root')).render(<div className="wb-app"><UsagePopover events={events} snapshot={snapshot} /></div>);
+    const root = createRoot(document.getElementById('root'));
+    const render = () => root.render(<div className="wb-app"><UsagePopover events={[...events]} snapshot={snapshot} /></div>);
+    window.appendUsage = event => { events.push(event); snapshot.status = 'running'; render(); };
+    render();
   `,
     },
     bundle: true,
@@ -164,7 +167,7 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         }, theme);
         const trigger = page.getByLabel("上下文与用量", { exact: true });
         expect(await trigger.innerText()).toContain("CH 97.6%");
-        expect(await trigger.innerText()).toContain("≈486.4K / 1M");
+        expect(await trigger.innerText()).toContain("486.3K / 1M");
         const track = await page.locator(".usage-track").boundingBox();
         if (!track) throw new Error("Missing context track");
         expect(track.height).toBe(3);
@@ -173,7 +176,7 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         expect(segments.reduce((sum, segment) => sum + segment.width, 0) / track.width).toBeCloseTo(486400 / 1048576, 2);
         await trigger.click();
         const panel = page.getByRole("region", { name: "用量详情" });
-        expect(await panel.innerText()).toContain("46.4% / 486.4K");
+        expect(await panel.innerText()).toContain("46.4% / 486.3K");
         expect(await panel.innerText()).toContain("97.6%");
         for (const label of ["指令", "记忆", "对话", "工具"]) expect(await panel.innerText()).toContain(label);
         const rect = await panel.boundingBox();
@@ -191,21 +194,32 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         expect(await panel.count()).toBe(0);
       }
     const saved = await page.evaluate(() =>
-      localStorage.getItem("forge-session-usage-v1"),
+      localStorage.getItem("forge-session-usage-v2"),
     );
     expect(saved).toContain('"eventCount":3');
     await page.reload();
     await page.getByLabel("上下文与用量", { exact: true }).click();
     expect(
       await page.getByRole("region", { name: "用量详情" }).innerText(),
-    ).toContain("46.4% / 486.4K");
+    ).toContain("46.4% / 486.3K");
     expect(
-      await page.evaluate(() => localStorage.getItem("forge-session-usage-v1")),
+      await page.evaluate(() => localStorage.getItem("forge-session-usage-v2")),
     ).toBe(saved);
+    const projected = { ...base, type: "context_usage", usage: { windowTokens: 1048576, usedTokens: 120000, estimated: true, basis: "projected", parts: { instructions: 0, memory: 0, conversation: 120000, tools: 0 } } };
+    await page.evaluate(event => Reflect.get(window, 'appendUsage')(event), projected);
+    const detail = page.getByRole('region', { name: '用量详情' });
+    await expect.poll(() => detail.innerText()).toContain('≈120K tokens');
+    expect(await page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('486.3K / 1M');
+    expect(await detail.innerText()).toContain('最近请求输入（实报）');
+    await page.evaluate(event => Reflect.get(window, 'appendUsage')(event), { ...base, type: 'context_compacted', removedMessages: 10, beforeChars: 1000000, afterChars: 400000 });
+    await page.evaluate(event => Reflect.get(window, 'appendUsage')(event), projected);
+    await expect.poll(() => page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('≈120K / 1M');
+    expect(await detail.innerText()).toContain('压缩后预估（待实报）');
+    expect(await detail.innerText()).toContain('累计用量不清零');
     await page.goto("http://usage.test/?unknown-window");
-    await page.getByText("≈61.7K tokens", { exact: true }).click();
+    await page.getByText("输入 61.6K tokens", { exact: true }).click();
     const unknownPanel = page.getByRole("region", { name: "用量详情" });
-    expect(await unknownPanel.innerText()).toContain("61.7K tokens 已用");
+    expect(await unknownPanel.innerText()).toContain("61.6K tokens 已用");
     expect(await unknownPanel.innerText()).toContain("上下文窗口未知，暂不计算百分比");
     expect(await page.getByRole("progressbar", { name: "上下文占用" }).count()).toBe(0);
   } finally {

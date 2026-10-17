@@ -1,4 +1,5 @@
-import type { AgentEvent, ContextUsage, Usage } from "../../shared/schemas";
+import type { AgentEvent, Usage } from "../../shared/schemas";
+import { advanceContextDisplay, emptyContextDisplay } from "../../shared/context-display";
 
 type Totals = Pick<Usage, "promptTokens" | "completionTokens" | "totalTokens">;
 const emptyTotals = (): Totals => ({
@@ -14,7 +15,7 @@ const add = (a: Totals, b: Totals): Totals => ({
 
 function emptyState() {
   return {
-    context: undefined as ContextUsage | undefined,
+    display: emptyContextDisplay(),
     latestCache: undefined as number | undefined,
     cacheInput: 0,
     cacheRead: 0,
@@ -30,8 +31,8 @@ function emptyState() {
 type UsageState = ReturnType<typeof emptyState>;
 
 function accumulate(state: UsageState, event: AgentEvent) {
+  state.display = advanceContextDisplay(state.display, event);
   if (event.type === "context_usage") {
-    state.context = event.usage;
     const usage = event.usage;
     if (usage.basis !== "projected" && usage.promptTokens !== undefined) {
       state.requests++;
@@ -71,7 +72,9 @@ function accumulate(state: UsageState, event: AgentEvent) {
 
 function summarize(state: UsageState) {
   return {
-    context: state.context,
+    context: state.display.context,
+    projected: state.display.projected,
+    compacted: state.display.compacted,
     total:
       state.reports + state.pendingReports
         ? add(state.total, state.pending)
@@ -111,7 +114,7 @@ export function appendSessionEvent(
 ): readonly AgentEvent[] {
   const previous = entry(events);
   const next = [...events, event];
-  if (event.type !== "context_usage" && event.type !== "run_finished")
+  if (event.type !== "context_usage" && event.type !== "run_finished" && event.type !== "context_compacted" && event.type !== "run_started")
     cache.set(next, previous);
   else {
     const state = { ...previous.state };
