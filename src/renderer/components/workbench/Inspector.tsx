@@ -1,9 +1,18 @@
-import { CaretRight } from "@phosphor-icons/react";
+import {
+  ArrowsCounterClockwise,
+  CaretRight,
+  ChartBar,
+  Cpu,
+  FileCode,
+  Folder,
+  ShieldCheck,
+  SlidersHorizontal,
+} from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { useWorkbench } from "../../state/workbench-context";
 import { ApprovalPanel } from "../primitives/ApprovalPanel";
 import { Button } from "../primitives/Button";
-import { DiffViewer } from "../primitives/DiffViewer";
+import { DiffViewer, diffStats } from "../primitives/DiffViewer";
 import { StatusBadge } from "../primitives/StatusBadge";
 import { Tabs } from "../primitives/Tabs";
 import { CheckpointPanel, ProjectResources } from "./CatalogPanels";
@@ -75,7 +84,10 @@ export function Inspector({
       aria-label="执行详情"
     >
       <div className="inspector-header wb-inspector-head">
-        <span>执行详情</span>
+        <div className="inspector-title-row">
+          <SlidersHorizontal size={15} weight="bold" className="inspector-title-icon" />
+          <span>执行详情</span>
+        </div>
         {snapshot && <StatusBadge status={run?.status ?? snapshot.status} />}
         {onRequestCollapse && (
           <button
@@ -185,73 +197,118 @@ export function Inspector({
                 label: "运行",
                 content: (
                   <div className="inspector-sections">
-                    <section className="inspector-overview">
+                    <section className="inspector-overview inspector-card">
+                      <div className="inspector-card-header">
+                        <span className="inspector-card-title">会话概览</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="inspector-refresh-mini"
+                          title="刷新记录"
+                          aria-label="刷新记录"
+                          onClick={() => void refreshActiveSession()}
+                        >
+                          <ArrowsCounterClockwise size={12} weight="bold" />
+                          <span>刷新</span>
+                        </Button>
+                      </div>
                       <dl className="wb-details">
-                        <dt>模型</dt>
-                        <dd>
-                          {started?.type === "run_started"
-                            ? started.model
-                            : snapshot.model}
+                        <dt>
+                          <Cpu size={13} className="dt-icon" />
+                          <span>模型</span>
+                        </dt>
+                        <dd className="wb-val-mono" title={started?.type === "run_started" ? started.model : snapshot.model}>
+                          <code>
+                            {started?.type === "run_started"
+                              ? started.model
+                              : snapshot.model}
+                          </code>
                         </dd>
-                        <dt>权限</dt>
+                        <dt>
+                          <ShieldCheck size={13} className="dt-icon" />
+                          <span>权限</span>
+                        </dt>
                         <dd>
-                          {
-                            permissionLabels[
-                              run?.permission ??
-                                (started?.type === "run_started"
-                                  ? started.permission
-                                  : (state.settings?.defaultPermission ??
-                                    "workspace"))
-                            ].split(" · ")[0]
-                          }
+                          <span className="inspector-permission-pill">
+                            {
+                              permissionLabels[
+                                run?.permission ??
+                                  (started?.type === "run_started"
+                                    ? started.permission
+                                    : (state.settings?.defaultPermission ??
+                                      "workspace"))
+                              ].split(" · ")[0]
+                            }
+                          </span>
                         </dd>
-                        <dt>工作区</dt>
-                        <dd>{snapshot.workspace}</dd>
+                        <dt>
+                          <Folder size={13} className="dt-icon" />
+                          <span>工作区</span>
+                        </dt>
+                        <dd className="wb-val-mono" title={snapshot.workspace}>
+                          <code>{snapshot.workspace}</code>
+                        </dd>
                       </dl>
                       {storedActive && (
-                        <p className="wb-muted">
+                        <p className="wb-muted inspector-stored-notice">
                           已保存的状态，本窗口没有运行句柄。刷新可查看最新记录；取消操作由主机确认。
                         </p>
                       )}
                     </section>
                     <RuntimePanels key={state.activeSessionId ?? "none"} />
-                    <details className="wb-disclosure">
-                      <summary>上次运行用量</summary>
+                    <details className="wb-disclosure inspector-disclosure-card inspector-usage-card">
+                      <summary>
+                        <span className="inspector-disclosure-head">
+                          <ChartBar size={14} weight="bold" />
+                          <span>上次运行用量</span>
+                        </span>
+                        {usage && (
+                          <span className="inspector-token-pill">
+                            {usage.totalTokens.toLocaleString()} tokens
+                          </span>
+                        )}
+                      </summary>
                       <div className="wb-disclosure-body">
                         {usage ? (
-                          <dl className="wb-details">
-                            <dt>输入 / 输出</dt>
-                            <dd>
-                              {usage.promptTokens.toLocaleString()} /{" "}
-                              {usage.completionTokens.toLocaleString()}
-                            </dd>
-                            <dt>总计</dt>
-                            <dd>{usage.totalTokens.toLocaleString()}</dd>
-                            {usage.cachedPromptTokens !== undefined && (
-                              <>
-                                <dt>缓存输入</dt>
-                                <dd>
-                                  {usage.cachedPromptTokens.toLocaleString()}
-                                </dd>
-                              </>
-                            )}
-                          </dl>
+                          <div className="inspector-usage-content">
+                            <dl className="wb-details inspector-usage-dl">
+                              <dt>输入 / 输出</dt>
+                              <dd>
+                                {usage.promptTokens.toLocaleString()} /{" "}
+                                {usage.completionTokens.toLocaleString()}
+                              </dd>
+                              <dt>总计</dt>
+                              <dd className="usage-total-highlight">
+                                {usage.totalTokens.toLocaleString()}
+                              </dd>
+                              {usage.cachedPromptTokens !== undefined && (
+                                <>
+                                  <dt>缓存输入</dt>
+                                  <dd>
+                                    {usage.cachedPromptTokens.toLocaleString()}
+                                  </dd>
+                                </>
+                              )}
+                            </dl>
+                          </div>
                         ) : (
                           <p className="wb-muted">尚无已结算的运行用量</p>
                         )}
                         {finished?.type === "run_finished" && (
-                          <p className="wb-muted">
-                            {finished.turns} 轮 · {finished.toolCalls}{" "}
-                            次工具调用
-                          </p>
+                          <div className="inspector-usage-footer">
+                            <span className="usage-footer-tag">{finished.turns} 轮</span>
+                            <span className="usage-footer-tag">{finished.toolCalls} 次工具调用</span>
+                          </div>
                         )}
                       </div>
                     </details>
                     <Button
                       size="sm"
+                      className="inspector-refresh-bottom"
                       onClick={() => void refreshActiveSession()}
                     >
-                      刷新记录
+                      <ArrowsCounterClockwise size={13} weight="bold" />
+                      <span>刷新记录</span>
                     </Button>
                   </div>
                 ),
@@ -281,32 +338,54 @@ export function Inspector({
                         </div>
                       </details>
                     )}
-                    <section className="wb-stack">
-                      <h3>
-                        文件变更{" "}
-                        <span className="wb-muted">
-                          {snapshot.changes.length}
-                        </span>
-                      </h3>
+                    <section className="wb-stack inspector-changes-section">
+                      <div className="inspector-section-header">
+                        <h3>
+                          文件变更{" "}
+                          <span className="wb-muted">
+                            {snapshot.changes.length}
+                          </span>
+                        </h3>
+                      </div>
                       {snapshot?.changes.length ? (
-                        snapshot.changes.map((change, i) => (
-                          <details
-                            key={`${change.path}-${i}`}
-                            className="wb-disclosure"
-                          >
-                            <summary>
-                              <span className="inspector-file-path">
-                                {change.path}
-                              </span>
-                              <span className="inspector-file-kind">
-                                {change.kind}
-                              </span>
-                            </summary>
-                            <DiffViewer change={change} isSuggested={false} />
-                          </details>
-                        ))
+                        <div className="inspector-files-list">
+                          {snapshot.changes.map((change, i) => {
+                            const stats = diffStats(change);
+                            return (
+                              <details
+                                key={`${change.path}-${i}`}
+                                className="wb-disclosure inspector-file-card"
+                              >
+                                <summary className="inspector-file-summary">
+                                  <div className="inspector-file-info">
+                                    <FileCode size={14} className="inspector-file-icon" />
+                                    <span className="inspector-file-path" title={change.path}>
+                                      {change.path}
+                                    </span>
+                                  </div>
+                                  <div className="inspector-file-badges">
+                                    {stats && (
+                                      <span className="diff-stats-pill">
+                                        {stats.added > 0 && <span className="diff-stats-add">+{stats.added}</span>}
+                                        {stats.removed > 0 && <span className="diff-stats-del">-{stats.removed}</span>}
+                                      </span>
+                                    )}
+                                    <span className={`inspector-file-kind kind-${change.kind}`}>
+                                      {change.kind}
+                                    </span>
+                                  </div>
+                                </summary>
+                                <div className="inspector-diff-container">
+                                  <DiffViewer change={change} isSuggested={false} />
+                                </div>
+                              </details>
+                            );
+                          })}
+                        </div>
                       ) : (
-                        <p className="wb-muted">本会话尚无直接文件变更</p>
+                        <div className="inspector-empty-card">
+                          <p className="wb-muted">本会话尚无直接文件变更</p>
+                        </div>
                       )}
                     </section>
                     <details className="wb-disclosure">

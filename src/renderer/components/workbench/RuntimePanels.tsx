@@ -1,3 +1,13 @@
+import {
+  ArrowSquareOut,
+  ArrowsInLineVertical,
+  CheckCircle,
+  Cpu,
+  FileText,
+  GitFork,
+  ListChecks,
+  Sparkle,
+} from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { OperationScope } from "../../state/operation-scope";
 import { useWorkbench } from "../../state/workbench-context";
@@ -84,14 +94,16 @@ export function RuntimePanels() {
       {/* Active children stay visible by default: this is live delegation
           state, not raw metadata. */}
       <section className="wb-stack inspector-section">
-        <h3>
-          子任务 <span className="wb-muted">{children.length}</span>
-        </h3>
-        {parentId && (
-          <Button size="sm" onClick={() => void selectSession(parentId)}>
-            打开父任务
-          </Button>
-        )}
+        <div className="inspector-card-header">
+          <h3>
+            子任务 <span className="wb-muted">{children.length}</span>
+          </h3>
+          {parentId && (
+            <Button size="sm" variant="ghost" onClick={() => void selectSession(parentId)}>
+              打开父任务
+            </Button>
+          )}
+        </div>
         {children.length ? (
           [...children]
             .sort(
@@ -108,28 +120,35 @@ export function RuntimePanels() {
                 key={child.id}
                 className="agent-card child-session-card wb-child-row"
               >
-                <Button
-                  size="sm"
-                  className="child-title-button"
-                  title={child.title}
-                  aria-label={`打开子任务：${child.title}`}
-                  onClick={() => void selectSession(child.id)}
-                >
-                  <span className="child-title-clamp">{child.title}</span>
-                </Button>
-                {(child.status === "running" ||
-                  child.status === "awaiting_approval") && (
+                <div className="child-card-header">
                   <Button
                     size="sm"
-                    disabled={cancelling}
-                    onClick={() => void cancelOwned(child.id)}
+                    className="child-title-button"
+                    title={child.title}
+                    aria-label={`打开子任务：${child.title}`}
+                    onClick={() => void selectSession(child.id)}
                   >
-                    {cancelling ? "正在取消…" : "取消任务"}
+                    <ArrowSquareOut size={13} weight="bold" />
+                    <span className="child-title-clamp">{child.title}</span>
                   </Button>
-                )}
+                  {(child.status === "running" ||
+                    child.status === "awaiting_approval") && (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={cancelling}
+                      onClick={() => void cancelOwned(child.id)}
+                    >
+                      {cancelling ? "正在取消…" : "取消任务"}
+                    </Button>
+                  )}
+                </div>
                 <div className="inspector-child-meta">
                   <StatusBadge status={child.status} />
-                  <span title={child.model}>{child.model}</span>
+                  <span title={child.model}>
+                    <Cpu size={12} weight="bold" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
+                    {child.model}
+                  </span>
                 </div>
                 {updates
                   .filter((update) => update.childSessionId === child.id)
@@ -168,14 +187,14 @@ export function RuntimePanels() {
             </div>
           </details>
         )}
-        {snapshot.ownership && <p>负责范围：{snapshot.ownership}</p>}
+        {snapshot.ownership && <p className="inspector-ownership-tag">负责范围：{snapshot.ownership}</p>}
       </section>
       <section className="wb-stack inspector-section">
         <h3>上下文</h3>
         {/* Raw context statistics collapse into one quiet disclosure; the
             compaction controls below stay directly reachable. */}
         <details
-          className="wb-disclosure"
+          className="wb-disclosure inspector-disclosure-card"
           onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)}
         >
           <summary>上下文统计</summary>
@@ -187,26 +206,28 @@ export function RuntimePanels() {
             ) : !diagnostics ? (
               <p className="wb-muted">正在读取…</p>
             ) : (
-              <dl className="wb-details">
-                <dt>原始记录</dt>
-                <dd>
-                  {diagnostics.transcriptChars.toLocaleString()} 字符 ·{" "}
-                  {diagnostics.messageCount} 条消息
-                </dd>
-                <dt>投影上下文</dt>
-                <dd>{diagnostics.projectedChars.toLocaleString()} 字符</dd>
-                <dt>摘要类型</dt>
-                <dd>
-                  {diagnostics.summaryFallback
-                    ? "摘录回退（非语义摘要）"
-                    : "语义摘要 / 未压缩"}
-                </dd>
-              </dl>
+              <div className="context-diagnostics-view">
+                <dl className="wb-details inspector-details-grid">
+                  <dt>原始记录</dt>
+                  <dd>
+                    {diagnostics.transcriptChars.toLocaleString()} 字符 ·{" "}
+                    {diagnostics.messageCount} 条消息
+                  </dd>
+                  <dt>投影上下文</dt>
+                  <dd>{diagnostics.projectedChars.toLocaleString()} 字符</dd>
+                  <dt>摘要类型</dt>
+                  <dd>
+                    {diagnostics.summaryFallback
+                      ? "摘录回退（非语义摘要）"
+                      : "语义摘要 / 未压缩"}
+                  </dd>
+                </dl>
+              </div>
             )}
           </div>
         </details>
         {snapshot.contextSummary && (
-          <details className="wb-disclosure">
+          <details className="wb-disclosure inspector-disclosure-card">
             <summary>
               已保存摘要 · 边界 {snapshot.contextSummary.boundary}
               {snapshot.contextSummary.fallback ? " · 摘录回退" : ""}
@@ -216,31 +237,34 @@ export function RuntimePanels() {
             </div>
           </details>
         )}
-        <Button
-          size="sm"
-          disabled={busy || running}
-          onClick={async () => {
-            const valid = scope.current.begin();
-            setBusy(true);
-            setError("");
-            try {
-              await window.forge.compactSession(snapshot.id);
-              if (valid()) await refreshActiveSession();
-            } catch (err) {
-              if (valid())
-                setError(err instanceof Error ? err.message : "压缩失败");
-            } finally {
-              if (valid()) setBusy(false);
-            }
-          }}
-        >
-          {busy ? "正在压缩…" : "压缩上下文"}
-        </Button>
-        <p className="wb-muted">
-          {running
-            ? "运行结束后可压缩，原始记录保留。"
-            : "保留原始记录，仅压缩模型使用的上下文。"}
-        </p>
+        <div className="context-compaction-row">
+          <Button
+            size="sm"
+            disabled={busy || running}
+            onClick={async () => {
+              const valid = scope.current.begin();
+              setBusy(true);
+              setError("");
+              try {
+                await window.forge.compactSession(snapshot.id);
+                if (valid()) await refreshActiveSession();
+              } catch (err) {
+                if (valid())
+                  setError(err instanceof Error ? err.message : "压缩失败");
+              } finally {
+                if (valid()) setBusy(false);
+              }
+            }}
+          >
+            <ArrowsInLineVertical size={13} weight="bold" />
+            <span>{busy ? "正在压缩…" : "压缩上下文"}</span>
+          </Button>
+          <p className="wb-muted context-compaction-hint">
+            {running
+              ? "运行结束后可压缩，原始记录保留。"
+              : "保留原始记录，仅压缩模型使用的上下文。"}
+          </p>
+        </div>
         {busy && (
           <Button
             variant="danger"
@@ -273,11 +297,11 @@ export function RuntimePanels() {
                         ? "●"
                         : "○"}
                   </span>{" "}
-                  {step.step}
+                  <span className="plan-step-text">{step.step}</span>
                 </li>
               ))}
             </ol>
-            <details className="wb-disclosure">
+            <details className="wb-disclosure inspector-disclosure-card">
               <summary>查看计划说明（{snapshot.plan.steps.length} 项）</summary>
               <div className="wb-disclosure-body">
                 <Markdown source={snapshot.plan.explanation} />
