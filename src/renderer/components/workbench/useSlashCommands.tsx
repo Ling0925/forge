@@ -1,89 +1,49 @@
-import { useEffect, useState, type RefObject, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type RefObject, type KeyboardEvent } from "react";
+import { matchSlashCommands } from "../../../shared/slash-commands";
+import { desktopSlashLimitation, executeDesktopSlash, type DesktopSlashHost, type DesktopSlashResult } from "./desktop-slash";
 import "./slash-menu.css";
-
-const commands = [
-  { name: "/help", description: "查看桌面命令帮助" },
-  { name: "/new", description: "打开新会话，保留其他会话草稿" },
-  { name: "/model", description: "打开模型选择器" },
-  { name: "/mode", description: "选择 Build / Plan 模式（下一次运行）" },
-  { name: "/permission", description: "打开权限选择器，不自动提升权限" },
-  { name: "/settings", description: "打开设置" },
-  { name: "/stop", description: "停止当前会话运行" },
-] as const;
 
 export function useSlashCommands(options: {
   prompt: string;
   draftId: string;
   input: RefObject<HTMLTextAreaElement | null>;
   setPrompt: (value: string) => void;
-  openNew: () => void;
-  openSettings: () => void;
-  stop: () => Promise<void>;
-  running: boolean;
+  host: DesktopSlashHost;
   busy: boolean;
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [selected, setSelected] = useState(0);
-  const [message, setMessage] = useState("");
+  const [result, setResult] = useState<DesktopSlashResult>({});
+  const [executing, setExecuting] = useState(false);
+  const locked = useRef(false);
+  const currentDraft = useRef(options.draftId);
+  currentDraft.current = options.draftId;
   const text = options.prompt.trim();
-  // A leading slash is reserved for local commands. // explicitly sends literal text.
-  const isCommand = text.startsWith("/") && !text.startsWith("//");
-  const matches = commands.filter(command => command.name.startsWith(text.toLowerCase()))
-    .sort((a, b) => Number(b.name === text.toLowerCase()) - Number(a.name === text.toLowerCase()));
-  const open = isCommand && !dismissed && matches.length > 0;
+  const isCommand = options.prompt.startsWith("/");
+  const matches = matchSlashCommands(text).sort((a, b) => Number(b.name === text) - Number(a.name === text));
+  const open = isCommand && !dismissed && !/\s/.test(text) && matches.length > 0;
   const index = Math.min(selected, Math.max(0, matches.length - 1));
   const menuId = `slash-${options.draftId}`;
-  useEffect(() => {
-    setDismissed(false);
-    setSelected(0);
-    setMessage("");
-  }, [options.prompt, options.draftId]);
+  useEffect(() => { setDismissed(false); setSelected(0); }, [options.prompt, options.draftId]);
+  useEffect(() => { setResult({}); }, [options.draftId]);
   useEffect(() => {
     if (open) document.getElementById(`${menuId}-${index}`)?.scrollIntoView({ block: "nearest" });
   }, [open, index, menuId]);
 
-  const execute = async (value = text) => {
+  const execute = async (line = text) => {
     if (!isCommand) return false;
-    if (options.busy) return true;
-    const command = commands.find(item => item.name === value.toLowerCase());
-    if (!command) {
-      setMessage("未知命令或不支持的参数。输入 / 查看命令；发送以 / 开头的普通消息请使用 //。");
-      setDismissed(true);
-      return true;
-    }
-    if (command.name === "/help") {
-      setMessage(commands.map(item => `${item.name}：${item.description}`).join("\n"));
-      setDismissed(true);
-      return true;
-    }
-    const selectors: Record<string, string> = {
-      "/model": ".composer-model-picker > summary",
-      "/mode": 'button[aria-label="运行模式"]',
-      "/permission": 'button[aria-label="执行权限"]',
-    };
-    const selector = selectors[command.name];
-    if (selector) {
-      const trigger = options.input.current?.closest("form")?.querySelector<HTMLElement>(selector);
-      if (!trigger || trigger.matches(":disabled")) {
-        setMessage("此操作当前不可用，请等待发送完成或切换到 Build 模式。");
-        setDismissed(true);
-        return true;
-      }
-      options.setPrompt("");
-      trigger.focus();
-      trigger.click();
-    } else if (command.name === "/stop") {
-      if (!options.running) {
-        setMessage("当前会话没有正在执行的任务。");
-        setDismissed(true);
-        return true;
-      }
-      options.setPrompt("");
-      await options.stop();
-    } else {
-      options.setPrompt("");
-      if (command.name === "/new") options.openNew();
-      else options.openSettings();
+    if (options.busy || locked.current) return true;
+    locked.current = true;
+    setExecuting(true);
+    setDismissed(true);
+    try {
+      const next = await executeDesktopSlash(line, options.host);
+      if (currentDraft.current === options.draftId) setResult(next);
+    } catch (error) {
+      if (currentDraft.current === options.draftId) setResult({ text: error instanceof Error ? error.message : "命令执行失败，未自动重试。" });
+    } finally {
+      locked.current = false;
+      setExecuting(false);
     }
     return true;
   };
@@ -106,7 +66,7 @@ export function useSlashCommands(options: {
     return false;
   };
   return {
-    isCommand, execute, onKeyDown,
+    isCommand, execute, onKeyDown, executing,
     inputProps: {
       "aria-controls": open ? menuId : undefined,
       "aria-expanded": open,
@@ -116,16 +76,21 @@ export function useSlashCommands(options: {
       onFocus: () => setDismissed(false),
     },
     view: <>
-      {open && <div className="composer-slash-menu" id={menuId} role="listbox" aria-label="桌面命令">
+      {open && <div className="composer-slash-menu" id={menuId} role="listbox" aria-label="Forge 命令">
         {matches.map((command, position) => <div
           key={command.name} id={`${menuId}-${position}`} role="option"
           aria-selected={position === index}
           onMouseDown={event => event.preventDefault()}
           onClick={() => void execute(command.name)}
-        ><strong>{command.name}</strong><span>{command.description}</span></div>)}
+        ><strong>{command.name}</strong><span>{command.args} {command.description}
+          {desktopSlashLimitation(command.name) && <small>{desktopSlashLimitation(command.name)}</small>}
+        </span></div>)}
         <small>↑↓ 选择 · Enter 执行 · Tab 补全 · Esc 关闭</small>
       </div>}
-      {message && <output className="composer-slash-message" aria-live="polite">{message}</output>}
+      {executing && <output aria-live="polite">正在执行命令…</output>}
+      {result.text && <output className="composer-slash-message" aria-live="polite">{result.text}</output>}
+      {result.sessions?.map(session => <button key={session.id} type="button" disabled={executing}
+        onClick={() => void execute(`/resume ${session.id}`)}>{session.title} · {session.id}</button>)}
     </>,
   };
 }

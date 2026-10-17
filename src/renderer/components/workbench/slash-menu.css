@@ -20,4 +20,4 @@
 .composer-slash-menu strong { min-width: 95px; }
 .composer-slash-menu span { overflow-wrap: anywhere; opacity: 0.8; }
 .composer-slash-menu small { display: block; padding: 6px 10px; opacity: 0.6; }
-.composer-slash-message { display: block; white-space: pre-wrap; font-size: 12px; padding: 8px; }
+.composer-slash-message { display: block; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 35vh; overflow: auto; font-size: 12px; padding: 8px; }

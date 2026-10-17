@@ -246,21 +246,41 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   };
   const isConfigured = state.settings?.isConfigured === true;
   const configurationHint = "连接模型后即可开始对话。";
-  const { openNewSession } = useWorkbench();
+  const { dispatch, loadSessions } = useWorkbench();
   const slash = useSlashCommands({
-    prompt, draftId, input: promptRef, running,
+    prompt, draftId, input: promptRef,
     busy: busy || !!submission || savingEffort,
     setPrompt: value => {
       setDrafts(old => ({ ...old, [draftId]: value }));
       setManualDrafts(old => ({ ...old, [draftId]: false }));
     },
-    openNew: () => openNewSession(true),
-    openSettings: () => openSettings(true),
-    stop: cancelRun,
+    host: {
+      bridge: window.forge,
+      sessionId: isNew ? undefined : state.activeSessionId ?? undefined,
+      workspace: isNew ? workspace : state.activeSnapshot?.workspace ?? "",
+      model, mode, permission, running,
+      setModel, setMode: changeMode, setPermission: changePermission,
+      setReasoning: value => updateSettings({ settings: { reasoningEffort: settingsFields.reasoningEffort.unwrap().parse(value) } }),
+      openModel: () => {
+        const trigger = promptRef.current?.closest("form")?.querySelector<HTMLElement>(".composer-model-picker > summary");
+        trigger?.focus();
+        trigger?.click();
+      },
+      applySnapshot: async (snapshot, switchSession) => {
+        // The operation targeted the captured session, not whichever session is now selected.
+        if (alive.current && selectedDraft.current === draftId) {
+          setDrafts(old => old[draftId] === prompt ? { ...old, [draftId]: "" } : old);
+          if (switchSession) setModelsByDraft(old => ({ ...old, [snapshot.id]: snapshot.model }));
+          dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
+          dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
+        }
+        await loadSessions();
+      },
+    },
   });
   const submit = async () => {
     if (slash.isCommand) { await slash.execute(); return; }
-    if (submitting.current || effortSaving.current || running || submission)
+    if (submitting.current || effortSaving.current || running || submission || slash.executing)
       return;
     if (!isConfigured) {
       setError(configurationHint);
@@ -269,7 +289,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     const parsed = taskSchema.safeParse({
       workspace: isNew ? workspace : state.activeSnapshot?.workspace,
       model,
-      prompt: prompt.trimStart().startsWith("//") ? prompt.replace("//", "/") : prompt,
+      prompt,
     });
     if (!parsed.success) {
       setError(parsed.error.issues.map((issue) => issue.message).join("；"));
