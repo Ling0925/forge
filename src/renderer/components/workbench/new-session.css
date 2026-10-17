@@ -71,9 +71,11 @@
 }
 .composer-fresh .composer-textarea {
   min-height: 100px;
-  border: none !important;
-  outline: none !important;
-  background: transparent !important;
+  /* Same opt-out as .composer-textarea in app.css: this plain textarea is not
+     a .form-* control, so plain declarations win by source order. */
+  border: none;
+  outline: none;
+  background: transparent;
 }
 @media (max-width: 640px) {
   .wb-new-session-intro {
@@ -88,10 +90,13 @@
     flex-wrap: wrap;
   }
 }
+/* Short viewports: the single reading-flow viewport (`main.wb-new-session`,
+   a direct child of `.wb-app` hosting the Welcome + Composer columns) owns
+   the only vertical scrollbar. The duplicate `overflow-y` that used to live
+   here fought the identical block in styles/workspace-theme.css and produced
+   nested scrolling on the same element chain, so only the geometry-only
+   compact spacing is kept below. */
 @media (max-height: 600px) {
-  .wb-new-session {
-    overflow-y: auto;
-  }
   .wb-new-session-intro {
     margin-top: 24px;
     margin-bottom: 16px;

@@ -49,8 +49,10 @@
 
   /* Layout Dimensions */
   --rail-width: 264px;
+  --rail-width-compact: 232px;
   --header-height: 52px;
   --inspector-width: 380px;
+  --inspector-width-compact: 320px;
   --control-height: 34px;
   --control-height-sm: 28px;
   --control-height-lg: 40px;

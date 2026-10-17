@@ -14,9 +14,9 @@
   min-height: 0;
 }
 .wb-app .workbench-task-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
   padding: 0 var(--space-5);
   height: var(--header-height);
@@ -25,6 +25,20 @@
   border-bottom: 1px solid var(--border-subtle);
   background: var(--canvas-bg);
   z-index: 10;
+}
+/* Start (search) / Center (title) / End (approvals, actions, settings). The
+   title column keeps a minimum visible width so the End actions cannot squeeze
+   it to nothing; beyond that it truncates with a smooth ellipsis (see .wb-app
+   h1). The session action group collapses first when width runs out. */
+.wb-header-start {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.wb-header-end {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 .wb-app h1 {
   font-size: var(--text-md);
@@ -45,6 +59,20 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+}
+.wb-header-actions > * {
+  flex-shrink: 0;
+}
+/* Width-constrained header (<= 900px): session actions collapse first and the
+   conversation title keeps a 160px minimum visible width per the spec. */
+@media (max-width: 900px) {
+  .wb-app .wb-session-actions {
+    display: none;
+  }
+  .wb-app .wb-header-title h1 {
+    min-width: 160px;
+  }
 }
 /* Single authoritative `.wb-icon-btn` owner lives further below; the earlier
    duplicate (30px + --radius-sm + border) conflicted with it and is removed. */
@@ -292,21 +320,25 @@
   max-height: 200px;
   resize: none;
   padding: 4px 6px;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
+  /* This plain `<textarea>` intentionally opts out of the .form-* control
+     chrome from primitives/forms.css; specificity `.composer-textarea` (one
+     class) is already enough to win because that sheet styles `.form-input`
+     at the same specificity and app.css loads later. */
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
   color: var(--text-primary);
   font: inherit;
   font-size: var(--prose-size);
   line-height: 1.6;
-  border-radius: 0 !important;
+  border-radius: 0;
 }
 .composer-textarea:focus,
 .composer-textarea:focus-visible {
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
+  border: none;
+  outline: none;
+  box-shadow: none;
 }
 .composer-controls {
   display: flex;
@@ -432,8 +464,6 @@
 .code-line-content,
 .diff-file-path,
 .error-state-message,
-.composer-model-full,
-.composer-model-id,
 .wb-details dd {
   user-select: text;
 }
@@ -617,12 +647,9 @@
   }
 
   .wb-app .workbench-task-header {
-    flex-wrap: wrap;
+    /* Grid Start/Center/End zones; compact paddings and gaps only. */
     gap: var(--space-2);
-  }
-  .wb-app .workbench-task-header h1 {
-    flex-basis: auto;
-    order: 0;
+    padding: 0 var(--space-3);
   }
   .wb-app .workbench-composer {
     padding: var(--space-2) var(--space-3);
@@ -952,92 +979,11 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.composer-model-search-input {
-  flex: 1;
-  height: 28px !important;
-  font-size: 12px !important;
-  padding: 0 8px !important;
-  background-color: var(--surface-soft) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: var(--radius-sm) !important;
-}
-
-.composer-model-refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  background-color: var(--surface-soft);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.composer-model-refresh-btn:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.composer-model-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 240px;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.composer-model-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.composer-model-option:hover {
-  background-color: var(--surface-hover);
-}
-
-.composer-model-option.is-selected {
-  background-color: var(--surface-selected);
-}
-
-.composer-model-option-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.composer-model-option-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer-model-option-full {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* Dead 2024 model-picker markup (composer-model-search-input / -refresh-btn /
+   -list / -option*) was removed: the live picker is ModelCatalog with
+   `.model-catalog-*` styles in styles/settings-models.css. Dropping it also
+   removed six forced `!important` wins that only existed to fight forms.css
+   from a class nothing renders. */
 @keyframes slide-up-fade {
   from {
     opacity: 0;
@@ -1174,6 +1120,34 @@
       visibility 0s linear var(--motion-duration-md);
   }
 }
+
+/* Mid-size desktops (1024px ~ 1366px): when the inspector is expanded, the
+   pane narrows to --inspector-width-compact and the sidebar rail follows
+   --rail-width-compact so the central reading flow keeps a comfortable
+   (>= 640px) width instead of being squeezed below its legible measure. */
+@media (min-width: 1001px) and (max-width: 1366px) {
+  .wb-app:not(.inspector-collapsed) .workbench-inspector,
+  .wb-app:not(.inspector-collapsed) .workbench-inspector > * {
+    width: var(--inspector-width-compact);
+    min-width: var(--inspector-width-compact);
+  }
+  .wb-app:not(.inspector-collapsed) .workbench-sidebar {
+    width: var(--rail-width-compact);
+    min-width: var(--rail-width-compact);
+    max-width: var(--rail-width-compact);
+  }
+  /* One scroll owner: the reading flow fills the remaining space instead of
+     growing an outer page scrollbar next to the conversation scrollbar. */
+  .wb-app .workbench-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .wb-app .conversation-inner,
+  .wb-app .workbench-conversation-scroll {
+    min-width: 0;
+  }
+}
+
 @media (max-width: 768px) {
   .composer-toolbar {
     flex-wrap: wrap;
@@ -1184,7 +1158,6 @@
   .composer-plan-note {
     max-width: 100%;
   }
-  .composer-model-name,
   .composer-model-short {
     max-width: 120px;
   }
@@ -1203,16 +1176,9 @@
   }
 }
 
-.wb-header-title {
-  min-width: 0;
-  flex: 1;
-}
-.wb-header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
+/* `.wb-header-title` is a grid item (min 0 + ellipsis via h1); the former
+   flex `flex: 1` duplicate and the second `.wb-header-actions` gap:8px
+   redeclaration were reconciled into the single header block above. */
 .wb-icon-btn {
   display: inline-flex;
   align-items: center;

@@ -312,10 +312,11 @@
     min-height: var(--touch-min-target);
   }
 }
+/* Short viewports: geometry-only. The single vertical scrollbar stays with
+   the reading-flow viewport; the duplicate `overflow-y` that used to live
+   here (and in components/workbench/new-session.css) created nested scroll
+   containers on the same element and was removed from both sheets. */
 @media (max-height: 700px) {
-  .wb-app .wb-new-session {
-    overflow-y: auto;
-  }
   .wb-app .wb-new-session-intro {
     margin-top: var(--space-4);
   }

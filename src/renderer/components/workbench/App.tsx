@@ -91,7 +91,13 @@ function Workbench() {
       <Sidebar />
       <main className={`workbench-main${isNew ? " wb-new-session" : ""}`}>
         <header className="workbench-task-header">
-          <CommandPalette />
+          {/* Start / Center / End header zones: global search stays anchored
+              on the left, the conversation title owns a protected center
+              column that never truncates before its minimum visible width,
+              and session-scoped actions sit on the right. */}
+          <div className="wb-header-start">
+            <CommandPalette />
+          </div>
           <div className="wb-header-title">
             <h1
               title={isNew ? "新会话" : state.activeSnapshot?.title}
@@ -106,7 +112,7 @@ function Workbench() {
                 : (state.activeSnapshot?.title ?? "Forge 工作台")}
             </h1>
           </div>
-          <div className="wb-header-actions">
+          <div className="wb-header-end wb-header-actions">
             {pending > 0 && (
               <button
                 type="button"
