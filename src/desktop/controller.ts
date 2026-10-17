@@ -47,6 +47,10 @@ export function createWorkerController(
       permission: Permission | undefined;
       permissionChanged: boolean;
       recovery: Map<string, AgentEvent>;
+      steering: Extract<RpcRequest, { method: "steerRun" }>[];
+      applyingSteering: Extract<RpcRequest, { method: "steerRun" }>[];
+      acceptingSteering: boolean;
+      terminal?: Extract<AgentEvent, { type: "run_finished" }>;
     }
   >();
   const pending = new Map<string, RpcRequest>();
@@ -96,6 +100,11 @@ export function createWorkerController(
     )
       return;
     if (value.type === "run_started") run.permission = value.permission;
+    if (value.type === "run_finished") {
+      run.terminal = value;
+      run.acceptingSteering = false;
+      return;
+    }
     if (value.type === "approval_requested") {
       const approval = approvalRequestSchema.parse(value.request);
       if (
@@ -138,10 +147,6 @@ export function createWorkerController(
       // Keep one extra character so the renderer can still indicate truncation.
       run.recovery.set(value.type, { ...value, text: (text + value.text).slice(0, 131073) });
     }
-    if (value.type === "run_finished") {
-      run.finished = true;
-      for (const approval of run.approvals.values()) approval.resolve?.(false);
-    }
     emit(parsed);
   };
   const finish = (runId: RunId, error?: ErrorInfo): void => {
@@ -153,7 +158,7 @@ export function createWorkerController(
     };
     if (error && !run.abort.signal.aborted)
       event(runId, { ...base, type: "error", error });
-    event(runId, {
+    const terminal: AgentEvent = run.terminal && !error ? run.terminal : {
       ...base,
       type: "run_finished",
       status: run.abort.signal.aborted
@@ -163,9 +168,13 @@ export function createWorkerController(
           : "completed",
       turns: 0,
       toolCalls: 0,
-    });
+    };
+    run.finished = true;
+    for (const request of [...run.steering, ...run.applyingSteering])
+      respond(request, null, { code: "cancelled", message: "插话未写入会话，草稿已保留。请核对记录后手动发送。", retryable: false });
     for (const approval of run.approvals.values()) approval.resolve?.(false);
     runs.delete(runId);
+    emit({ kind: "event", data: { runId, event: terminal } });
   };
   const handle = async (raw: unknown): Promise<void> => {
     const parsed = workerRequestSchema.safeParse(raw);
@@ -300,14 +309,17 @@ export function createWorkerController(
               true,
             );
           const runId = runIdSchema.parse(randomUUID());
-          const run = {
+          const run: NonNullable<ReturnType<typeof runs.get>> = {
             input: request.input,
             abort: new AbortController(),
             approvals: new Map<string, Approval>(),
             finished: false,
-            permission: undefined as Permission | undefined,
+            permission: undefined,
             permissionChanged: false,
             recovery: new Map<string, AgentEvent>(),
+            steering: [],
+            applyingSteering: [],
+            acceptingSteering: true,
           };
           runs.set(runId, run);
           respond(request, { runId, sessionId: request.input.sessionId });
@@ -357,7 +369,15 @@ export function createWorkerController(
                   });
                 },
                 run.abort.signal,
-                { drainSteering: () => [], getPermission: () => run.permission },
+                { drainSteering: (final) => {
+                    const requests = run.steering.splice(0);
+                    run.applyingSteering.push(...requests);
+                    if (final && requests.length === 0) run.acceptingSteering = false;
+                    return requests.map(request => request.prompt);
+                  },
+                  onSteeringApplied: () => {
+                    for (const request of run.applyingSteering.splice(0)) respond(request, null);
+                  }, getPermission: () => run.permission },
               ),
             )
             .then(
@@ -366,6 +386,16 @@ export function createWorkerController(
             );
           operations.add(operation);
           void operation.finally(() => operations.delete(operation));
+          break;
+        }
+        case "steerRun": {
+          const run = runs.get(request.runId);
+          if (!run || run.finished || run.abort.signal.aborted || !run.acceptingSteering)
+            throw new ForgeError("not_found", "当前运行已结束或正在收尾，草稿已保留。请手动发送下一轮。");
+          const queued = [...run.steering, ...run.applyingSteering];
+          if (queued.length >= 1000 || queued.reduce((size, item) => size + Buffer.byteLength(item.prompt), Buffer.byteLength(request.prompt)) > 1000000)
+            throw new ForgeError("invalid_input", "插话队列已满，草稿已保留。");
+          run.steering.push(request);
           break;
         }
         case "setRunPermission": {

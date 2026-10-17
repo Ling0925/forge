@@ -1,0 +1,117 @@
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { build } from "esbuild";
+import { chromium } from "playwright";
+import { expect, it } from "vitest";
+
+it("uses pinned sources, retains unacknowledged drafts and runs only confirmed session queues", async () => {
+  const bundle = await build({ stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
+    import {createRoot} from 'react-dom/client';
+    import {Composer} from './src/renderer/components/workbench/Composer';
+    import {WorkbenchProvider,useWorkbench} from './src/renderer/state/workbench-context';
+    import {defaultPublicSettings} from './src/shared/schemas';
+    import './src/renderer/styles/global.css';
+    import './src/renderer/components/workbench/app.css';
+    import './src/renderer/styles/workspace-theme.css';
+    const a='11111111-1111-4111-8111-111111111111';
+    const b='22222222-2222-4222-8222-222222222222';
+    const snapshots=Object.fromEntries([a,b].map(id=>[id,{version:1,id,title:id===a?'A':'B',workspace:'/tmp',model:'a-model',providerSourceId:'a',
+      status:'idle',createdAt:'2026-01-01T00:00:00.000Z',updatedAt:'2026-01-01T00:00:00.000Z',messages:[],events:[],changes:[]}]));
+    const listeners=new Set(); const live=new Map(); const pending=new Map(); let counter=0;
+    const emit=(runId,event)=>{for(const listener of listeners)listener({runId,event:{timestamp:new Date().toISOString(),...event}});};
+    const fixture=window.fixture={starts:[],catalogues:[],pending:()=>pending.size,
+      apply:()=>{for(const [id,item] of pending){snapshots[item.sessionId].messages.push({role:'user',content:item.prompt});item.resolve();pending.delete(id);}},
+      finish:(sessionId,status)=>{const runId=live.get(sessionId);live.delete(sessionId);snapshots[sessionId].status=status;
+        for(const [id,item]of pending)if(item.sessionId===sessionId){item.reject(Error('未写入，草稿已保留'));pending.delete(id);}
+        emit(runId,{type:'run_finished',sessionId,status,turns:1,toolCalls:0});}};
+    window.forge={getSettings:async()=>({...defaultPublicSettings,isConfigured:true,baseUrl:'https://b.invalid/v1',model:'b-model',activeSourceId:'b',
+      providerSources:[{id:'a',label:'Source A',baseUrl:'https://a.invalid/v1',model:'a-model',hasApiKey:false},{id:'b',label:'Source B',baseUrl:'https://b.invalid/v1',model:'b-model',hasApiKey:false}]}),
+      listSessions:async()=>Object.values(snapshots),getSession:async id=>structuredClone(snapshots[id]),
+      listModels:async source=>{fixture.catalogues.push(source);return [source+'-model'];},
+      onEvent:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
+      startRun:async input=>{fixture.starts.push(input);const runId='33333333-3333-4333-8333-'+String(++counter).padStart(12,'0');
+        const snapshot=snapshots[input.sessionId];snapshot.messages.push({role:'user',content:input.prompt});snapshot.status='running';
+        if(input.providerSourceId)snapshot.providerSourceId=input.providerSourceId;if(input.model)snapshot.model=input.model;
+        live.set(input.sessionId,runId);setTimeout(()=>emit(runId,{type:'run_started',sessionId:input.sessionId,model:snapshot.model,permission:input.permission??'workspace'}),0);
+        return {runId,sessionId:input.sessionId};},
+      steerRun:(runId,prompt)=>new Promise((resolve,reject)=>{const sessionId=[...live].find(([,id])=>id===runId)?.[0];
+        if(!sessionId){reject(Error('stale run'));return;}pending.set(runId,{sessionId,prompt,resolve,reject});}),
+      cancelRun:async runId=>{const sessionId=[...live].find(([,id])=>id===runId)?.[0];if(sessionId)fixture.finish(sessionId,'cancelled');},
+      chooseWorkspace:async()=>null,setRunPermission:async(_id,permission)=>permission};
+    function Harness(){const {selectSession,state}=useWorkbench();return <>
+      <button onClick={()=>selectSession(a)}>打开 A</button><button onClick={()=>selectSession(b)}>打开 B</button>
+      <output id="selected">{state.activeSessionId}</output><div className="wb-app"><Composer/></div></>}
+    createRoot(document.getElementById('root')).render(<WorkbenchProvider><Harness/></WorkbenchProvider>);
+  ` }, bundle: true, write: false, format: "iife", jsx: "automatic", outfile: "steering.js", loader: { ".woff2": "dataurl" }, define: { "process.env.NODE_ENV": '"development"' } });
+  const browser = await chromium.launch({ headless: true, ...(process.env.FORGE_BROWSER_EXECUTABLE ? { executablePath: process.env.FORGE_BROWSER_EXECUTABLE } : {}) });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("http://forge.test/**", route => route.fulfill({ body: '<html><head></head><body><div id="root"></div></body></html>', contentType: "text/html" }));
+    await page.goto("http://forge.test");
+    const js = bundle.outputFiles.find(file => file.path.endsWith(".js"))?.text;
+    if (!js) throw new Error("Missing mounted bundle");
+    const css = bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
+    await page.addStyleTag({ content: css });
+    await page.addScriptTag({ content: js });
+    await page.getByRole("button", { name: "打开 A", exact: true }).click();
+    const input = page.locator("textarea.composer-textarea");
+    await expect.poll(() => page.getByRole("button", { name: "会话模型来源", exact: true }).innerText()).toBe("Source A");
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").catalogues.includes("a"))).toBe(true);
+    await input.fill("initial"); await input.press("Enter");
+    await expect.poll(() => input.inputValue()).toBe("");
+    await input.fill("change direction"); await input.press("Enter");
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").pending())).toBe(1);
+    expect(await input.inputValue()).toBe("change direction");
+    await page.evaluate(() => Reflect.get(window, "fixture").apply());
+    await expect.poll(() => input.inputValue()).toBe("");
+    await page.getByRole("button", { name: "运行中消息", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: /^排队/ }).click();
+    await input.fill("follow one"); await input.press("Enter");
+    await expect.poll(() => input.inputValue()).toBe("");
+    await input.fill("follow two"); await input.press("Enter");
+    await expect.poll(() => input.inputValue()).toBe("");
+    await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));
+    await expect.poll(() => page.locator(".composer-status").innerText()).toContain("已暂停");
+    expect(await page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(1);
+    await page.getByRole("button", { name: "继续队列", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(2);
+    await expect.poll(() => page.locator(".composer-status").innerText()).toContain("待发 1 条");
+    await page.getByRole("button", { name: "打开 B", exact: true }).click();
+    expect(await page.getByRole("button", { name: "清空队列", exact: true }).count()).toBe(0);
+    await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'completed'));
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(3);
+    expect(await page.locator("#selected").innerText()).toBe("22222222-2222-4222-8222-222222222222");
+    expect(await page.evaluate(() => Reflect.get(window, "fixture").starts.map((item: { prompt: string }) => item.prompt))).toEqual(["initial", "follow one", "follow two"]);
+    expect(await page.evaluate(() => Reflect.get(window, "fixture").starts[2].providerSourceId)).toBe("a");
+    await page.getByRole("button", { name: "打开 A", exact: true }).click();
+    await page.getByRole("button", { name: "运行中消息", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: /^插话/ }).click();
+    await input.fill("retain on cancellation"); await input.press("Enter");
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").pending())).toBe(1);
+    await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));
+    await expect.poll(() => page.getByRole("alert").last().innerText()).toContain("草稿已保留");
+    expect(await input.inputValue()).toBe("retain on cancellation");
+    await page.getByRole("button", { name: "会话模型来源", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: /^Source B/ }).click();
+    await input.fill("explicit source change"); await page.getByRole("button", { name: "运行", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.at(-1).providerSourceId)).toBe("b");
+    await page.getByRole("button", { name: "运行中消息", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: /^排队/ }).click();
+    await input.fill("keep across reload"); await input.press("Enter");
+    await expect.poll(() => input.inputValue()).toBe("");
+    await mkdir(resolve(".build/design-fixes-ui"), { recursive: true });
+    for (const width of [390, 1440]) for (const theme of ["light", "dark"]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+      await page.screenshot({ path: resolve(`.build/design-fixes-ui/steering-${width}-${theme}.png`), animations: "disabled" });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+    await page.reload(); await page.addStyleTag({ content: css }); await page.addScriptTag({ content: js });
+    await page.getByRole("button", { name: "打开 A", exact: true }).click();
+    await expect.poll(() => page.locator(".composer-status").innerText()).toContain("已暂停");
+    expect(await page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(0);
+    expect(errors).toEqual([]);
+  } finally { await browser.close(); }
+}, 30000);

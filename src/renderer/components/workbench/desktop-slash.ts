@@ -6,8 +6,6 @@ import type { ForgeBridge } from "../../../shared/ipc";
 // Limitations of the current desktop bridge, not a second command catalog.
 export const desktopSlashLimitation = (name: string): string | undefined => ({
   "/history": "仅 CLI：终端输入历史；桌面草稿不是该历史记录",
-  "/steer": "桌面桥接尚未提供运行插话接口",
-  "/queue": "桌面桥接尚未提供 CLI 待发队列接口",
   "/approval": "仅 CLI：进程内自动审批策略；桌面保留逐项审批",
   "/tasks": "桌面桥接尚未提供进程任务查询/停止接口",
   "/tools": "CLI 工具编号视图尚未接入桌面；请使用消息中的工具卡",
@@ -24,6 +22,8 @@ export interface DesktopSlashHost {
   mode: "plan" | "build";
   permission: string;
   running: boolean;
+  steer?(text: string): Promise<boolean>;
+  queueCommand?(value: string): string;
   setModel(value: string): void;
   setMode(value: "plan" | "build"): void;
   setPermission(value: string): Promise<void>;
@@ -32,6 +32,7 @@ export interface DesktopSlashHost {
   applySnapshot(snapshot: SessionSnapshot, switchSession: boolean): Promise<void>;
 }
 export interface DesktopSlashResult {
+  clearPrompt?: boolean;
   text?: string;
   sessions?: readonly { id: SessionId; title: string }[];
 }
@@ -43,6 +44,15 @@ export async function executeDesktopSlash(line: string, host: DesktopSlashHost):
   ).join("\n") };
   const limitation = desktopSlashLimitation(command);
   if (limitation) throw Error(limitation);
+  if (command === "/steer") {
+    if (!host.running || !value || !host.steer) throw Error("需要活动运行：/steer <消息>");
+    if (!await host.steer(value)) throw Error("插话未确认写入，草稿已保留。");
+    return { text: "插话已写入当前会话。", clearPrompt: true };
+  }
+  if (command === "/queue") {
+    if (!host.queueCommand) throw Error("当前宿主不支持待发队列。");
+    return { text: host.queueCommand(value), clearPrompt: true };
+  }
   // Do not silently race live work or apply a deferred command to a different session.
   if (host.running) throw Error("当前会话正在运行，请停止或等待完成后执行此命令（桌面不自动排队）。");
   const actions = createSlashActions(host.bridge);

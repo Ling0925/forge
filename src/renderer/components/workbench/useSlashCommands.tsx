@@ -38,7 +38,10 @@ export function useSlashCommands(options: {
     setDismissed(true);
     try {
       const next = await executeDesktopSlash(line, options.host);
-      if (currentDraft.current === options.draftId) setResult(next);
+      if (currentDraft.current === options.draftId) {
+        setResult(next);
+        if (next.clearPrompt) options.setPrompt("");
+      }
     } catch (error) {
       if (currentDraft.current === options.draftId) setResult({ text: error instanceof Error ? error.message : "命令执行失败，未自动重试。" });
     } finally {

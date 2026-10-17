@@ -291,6 +291,8 @@ export function launchDesktop(): void {
         return failure(request);
       if (
         (request.method === "cancelRun" ||
+          request.method === "setRunPermission" ||
+          request.method === "steerRun" ||
           request.method === "answerApproval") &&
         runs.get(request.runId)?.owner !== contents
       )

@@ -7,11 +7,13 @@ import {
   useLayoutEffect,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import {
   configureInputSchema,
   createSessionInputSchema,
   runInputSchema,
+  type RunInput,
 } from "../../shared/schemas";
 import type {
   ConfigureInput,
@@ -20,6 +22,7 @@ import type {
   SessionId,
 } from "../shared-types";
 import { shouldRefreshTranscript } from "./refresh-events";
+import { RunInputQueue } from "./run-input-queue";
 import {
   type WorkbenchAction,
   initialWorkbenchState,
@@ -38,6 +41,22 @@ function useController() {
   const alive = useRef(true);
   const starting = useRef(new Set<string>());
   const answering = useRef(new Set<string>());
+  const [restoredQueue] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem("forge-pending-inputs");
+      return raw && raw.length <= 2000000 ? RunInputQueue.restore(JSON.parse(raw)) : new RunInputQueue();
+    } catch { return new RunInputQueue(); }
+  });
+  const inputQueue = useRef(restoredQueue);
+  const queuedStarts = useRef(new Map<SessionId, RunInput>());
+  const terminalSessions = useRef(new Set<SessionId>());
+  const [, setQueueVersion] = useState(0);
+  const updateQueue = useCallback(() => {
+    try { sessionStorage.setItem("forge-pending-inputs", JSON.stringify(inputQueue.current.snapshot())); }
+    catch (error) { if (!(error instanceof DOMException)) throw error; }
+    if (alive.current) setQueueVersion(version => version + 1);
+  }, []);
+  const launchQueued = useRef<(id: SessionId) => Promise<void>>(async () => {});
   const dispatch = useCallback((action: WorkbenchAction) => {
     if (alive.current) rawDispatch(action);
   }, []);
@@ -124,6 +143,16 @@ function useController() {
     }
     const titleRefreshes = new Map<string, ReturnType<typeof setTimeout>>();
     const off = window.forge.onEvent((event) => {
+      const id = event.event.sessionId;
+      if (event.event.type === "run_started") {
+        terminalSessions.current.delete(id);
+        const queued = queuedStarts.current.get(id);
+        if (queued) {
+          inputQueue.current.consume(queued);
+          queuedStarts.current.delete(id);
+          updateQueue();
+        }
+      }
       dispatch({ type: "RUN_EVENT_RECEIVED", event });
       if (shouldRefreshTranscript(event.event.type)) {
         // Refresh on run_started/approval_requested too: the accepted user turn
@@ -133,12 +162,16 @@ function useController() {
         if (event.event.type === "agent_update") {
           void loadSessions();
           void refreshSession(event.event.childSessionId);
-        } else void loadSessions();
+        } else if (event.event.type === "run_started") void loadSessions();
       }
       if (event.event.type === "run_finished") {
+        terminalSessions.current.add(id);
+        queuedStarts.current.delete(id);
+        if (event.event.status !== "completed") inputQueue.current.pause(id);
+        updateQueue();
+        if (event.event.status === "completed") setTimeout(() => { if (alive.current) void launchQueued.current(id); }, 0);
         starting.current.delete(event.event.sessionId);
         // One bounded follow-up read for asynchronous title metadata; no polling.
-        const id = event.event.sessionId;
         clearTimeout(titleRefreshes.get(id));
         titleRefreshes.set(id, setTimeout(() => {
           titleRefreshes.delete(id);
@@ -156,7 +189,7 @@ function useController() {
       off();
       for (const timer of titleRefreshes.values()) clearTimeout(timer);
     };
-  }, [dispatch, fail, loadSettings, loadSessions, refreshSession]);
+  }, [dispatch, fail, loadSettings, loadSessions, refreshSession, updateQueue]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
@@ -205,14 +238,15 @@ function useController() {
     model?: string,
     target?: SessionId,
     mode: "build" | "plan" = "build",
+    providerSourceId?: string,
   ) => {
     const id = target ?? current.current.activeSessionId;
     if (!id || !window.forge) return false;
     const run = current.current.activeRuns[id];
     if (
       starting.current.has(id) ||
-      run?.status === "running" ||
-      run?.status === "awaiting_approval"
+      (!terminalSessions.current.has(id) && (run?.status === "running" ||
+      run?.status === "awaiting_approval"))
     )
       return false;
     try {
@@ -221,7 +255,8 @@ function useController() {
         mode,
         prompt,
         permission: permission ?? current.current.settings?.defaultPermission,
-        model: model ?? current.current.settings?.model,
+        ...(model ? { model } : {}),
+        ...(providerSourceId ? { providerSourceId } : {}),
       });
       starting.current.add(id);
       dispatch({ type: "START_RUN_INITIATED", sessionId: id });
@@ -235,6 +270,34 @@ function useController() {
       await refreshSession(id);
       return false;
     }
+  };
+  const runQueued = async (id: SessionId) => {
+    if (queuedStarts.current.has(id) || starting.current.has(id)) return;
+    const run = current.current.activeRuns[id];
+    if (!terminalSessions.current.has(id) && (run?.status === "running" || run?.status === "awaiting_approval")) return;
+    const input = inputQueue.current.peek(id);
+    if (!input) return;
+    queuedStarts.current.set(id, input);
+    const started = await startRun(input.prompt, input.permission, input.model, id, input.mode, input.providerSourceId);
+    if (!started) {
+      queuedStarts.current.delete(id);
+      inputQueue.current.pause(id);
+      updateQueue();
+    }
+  };
+  const queueInput = (input: RunInput): boolean => {
+    try {
+      inputQueue.current.add(input);
+      updateQueue();
+      return true;
+    } catch (error) { fail(error); return false; }
+  };
+  launchQueued.current = runQueued;
+  const sendSteering = async (prompt: string, id: SessionId): Promise<boolean> => {
+    const run = current.current.activeRuns[id];
+    if (!run?.runId) return false;
+    try { await window.forge.steerRun(run.runId, prompt); await refreshSession(id); return true; }
+    catch (error) { fail(error); return false; }
   };
   const cancelRun = async (target?: SessionId) => {
     const id = target ?? current.current.activeSessionId;
@@ -304,6 +367,18 @@ function useController() {
     selectSession,
     createSession,
     startRun,
+    sendSteering,
+    queueInput,
+    pendingInputs: state.activeSessionId ? inputQueue.current.items(state.activeSessionId) : [],
+    inputQueuePaused: state.activeSessionId ? inputQueue.current.isPaused(state.activeSessionId) : false,
+    resumeInputs: () => {
+      const id = current.current.activeSessionId;
+      if (id) { inputQueue.current.resume(id); updateQueue(); void runQueued(id); }
+    },
+    clearInputs: () => {
+      const id = current.current.activeSessionId;
+      if (id && !queuedStarts.current.has(id)) { inputQueue.current.clear(id); updateQueue(); }
+    },
     cancelRun,
     setRunPermission,
     answerApproval,

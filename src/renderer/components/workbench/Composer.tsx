@@ -24,6 +24,7 @@ import { UsagePopover } from "./UsagePopover";
 import { useAutosizePrompt } from "./useAutosizePrompt";
 import { useSlashCommands } from "./useSlashCommands";
 import "./composer-activity.css";
+import "./composer-live-input.css";
 
 const taskSchema = z.object({
   workspace: z
@@ -62,6 +63,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setRunPermission,
     openSettings,
     updateSettings,
+    sendSteering,
+    queueInput,
+    pendingInputs = [],
+    inputQueuePaused = false,
+    resumeInputs,
+    clearInputs,
   } = useWorkbench();
   // Keep one composer mounted across new/history views; drafts never migrate to another session.
   const [drafts, setDrafts] = useState(readDrafts);
@@ -122,6 +129,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [modelsByDraft, setModelsByDraft] = useState<Record<string, string>>(
     {},
   );
+  const [sourcesByDraft, setSourcesByDraft] = useState<Record<string, string>>({});
+  const providerSourceId = sourcesByDraft[draftId] ?? (!isNew ? state.activeSnapshot?.providerSourceId : undefined) ?? state.settings?.activeSourceId;
+  const providerSource = state.settings?.providerSources?.find(source => source.id === providerSourceId);
   const model =
     modelsByDraft[draftId] ??
     (isNew ? state.settings?.model : state.activeSnapshot?.model) ??
@@ -133,9 +143,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
   const modelSource = JSON.stringify([
-    state.settings?.activeSourceId ?? "legacy",
-    state.settings?.baseUrl ?? "",
-    state.settings?.apiMode ?? "chat-completions",
+    providerSourceId ?? "legacy",
+    providerSource?.baseUrl ?? state.settings?.baseUrl ?? "",
+    providerSource?.apiMode ?? state.settings?.apiMode ?? "chat-completions",
     state.settings?.environmentOverride ?? false,
   ]);
   const currentModelSource = useRef(modelSource);
@@ -146,7 +156,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     void listModels();
   }, [modelSource]);
   const allKnownModels = useMemo(() => {
-    const list = [
+    const list = !isNew && state.activeSnapshot?.providerSourceId ? [model, providerSource?.model, ...availableModels] : [
       model,
       state.settings?.model,
       ...(state.settings?.providerSources?.map((s) => s.model) ?? []),
@@ -169,6 +179,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     state.settings?.providerSources,
     state.settings?.modelContextWindows,
     availableModels,
+    isNew,
+    state.activeSnapshot?.providerSourceId,
+    providerSource?.model,
   ]);
   const [savingEffort, setSavingEffort] = useState(false);
   const effortSaving = useRef(false);
@@ -231,6 +244,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       void selectSession(submission.id);
   }, [submission, state.activeRuns, selectSession]);
   const [mode, setMode] = useState<"build" | "plan">("build");
+  const [liveInputKind, setLiveInputKind] = useState("steer");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const pendingNew = useRef<{
@@ -276,7 +290,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const changeMode = (next: "build" | "plan") => {
     setMode(next);
   };
-  const isConfigured = state.settings?.isConfigured === true;
+  const isConfigured = !isNew && state.activeSnapshot?.providerSourceId
+    ? Boolean(providerSource?.baseUrl && model) : state.settings?.isConfigured === true;
   const configurationHint = "连接模型后即可开始对话。";
   const { dispatch, loadSessions } = useWorkbench();
   const slash = useSlashCommands({
@@ -296,6 +311,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       mode,
       permission,
       running,
+      steer: async (text) => {
+        const id = state.activeSessionId;
+        return id ? sendSteering(text, id) : false;
+      },
+      queueCommand: (value) => {
+        if (value === "clear") clearInputs();
+        else if (value === "run") resumeInputs();
+        else if (value) throw new Error("用法：/queue [clear|run]");
+        return `待发 ${pendingInputs.length} 条${inputQueuePaused ? "（已暂停）" : ""}。`;
+      },
       setModel,
       setMode: changeMode,
       setPermission: changePermission,
@@ -340,11 +365,29 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     if (
       submitting.current ||
       effortSaving.current ||
-      running ||
       submission ||
       slash.executing
     )
       return;
+    if (running && state.activeSessionId && prompt.trim()) {
+      const id = state.activeSessionId;
+      const capturedPrompt = prompt;
+      submitting.current = true;
+      setBusy(true);
+      setError("");
+      const accepted = liveInputKind === "follow-up"
+        ? queueInput({ sessionId: id, prompt: capturedPrompt, model, permission: mode === "plan" ? "readonly" : permission, mode,
+          ...(providerSourceId ? { providerSourceId } : {}) })
+        : await sendSteering(capturedPrompt, id);
+      submitting.current = false;
+      if (!alive.current) return;
+      setBusy(false);
+      if (accepted) {
+        setDrafts(old => old[draftId] === capturedPrompt ? { ...old, [draftId]: "" } : old);
+        setManualDrafts(old => ({ ...old, [draftId]: false }));
+      } else if (selectedDraft.current === draftId) setError("消息未确认写入，草稿已保留。请核对会话后手动发送。");
+      return;
+    }
     if (!isConfigured) {
       setError(configurationHint);
       return;
@@ -373,7 +416,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         id = pending.id;
       else {
         const snapshot = await createSession(
-          { workspace: parsed.data.workspace, model: parsed.data.model },
+          { workspace: parsed.data.workspace, model: parsed.data.model, ...(providerSourceId ? { providerSourceId } : {}) },
           false,
         );
         id = snapshot?.id ?? null;
@@ -392,6 +435,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           parsed.data.model,
           id,
           mode,
+          providerSourceId,
         )
       : false;
     submitting.current = false;
@@ -415,7 +459,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     try {
       const models = await modelCatalogCache.load(
         modelSource,
-        () => window.forge.listModels(state.settings?.activeSourceId),
+        () => window.forge.listModels(providerSourceId),
         refresh,
       );
       if (alive.current && currentModelSource.current === modelSource)
@@ -524,7 +568,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           )}
         </div>
         {slash.view}
-        <div className="composer-prompt composer-surface is-quiet">
+        <div className={`composer-prompt composer-surface is-quiet${running ? " has-live-actions" : ""}`}>
           <label htmlFor={promptId} className="visually-hidden">
             {isNew ? "新会话消息" : "继续任务"}
           </label>
@@ -589,6 +633,29 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               }
             }}
           />
+          {running && (
+            <div className="composer-live-actions">
+              <ComposerDropdown
+                ariaLabel="运行中消息"
+                value={liveInputKind}
+                onChange={setLiveInputKind}
+                disabled={busy}
+                options={[
+                  { value: "steer", label: "插话", sub: "在当前步骤结束后接收" },
+                  { value: "follow-up", label: "排队", sub: "本轮完成后开始下一轮" },
+                ]}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                loading={busy}
+                disabled={!prompt.trim() || busy || savingEffort}
+                aria-label={liveInputKind === "steer" ? "发送插话" : "加入待发队列"}
+              >
+                {liveInputKind === "steer" ? "插话" : "排队"}
+              </Button>
+            </div>
+          )}
         </div>
         <div className="composer-toolbar">
           <div className="composer-toolbar-start">
@@ -667,17 +734,19 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </select>
           </div>
           <div className="composer-toolbar-end">
-            {state.settings?.activeSourceId && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => openSettings(true)}
-                title="当前模型来源；在设置中切换。已有会话请确认模型 ID 在此来源可用。"
-              >
-                {state.settings.providerSources?.find(
-                  (source) => source.id === state.settings?.activeSourceId,
-                )?.label ?? state.settings.activeSourceId}
-              </Button>
+            {providerSourceId && (
+              <ComposerDropdown ariaLabel="会话模型来源" value={providerSourceId}
+                disabled={busy || !!submission}
+                options={[
+                  ...(!providerSource ? [{ value: providerSourceId, label: `${providerSourceId}（不可用）` }] : []),
+                  ...(state.settings?.providerSources?.map(source => ({ value: source.id, label: source.label,
+                    sub: "后续运行使用此来源" })) ?? []),
+                ]}
+                onChange={value => {
+                  setSourcesByDraft(old => ({ ...old, [draftId]: value }));
+                  const selected = state.settings?.providerSources?.find(source => source.id === value);
+                  if (selected) setModel(selected.model);
+                }} />
             )}
             <ModelPicker
               value={model}
@@ -752,6 +821,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             )}
           </div>
         </div>
+        {pendingInputs.length > 0 && <output className="composer-status">
+          <span>待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{pendingInputs[0]?.prompt.slice(0, 80)}</span>
+          <Button type="button" size="sm" variant="ghost" disabled={running || busy} onClick={resumeInputs}>继续队列</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={clearInputs}>清空队列</Button>
+        </output>}
         {(!isConfigured || mode === "plan" || error) && (
           <div className="composer-status" aria-live="polite">
             {!isConfigured && (
