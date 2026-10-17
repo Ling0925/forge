@@ -1,4 +1,5 @@
 import { fileChangeSchema } from "../../shared/schemas";
+import type { ImageAttachment } from "../../shared/images";
 import type { FileChange, SessionSnapshot, ToolCall } from "../shared-types";
 
 export type TimelineItem =
@@ -7,6 +8,7 @@ export type TimelineItem =
       readonly id: string;
       readonly role: "user" | "assistant";
       readonly content: string;
+      readonly images?: readonly ImageAttachment[];
       readonly reasoning?: string;
       readonly reasoningTruncated?: boolean;
       readonly origin?: "agent_reconciliation";
@@ -85,12 +87,13 @@ export function reduceTimeline(
       // Internal child joins do not start a human turn or break pending results.
       if (message.role !== "user" || message.origin !== "agent_reconciliation")
         pending.clear();
-      if (message.content || (message.role === "assistant" && message.reasoning))
+      if (message.content || (message.role === "user" && message.images?.length) || (message.role === "assistant" && message.reasoning))
         items.push({
           kind: "message",
           id: `message:${index}`,
           role: message.role,
           content: message.content ?? "",
+          ...(message.role === "user" && message.images?.length ? { images: message.images } : {}),
           ...(message.role === "assistant" && message.reasoning
             ? { reasoning: message.reasoning }
             : {}),

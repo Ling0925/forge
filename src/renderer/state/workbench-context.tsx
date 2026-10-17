@@ -23,6 +23,7 @@ import type {
 } from "../shared-types";
 import { shouldRefreshTranscript } from "./refresh-events";
 import { RunInputQueue } from "./run-input-queue";
+import type { ImageAttachment } from "../../shared/images";
 import {
   type WorkbenchAction,
   initialWorkbenchState,
@@ -44,16 +45,19 @@ function useController() {
   const [restoredQueue] = useState(() => {
     try {
       const raw = sessionStorage.getItem("forge-pending-inputs");
-      return raw && raw.length <= 2000000 ? RunInputQueue.restore(JSON.parse(raw)) : new RunInputQueue();
+      return raw && raw.length <= 20 * 1024 * 1024 ? RunInputQueue.restore(JSON.parse(raw)) : new RunInputQueue();
     } catch { return new RunInputQueue(); }
   });
   const inputQueue = useRef(restoredQueue);
   const queuedStarts = useRef(new Map<SessionId, RunInput>());
   const terminalSessions = useRef(new Set<SessionId>());
   const [, setQueueVersion] = useState(0);
-  const updateQueue = useCallback(() => {
+  const updateQueue = useCallback((requirePersistence = false) => {
     try { sessionStorage.setItem("forge-pending-inputs", JSON.stringify(inputQueue.current.snapshot())); }
-    catch (error) { if (!(error instanceof DOMException)) throw error; }
+    catch (error) {
+      if (requirePersistence) throw new Error("浏览器存储空间不足，无法保存待发图片；草稿已保留，请减少图片或在本轮结束后发送。");
+      if (!(error instanceof DOMException)) throw error;
+    }
     if (alive.current) setQueueVersion(version => version + 1);
   }, []);
   const launchQueued = useRef<(id: SessionId) => Promise<void>>(async () => {});
@@ -239,6 +243,7 @@ function useController() {
     target?: SessionId,
     mode: "build" | "plan" = "build",
     providerSourceId?: string,
+    images?: readonly ImageAttachment[],
   ) => {
     const id = target ?? current.current.activeSessionId;
     if (!id || !window.forge) return false;
@@ -254,6 +259,7 @@ function useController() {
         sessionId: id,
         mode,
         prompt,
+        ...(images?.length ? { images } : {}),
         permission: permission ?? current.current.settings?.defaultPermission,
         ...(model ? { model } : {}),
         ...(providerSourceId ? { providerSourceId } : {}),
@@ -278,7 +284,7 @@ function useController() {
     const input = inputQueue.current.peek(id);
     if (!input) return;
     queuedStarts.current.set(id, input);
-    const started = await startRun(input.prompt, input.permission, input.model, id, input.mode, input.providerSourceId);
+    const started = await startRun(input.prompt, input.permission, input.model, id, input.mode, input.providerSourceId, input.images);
     if (!started) {
       queuedStarts.current.delete(id);
       inputQueue.current.pause(id);
@@ -286,17 +292,21 @@ function useController() {
     }
   };
   const queueInput = (input: RunInput): boolean => {
+    let queued: RunInput | undefined;
     try {
-      inputQueue.current.add(input);
-      updateQueue();
+      queued = inputQueue.current.add(input);
+      updateQueue(true);
       return true;
-    } catch (error) { fail(error); return false; }
+    } catch (error) {
+      if (queued) inputQueue.current.remove(queued);
+      fail(error); return false;
+    }
   };
   launchQueued.current = runQueued;
-  const sendSteering = async (prompt: string, id: SessionId): Promise<boolean> => {
+  const sendSteering = async (prompt: string, id: SessionId, images?: readonly ImageAttachment[]): Promise<boolean> => {
     const run = current.current.activeRuns[id];
     if (!run?.runId) return false;
-    try { await window.forge.steerRun(run.runId, prompt); await refreshSession(id); return true; }
+    try { await window.forge.steerRun(run.runId, prompt, images); await refreshSession(id); return true; }
     catch (error) { fail(error); return false; }
   };
   const cancelRun = async (target?: SessionId) => {

@@ -7,6 +7,7 @@ import { createWorkerController } from "../../src/desktop/controller";
 import type { HarnessService } from "../../src/shared/contracts";
 import { createTransportBridge } from "../../src/shared/bridge";
 import type { RunEvent } from "../../src/shared/ipc";
+import { image } from "../fixtures/image";
 
 let directory = "";
 let service: HarnessService;
@@ -72,6 +73,19 @@ function connect(owned = service) {
   });
   return { controller, bridge, events };
 }
+
+it("delivers image-only steering through the shared bridge and controller after durable save", async () => {
+  const session = await service.createSession({ workspace: directory });
+  const { controller, bridge } = connect();
+  try {
+    const run = await bridge.startRun({ sessionId: session.id, prompt: "initial" });
+    await vi.waitFor(() => expect(entered).toBe(1));
+    const pending = bridge.steerRun(run.runId, "", [image]);
+    releaseModel();
+    await pending;
+    expect((await bridge.getSession(session.id)).messages).toContainEqual({ role: "user", content: "", images: [image] });
+  } finally { await controller.dispose(); }
+});
 
 it("acknowledges steering only after durable consumption and rejects a finished handle", async () => {
   const session = await service.createSession({

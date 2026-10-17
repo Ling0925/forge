@@ -376,7 +376,8 @@ export function createWorkerController(
                     const requests = run.steering.splice(0);
                     run.applyingSteering.push(...requests);
                     if (final && requests.length === 0) run.acceptingSteering = false;
-                    return requests.map(request => request.prompt);
+                    return requests.map(request => request.images?.length
+                      ? { prompt: request.prompt, images: request.images } : request.prompt);
                   },
                   onSteeringApplied: () => {
                     for (const request of run.applyingSteering.splice(0)) respond(request, null);
@@ -392,11 +393,13 @@ export function createWorkerController(
           break;
         }
         case "steerRun": {
+          if (!request.prompt && !request.images?.length)
+            throw new ForgeError("invalid_input", "请输入消息或添加图片。");
           const run = runs.get(request.runId);
           if (!run || run.finished || run.abort.signal.aborted || !run.acceptingSteering)
             throw new ForgeError("not_found", "当前运行已结束或正在收尾，草稿已保留。请手动发送下一轮。");
           const queued = [...run.steering, ...run.applyingSteering];
-          if (queued.length >= 1000 || queued.reduce((size, item) => size + Buffer.byteLength(item.prompt), Buffer.byteLength(request.prompt)) > 1000000)
+          if (queued.length >= 1000 || queued.reduce((size, item) => size + Buffer.byteLength(JSON.stringify({ prompt: item.prompt, images: item.images })), Buffer.byteLength(JSON.stringify({ prompt: request.prompt, images: request.images }))) > 16 * 1024 * 1024)
             throw new ForgeError("invalid_input", "插话队列已满，草稿已保留。");
           run.steering.push(request);
           break;
