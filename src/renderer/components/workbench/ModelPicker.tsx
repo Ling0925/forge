@@ -196,9 +196,13 @@ export function ModelPicker(props: {
             </fieldset>
           )}
           <ModelCatalog
-            {...props}
+            value={props.value}
+            models={props.models}
+            onRefresh={props.onRefresh}
+            loading={props.loading}
+            error={props.error}
             inputId="run-model"
-            hideSearch={props.hideSearch}
+            {...(props.hideSearch !== undefined ? { hideSearch: props.hideSearch } : {})}
             onSelect={(model) => {
               props.onSelect(model);
               if (props.reasoning && !props.hideSearch) return;

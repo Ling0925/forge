@@ -1,34 +1,52 @@
-.composer-prompt {
-  position: relative;
-}
-
-.composer-prompt.has-live-actions .composer-textarea {
-  padding-right: 132px;
+.composer-activity-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  min-height: 28px;
+  flex-wrap: wrap;
 }
 
 .composer-live-actions {
-  position: absolute;
-  right: var(--space-1-5, 6px);
-  bottom: 4px;
   display: flex;
   align-items: center;
   gap: var(--space-1, 4px);
-  z-index: 2;
+  margin-left: auto;
 }
 
+.composer-live-actions .composer-dropdown-menu {
+  top: calc(100% + 4px);
+  bottom: auto;
+  right: 0;
+  left: auto;
+}
+
+.wb-app .composer-live-actions .composer-dropdown-trigger,
 .composer-live-actions .composer-dropdown-trigger {
-  height: 26px;
-  min-height: 26px;
+  height: 28px;
+  min-height: 28px;
   padding: 0 var(--space-2, 8px);
   font-size: var(--text-xs, 12px);
 }
 
+.wb-app .composer-live-actions .btn,
 .composer-live-actions .btn {
-  height: var(--control-height-sm, 28px);
-  min-height: var(--control-height-sm, 28px);
+  height: 28px;
+  min-height: 28px;
   padding: 0 var(--space-2, 8px);
   font-size: var(--text-xs, 12px);
   white-space: nowrap;
+}
+
+.composer-status {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.composer-status > span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 /* Touch target area for mobile / coarse pointer (at least 44px) without affecting single-line layout height */

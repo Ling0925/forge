@@ -174,7 +174,7 @@ Active runs accept permission changes from the composer. The menu reflects the h
 
 Transcript synchronization separates persisted message freshness from live event timestamps. Tool transitions and terminal events retain unsynchronized assistant output until saved messages acknowledge it; failed partial output remains visible in memory. Unpositioned historical errors appear in a collapsed group before the conversation, never appended behind the newest answer.
 
-The composer reserves a 20px activity slot above the input to keep controls stationary across run transitions. Only the selected live run fills it. Three 3px by 12px bars use the existing accent ink and a staggered 1.2s scale/opacity rhythm; 12px text identifies execution, approval waiting or cancellation. Approval and cancellation stop the rhythm, terminal states clear the indicator, and reduced-motion uses static bars. No progress percentage or timer is invented. This uses native CSS with no animation dependency; the external loader reference was unreachable during implementation.
+The composer reserves a 28px activity row above the input to keep controls stationary across run transitions; the activity indicator itself remains 20px high. Only the selected live run fills it. Three 3px by 12px bars use the existing accent ink and a staggered 1.2s scale/opacity rhythm; 12px text identifies execution, approval waiting or cancellation. Approval and cancellation stop the rhythm, terminal states clear the indicator, and reduced-motion uses static bars. No progress percentage or timer is invented. This uses native CSS with no animation dependency; the external loader reference was unreachable during implementation.
 
 The execution inspector opens on Runtime, with Changes and Resources as separate tabs. Its header shows the selected session status; quiet sections use 12px text, 16px section spacing and aligned key/value rows. Tabs remain sticky within the single inspector scroll container. Plans and active child tasks are visible; raw context statistics, checkpoint management and long metadata use native disclosures. Long IDs and paths wrap without widening the pane. Diagnostics load only when their disclosure opens, not on streaming deltas. Existing approval actions stay above all categories, and touch targets retain 44px.
 
@@ -192,7 +192,9 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
   plus padding, then scrolls internally. Empty drafts return to 36px; width changes
   also recalculate height. The input alone owns the border/background;
   mode, permission, model and send controls live in a separate unbordered toolbar
-  below it with a 4px gap. Status and approval messages remain below the toolbar.
+  below it with a 4px gap. Composer notices, activity, queue actions, errors and
+  hints remain above the input in normal DOM and visual order, keeping the input itself
+  clear; conversation approval surfaces outside this composer remain unchanged.
   Sidebar sessions: 28px desktop rows, 44px coarse-pointer targets. No inline
   time/model metadata. Completed sessions have no status dot; pending approval
   takes precedence. Hover/focus opens a 280px viewport-bounded metadata tooltip

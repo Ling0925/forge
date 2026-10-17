@@ -15,6 +15,7 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       import './src/renderer/styles/global.css';
       import './src/renderer/components/workbench/app.css';
       import './src/renderer/styles/workspace-theme.css';
+      import './src/renderer/styles/settings-models.css';
       function Harness(){const {calls,switchSession,toggleFailure,holdSend,acceptSend,finishRun,awaitApproval,saveEffort,failEffort}=useWorkbench();return <>
         <div className="wb-app"><Composer/></div><output id="calls">{calls}</output>
         <button onClick={switchSession}>切换</button><button onClick={toggleFailure}>切换失败</button>
@@ -96,11 +97,19 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     await input.press("Enter");
     await expect.poll(calls).toBe("1");
     await expect.poll(() => input.inputValue()).toBe("");
-    const effort = page.getByRole("button", { name: "思考等级", exact: true });
-    await effort.click();
-    await page
-      .getByRole("menuitemradio", { name: "高 high", exact: true })
-      .click();
+    const trigger = page.locator(".composer-model-summary");
+    await trigger.click();
+    const slider = page.getByRole("slider", { name: "思考等级", exact: true });
+    const setSlider = async (val: string) => {
+      await slider.evaluate((node: HTMLInputElement, value: string) => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        setter?.call(node, value);
+        node.dispatchEvent(new Event("input", { bubbles: true }));
+      }, val);
+      await slider.dispatchEvent("pointerup");
+    };
+    await setSlider("5");
+    expect(await slider.getAttribute("aria-valuetext")).toBe("高");
     await input.fill("wait for effort");
     expect(
       await page
@@ -110,24 +119,22 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     await input.press("Enter");
     expect(await calls()).toBe("1");
     await page.getByRole("button", { name: "保存等级", exact: true }).click();
-    await expect.poll(() => effort.innerText()).toBe("高");
-    await effort.click();
-    await page
-      .getByRole("menuitemradio", { name: "低 low", exact: true })
-      .click();
+    await expect.poll(() => page.locator(".model-effort-meter").getAttribute("aria-label")).toContain("高");
+    await trigger.click();
+    await setSlider("3");
+    expect(await slider.getAttribute("aria-valuetext")).toBe("低");
     await page
       .getByRole("button", { name: "保存等级失败", exact: true })
       .click();
     await expect
       .poll(() => page.getByRole("alert").innerText())
       .toBe("思考等级保存失败，请重试。");
-    expect(await effort.innerText()).toBe("高");
-    await effort.click();
-    await page
-      .getByRole("menuitemradio", { name: "默认", exact: false })
-      .click();
+    expect(await page.locator(".model-effort-meter").getAttribute("aria-label")).toContain("高");
+    await trigger.click();
+    await expect.poll(() => slider.getAttribute("aria-valuetext")).toBe("高");
+    await slider.press("Home");
     await page.getByRole("button", { name: "保存等级", exact: true }).click();
-    await expect.poll(() => effort.innerText()).toBe("默认");
+    await expect.poll(() => page.locator(".model-effort-meter").getAttribute("aria-label")).toContain("自动");
     await input.fill("one");
     await input.press("Shift+Enter");
     await input.press("Enter");
@@ -185,35 +192,34 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     await page.getByRole("button", { name: "延迟发送", exact: true }).click();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      await effort.click();
-      const menu = page.getByRole("menu", { name: "思考等级", exact: true });
-      await menu.evaluate(async (node) => {
+      await trigger.click();
+      const panel = page.locator(".composer-model-panel");
+      await panel.waitFor();
+      await panel.evaluate(async (node) => {
         await Promise.all(
           node.getAnimations().map((animation) => animation.finished),
         );
       });
-      const menuBounds = await menu.boundingBox();
-      if (!menuBounds) throw new Error("Missing effort menu");
-      expect(menuBounds.x).toBeGreaterThanOrEqual(0);
-      expect(menuBounds.y).toBeGreaterThanOrEqual(0);
-      expect(menuBounds.x + menuBounds.width).toBeLessThanOrEqual(width);
+      const panelBounds = await panel.boundingBox();
+      if (!panelBounds) throw new Error("Missing effort panel");
+      expect(panelBounds.x).toBeGreaterThanOrEqual(0);
+      expect(panelBounds.y).toBeGreaterThanOrEqual(0);
+      expect(panelBounds.x + panelBounds.width).toBeLessThanOrEqual(width);
+      const sliderInPanel = page.getByRole("slider", { name: "思考等级", exact: true });
       expect(
-        await menu
-          .locator("button")
-          .first()
-          .evaluate((node) => {
-            const rect = node.getBoundingClientRect();
-            return node.contains(
-              document.elementFromPoint(
-                rect.x + rect.width / 2,
-                rect.y + rect.height / 2,
-              ),
-            );
-          }),
+        await sliderInPanel.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          return node.contains(
+            document.elementFromPoint(
+              rect.x + rect.width / 2,
+              rect.y + rect.height / 2,
+            ),
+          );
+        }),
       ).toBe(true);
       await page.screenshot({ path: `/tmp/forge-effort-${width}.png` });
       await page.keyboard.press("Escape");
-      expect(await effort.getAttribute("aria-expanded")).toBe("false");
+      expect(await page.locator(".composer-model-picker").getAttribute("open")).toBe(null);
       await input.fill("animation check");
       await page.evaluate(async () => {
         await Promise.all(

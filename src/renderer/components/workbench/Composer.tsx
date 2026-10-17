@@ -1,6 +1,5 @@
 import {
   ArrowUp,
-  Brain,
   CaretDown,
   FolderOpen,
   Lightning,
@@ -566,9 +565,83 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               </span>
             </output>
           )}
+          {running && (
+            <div className="composer-live-actions">
+              <ComposerDropdown
+                ariaLabel="运行中消息"
+                value={liveInputKind}
+                onChange={setLiveInputKind}
+                disabled={busy}
+                options={[
+                  { value: "steer", label: "插话", sub: "在当前步骤结束后接收" },
+                  { value: "follow-up", label: "排队", sub: "本轮完成后开始下一轮" },
+                ]}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                loading={busy}
+                disabled={!prompt.trim() || busy || savingEffort}
+                aria-label={liveInputKind === "steer" ? "发送插话" : "加入待发队列"}
+              >
+                {liveInputKind === "steer" ? "插话" : "排队"}
+              </Button>
+            </div>
+          )}
         </div>
+        {pendingInputs.length > 0 && (
+          <output className="composer-status">
+            <span>
+              待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{pendingInputs[0]?.prompt.slice(0, 80)}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={running || busy}
+              onClick={resumeInputs}
+            >
+              继续队列
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={clearInputs}
+            >
+              清空队列
+            </Button>
+          </output>
+        )}
+        {(!isConfigured || mode === "plan" || error) && (
+          <div className="composer-status" aria-live="polite">
+            {!isConfigured && (
+              <span className="wb-muted">
+                {configurationHint}{" "}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => openSettings(true)}
+                >
+                  配置模型
+                </Button>
+              </span>
+            )}
+            {mode === "plan" && (
+              <span className="wb-muted composer-plan-note">
+                规划模式只读，不执行修改或 MCP 操作。
+              </span>
+            )}
+            {error && (
+              <span role="alert" className="form-error composer-error">
+                {error}
+              </span>
+            )}
+          </div>
+        )}
         {slash.view}
-        <div className={`composer-prompt composer-surface is-quiet${running ? " has-live-actions" : ""}`}>
+        <div className="composer-prompt composer-surface is-quiet">
           <label htmlFor={promptId} className="visually-hidden">
             {isNew ? "新会话消息" : "继续任务"}
           </label>
@@ -633,29 +706,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               }
             }}
           />
-          {running && (
-            <div className="composer-live-actions">
-              <ComposerDropdown
-                ariaLabel="运行中消息"
-                value={liveInputKind}
-                onChange={setLiveInputKind}
-                disabled={busy}
-                options={[
-                  { value: "steer", label: "插话", sub: "在当前步骤结束后接收" },
-                  { value: "follow-up", label: "排队", sub: "本轮完成后开始下一轮" },
-                ]}
-              />
-              <Button
-                type="submit"
-                size="sm"
-                loading={busy}
-                disabled={!prompt.trim() || busy || savingEffort}
-                aria-label={liveInputKind === "steer" ? "发送插话" : "加入待发队列"}
-              >
-                {liveInputKind === "steer" ? "插话" : "排队"}
-              </Button>
-            </div>
-          )}
         </div>
         <div className="composer-toolbar">
           <div className="composer-toolbar-start">
@@ -757,32 +807,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               onRefresh={() => void listModels(true)}
               loading={listing}
               error={modelError}
+              reasoning={{
+                value: state.settings?.reasoningEffort ?? "default",
+                disabled: savingEffort || busy || !!submission,
+                onChange: (value) => void changeEffort(value),
+              }}
             />
-            <div
-              className="composer-effort"
-              title="思考等级：全局保存，用于后续请求；支持的等级取决于模型服务"
-            >
-              <ComposerDropdown
-                value={state.settings?.reasoningEffort ?? "default"}
-                onChange={(value) => void changeEffort(value)}
-                disabled={savingEffort || busy || !!submission}
-                ariaLabel="思考等级"
-                icon={<Brain size={12} aria-hidden="true" />}
-                options={[
-                  {
-                    value: "default",
-                    label: "默认",
-                    sub: "由模型决定 · 全局保存",
-                  },
-                  { value: "none", label: "关闭", sub: "none" },
-                  { value: "minimal", label: "极低", sub: "minimal" },
-                  { value: "low", label: "低", sub: "low" },
-                  { value: "medium", label: "中", sub: "medium" },
-                  { value: "high", label: "高", sub: "high" },
-                  { value: "xhigh", label: "极高", sub: "xhigh" },
-                ]}
-              />
-            </div>
             {running ? (
               <Button
                 type="button"
@@ -821,38 +851,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             )}
           </div>
         </div>
-        {pendingInputs.length > 0 && <output className="composer-status">
-          <span>待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{pendingInputs[0]?.prompt.slice(0, 80)}</span>
-          <Button type="button" size="sm" variant="ghost" disabled={running || busy} onClick={resumeInputs}>继续队列</Button>
-          <Button type="button" size="sm" variant="ghost" onClick={clearInputs}>清空队列</Button>
-        </output>}
-        {(!isConfigured || mode === "plan" || error) && (
-          <div className="composer-status" aria-live="polite">
-            {!isConfigured && (
-              <span className="wb-muted">
-                {configurationHint}{" "}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => openSettings(true)}
-                >
-                  配置模型
-                </Button>
-              </span>
-            )}
-            {mode === "plan" && (
-              <span className="wb-muted composer-plan-note">
-                规划模式只读，不执行修改或 MCP 操作。
-              </span>
-            )}
-            {error && (
-              <span role="alert" className="form-error composer-error">
-                {error}
-              </span>
-            )}
-          </div>
-        )}
         <UsagePopover
           snapshot={
             !isNew && state.activeSnapshot?.id === state.activeSessionId

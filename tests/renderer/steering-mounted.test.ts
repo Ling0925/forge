@@ -13,6 +13,7 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     import './src/renderer/styles/global.css';
     import './src/renderer/components/workbench/app.css';
     import './src/renderer/styles/workspace-theme.css';
+    import './src/renderer/styles/settings-models.css';
     const a='11111111-1111-4111-8111-111111111111';
     const b='22222222-2222-4222-8222-222222222222';
     const snapshots=Object.fromEntries([a,b].map(id=>[id,{version:1,id,title:id===a?'A':'B',workspace:'/tmp',model:'a-model',providerSourceId:'a',
@@ -46,6 +47,7 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
   const browser = await chromium.launch({ headless: true, ...(process.env.FORGE_BROWSER_EXECUTABLE ? { executablePath: process.env.FORGE_BROWSER_EXECUTABLE } : {}) });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    page.setDefaultTimeout(3000);
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.route("http://forge.test/**", route => route.fulfill({ body: '<html><head></head><body><div id="root"></div></body></html>', contentType: "text/html" }));
@@ -57,6 +59,13 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await page.addScriptTag({ content: js });
     await page.getByRole("button", { name: "打开 A", exact: true }).click();
     const input = page.locator("textarea.composer-textarea");
+    expect(await page.getByRole("button", { name: "思考等级", exact: true }).count()).toBe(0);
+    const modelSummary = page.locator(".composer-model-summary");
+    await modelSummary.click();
+    const effortSlider = page.getByRole("slider", { name: "思考等级", exact: true });
+    await effortSlider.waitFor();
+    expect(await effortSlider.isVisible()).toBe(true);
+    await page.keyboard.press("Escape");
     await expect.poll(() => page.getByRole("button", { name: "会话模型来源", exact: true }).innerText()).toBe("Source A");
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").catalogues.includes("a"))).toBe(true);
     await input.fill("initial"); await input.press("Enter");
@@ -64,6 +73,13 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await input.fill("change direction"); await input.press("Enter");
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").pending())).toBe(1);
     expect(await input.inputValue()).toBe("change direction");
+    const inputRect1 = await input.boundingBox();
+    const liveActionsRect = await page.locator(".composer-live-actions").boundingBox();
+    const actRect = await page.locator(".composer-activity").boundingBox();
+    if (!inputRect1 || !liveActionsRect || !actRect) throw new Error("Missing rects for live controls check");
+    expect(liveActionsRect.y + liveActionsRect.height).toBeLessThanOrEqual(inputRect1.y);
+    expect(actRect.y + actRect.height).toBeLessThanOrEqual(inputRect1.y);
+    expect(actRect.x + actRect.width).toBeLessThanOrEqual(liveActionsRect.x);
     await page.evaluate(() => Reflect.get(window, "fixture").apply());
     await expect.poll(() => input.inputValue()).toBe("");
     await page.getByRole("button", { name: "运行中消息", exact: true }).click();
@@ -74,6 +90,10 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await expect.poll(() => input.inputValue()).toBe("");
     await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));
     await expect.poll(() => page.locator(".composer-status").innerText()).toContain("已暂停");
+    const inputRect2 = await input.boundingBox();
+    const queueStatusRect = await page.locator(".composer-status").boundingBox();
+    if (!inputRect2 || !queueStatusRect) throw new Error("Missing rects for queue status check");
+    expect(queueStatusRect.y + queueStatusRect.height).toBeLessThanOrEqual(inputRect2.y);
     expect(await page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(1);
     await page.getByRole("button", { name: "继续队列", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(2);
@@ -92,6 +112,10 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").pending())).toBe(1);
     await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));
     await expect.poll(() => page.getByRole("alert").last().innerText()).toContain("草稿已保留");
+    const inputRect3 = await input.boundingBox();
+    const alertRect = await page.getByRole("alert").last().boundingBox();
+    if (!inputRect3 || !alertRect) throw new Error("Missing rects for alert check");
+    expect(alertRect.y + alertRect.height).toBeLessThanOrEqual(inputRect3.y);
     expect(await input.inputValue()).toBe("retain on cancellation");
     await page.getByRole("button", { name: "会话模型来源", exact: true }).click();
     await page.getByRole("menuitemradio", { name: /^Source B/ }).click();
@@ -108,6 +132,14 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
       await page.screenshot({ path: resolve(`.build/design-fixes-ui/steering-${width}-${theme}.png`), animations: "disabled" });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
+    await modelSummary.click();
+    await page.locator(".composer-model-panel").waitFor();
+    for (const width of [390, 1440]) for (const theme of ["light", "dark"]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+      await page.screenshot({ path: resolve(`.build/design-fixes-ui/steering-model-panel-${width}-${theme}.png`), animations: "disabled" });
+    }
+    await page.keyboard.press("Escape");
     await page.reload(); await page.addStyleTag({ content: css }); await page.addScriptTag({ content: js });
     await page.getByRole("button", { name: "打开 A", exact: true }).click();
     await expect.poll(() => page.locator(".composer-status").innerText()).toContain("已暂停");
