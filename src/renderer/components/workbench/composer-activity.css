@@ -53,3 +53,13 @@
     opacity: 1;
   }
 }
+
+.composer-output-speed {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 9ch;
+  display: inline-block;
+  font-size: inherit;
+  line-height: inherit;
+}

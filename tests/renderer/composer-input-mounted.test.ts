@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("composer grows to six lines and latches multiline drafts into click-only sending", async () => {
+it("composer grows to six lines and requires explicit submission for multiline drafts", async () => {
   const bundle = await build({
     stdin: {
       resolveDir: resolve("."),
@@ -149,7 +149,8 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     await input.press("Enter");
     expect(await input.inputValue()).toBe("one\n");
     await input.press("Control+Enter");
-    expect(await calls()).toBe("2");
+    await expect.poll(calls).toBe("3");
+    await expect.poll(() => input.inputValue()).toBe("");
     await input.fill(
       Array.from({ length: 12 }, (_, i) => `line ${i}`).join("\n"),
     );
@@ -172,9 +173,9 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
     await page.screenshot({ path: "/tmp/forge-input-six-lines.png" });
     await page.getByRole("button", { name: "切换失败", exact: true }).click();
     await page.getByRole("button", { name: "运行", exact: true }).click();
-    await expect.poll(calls).toBe("3");
+    await expect.poll(calls).toBe("4");
     await input.press("Enter");
-    expect(await calls()).toBe("3");
+    expect(await calls()).toBe("4");
     await page.getByRole("button", { name: "切换失败", exact: true }).click();
     await page.getByRole("button", { name: "运行", exact: true }).click();
     await expect.poll(() => input.inputValue()).toBe("");
@@ -185,9 +186,9 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       code: "Enter",
       isComposing: true,
     });
-    expect(await calls()).toBe("4");
+    expect(await calls()).toBe("5");
     await input.press("Enter");
-    await expect.poll(calls).toBe("5");
+    await expect.poll(calls).toBe("6");
     await expect.poll(() => input.inputValue()).toBe("");
     await page.getByRole("button", { name: "延迟发送", exact: true }).click();
     for (const width of [1440, 390]) {
@@ -261,7 +262,7 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
       await expect.poll(() => action.getAttribute("aria-label")).toBe("取消");
       expect(await action.boundingBox()).toEqual(initial);
       const activity = page.locator(".composer-activity");
-      expect(await activity.innerText()).toBe("正在执行");
+      expect(await activity.innerText()).toContain("正在执行");
       await page.emulateMedia({ reducedMotion: "no-preference" });
       const bar = activity.locator(".composer-activity-bars > span").first();
       const frames = await bar.evaluate((node) => {

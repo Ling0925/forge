@@ -23,6 +23,7 @@ import { Input } from "../primitives/Input";
 import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
 import { UsagePopover } from "./UsagePopover";
+import { OutputSpeed } from "./OutputSpeed";
 import { useAutosizePrompt } from "./useAutosizePrompt";
 import { useSlashCommands } from "./useSlashCommands";
 import "./composer-activity.css";
@@ -247,7 +248,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       void selectSession(submission.id);
   }, [submission, state.activeRuns, selectSession]);
   const [mode, setMode] = useState<"build" | "plan">("build");
-  const [liveInputKind, setLiveInputKind] = useState("steer");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const pendingNew = useRef<{
@@ -321,8 +321,23 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       queueCommand: (value) => {
         if (value === "clear") clearInputs();
         else if (value === "run") resumeInputs();
-        else if (value) throw new Error("用法：/queue [clear|run]");
-        return `待发 ${pendingInputs.length} 条${inputQueuePaused ? "（已暂停）" : ""}。`;
+        else if (/^add(?:\s|$)/.test(value)) {
+          const text = value.slice(3).trim();
+          const id = state.activeSessionId;
+          if (!running || !id || !text) throw new Error("需要会话处于运行状态且提供非空消息：/queue add <消息>");
+          const ok = queueInput({
+            sessionId: id,
+            prompt: text,
+            model,
+            permission: mode === "plan" ? "readonly" : permission,
+            mode,
+            ...(providerSourceId ? { providerSourceId } : {}),
+          });
+          if (!ok) throw new Error("加入待发队列失败。");
+          return "已加入待发队列。";
+        }
+        else if (value) throw new Error("用法：/queue [add <消息>|clear|run]");
+        return `待发 ${pendingInputs.length} 条${inputQueuePaused ? "（已暂停）" : ""}。可用 /queue add <消息> 排队。`;
       },
       setModel,
       setMode: changeMode,
@@ -360,7 +375,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       },
     },
   });
-  const submit = async () => {
+  const submit = async (kind: "follow-up" | "steer" = "follow-up") => {
     if (slash.isCommand) {
       await slash.execute();
       return;
@@ -378,7 +393,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       submitting.current = true;
       setBusy(true);
       setError("");
-      const accepted = liveInputKind === "follow-up"
+      const accepted = kind === "follow-up"
         ? queueInput({ sessionId: id, prompt: capturedPrompt, model, permission: mode === "plan" ? "readonly" : permission, mode,
           ...(providerSourceId ? { providerSourceId } : {}) })
         : await sendSteering(capturedPrompt, id);
@@ -569,29 +584,13 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                       ? `重试 ${run.providerRetry}/5`
                     : "正在执行"}
               </span>
+              <OutputSpeed run={run} />
             </output>
           )}
           {running && (
-            <div className="composer-live-actions">
-              <ComposerDropdown
-                ariaLabel="运行中消息"
-                value={liveInputKind}
-                onChange={setLiveInputKind}
-                disabled={busy}
-                options={[
-                  { value: "steer", label: "插话", sub: "在当前步骤结束后接收" },
-                  { value: "follow-up", label: "排队", sub: "本轮完成后开始下一轮" },
-                ]}
-              />
-              <Button
-                type="submit"
-                size="sm"
-                loading={busy}
-                disabled={!prompt.trim() || busy || savingEffort}
-                aria-label={liveInputKind === "steer" ? "发送插话" : "加入待发队列"}
-              >
-                {liveInputKind === "steer" ? "插话" : "排队"}
-              </Button>
+            <div className="composer-live-hints" aria-label="快捷键提示">
+              <span className="composer-live-hint">Enter 排队</span>
+              <span className="composer-live-hint">Alt+Enter 插话</span>
             </div>
           )}
         </div>
@@ -600,25 +599,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             <span className="composer-queue-text">
               待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{pendingInputs[0]?.prompt.slice(0, 80)}
             </span>
-            <div className="composer-queue-actions">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={running || busy}
-                onClick={resumeInputs}
-              >
-                继续队列
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={clearInputs}
-              >
-                清空队列
-              </Button>
-            </div>
+            <span className="composer-queue-hint">
+              <span>/queue run 继续</span>
+              <span>·</span>
+              <span>/queue clear 清空</span>
+            </span>
           </output>
         )}
         {(!isConfigured || mode === "plan" || error) && (
@@ -702,6 +687,18 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 !event.nativeEvent.isComposing &&
                 event.nativeEvent.keyCode !== 229
               ) {
+                if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+                  event.preventDefault();
+                  if (running) {
+                    void submit("steer");
+                  }
+                  return;
+                }
+                if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+                  event.preventDefault();
+                  void submit("follow-up");
+                  return;
+                }
                 if (event.ctrlKey || event.metaKey || event.altKey) {
                   event.preventDefault();
                   return;

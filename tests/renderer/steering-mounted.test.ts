@@ -71,23 +71,25 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").catalogues.includes("a"))).toBe(true);
     await input.fill("initial"); await input.press("Enter");
     await expect.poll(() => input.inputValue()).toBe("");
-    await input.fill("change direction"); await input.press("Enter");
+    await input.fill("change direction\nsecond line");
+    await input.dispatchEvent("keydown", { key: "Enter", altKey: true, isComposing: true });
+    expect(await page.evaluate(() => Reflect.get(window, "fixture").pending())).toBe(0);
+    await input.press("Alt+Enter");
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").pending())).toBe(1);
-    expect(await input.inputValue()).toBe("change direction");
+    expect(await input.inputValue()).toBe("change direction\nsecond line");
     const inputRect1 = await input.boundingBox();
-    const liveActionsRect = await page.locator(".composer-live-actions").boundingBox();
     const actRect = await page.locator(".composer-activity").boundingBox();
-    if (!inputRect1 || !liveActionsRect || !actRect) throw new Error("Missing rects for live controls check");
-    expect(liveActionsRect.y + liveActionsRect.height).toBeLessThanOrEqual(inputRect1.y);
+    if (!inputRect1 || !actRect) throw new Error("Missing rects for live status check");
+    expect(await page.locator(".composer-live-actions").count()).toBe(0);
+    expect(await page.getByRole("button", { name: "运行中消息", exact: true }).count()).toBe(0);
+    expect(await page.getByRole("button", { name: "发送插话", exact: true }).count()).toBe(0);
+    expect(await page.getByRole("button", { name: "加入待发队列", exact: true }).count()).toBe(0);
     expect(actRect.y + actRect.height).toBeLessThanOrEqual(inputRect1.y);
-    expect(actRect.x + actRect.width).toBeLessThanOrEqual(liveActionsRect.x);
     await page.evaluate(() => Reflect.get(window, "fixture").apply());
     await expect.poll(() => input.inputValue()).toBe("");
-    await page.getByRole("button", { name: "运行中消息", exact: true }).click();
-    await page.getByRole("menuitemradio", { name: /^排队/ }).click();
     await input.fill("follow one"); await input.press("Enter");
     await expect.poll(() => input.inputValue()).toBe("");
-    await input.fill("follow two"); await input.press("Enter");
+    await input.fill("follow two\nsecond line"); await input.press("Control+Enter");
     await expect.poll(() => input.inputValue()).toBe("");
     await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));
     await expect.poll(() => page.locator(".composer-status").innerText()).toContain("已暂停");
@@ -96,7 +98,7 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     if (!inputRect2 || !queueStatusRect) throw new Error("Missing rects for queue status check");
     expect(queueStatusRect.y + queueStatusRect.height).toBeLessThanOrEqual(inputRect2.y);
     expect(await page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(1);
-    await page.getByRole("button", { name: "继续队列", exact: true }).click();
+    await input.fill("/queue run"); await input.press("Enter");
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(2);
     await expect.poll(() => page.locator(".composer-status").innerText()).toContain("待发 1 条");
     await page.getByRole("button", { name: "打开 B", exact: true }).click();
@@ -104,12 +106,10 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'completed'));
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(3);
     expect(await page.locator("#selected").innerText()).toBe("22222222-2222-4222-8222-222222222222");
-    expect(await page.evaluate(() => Reflect.get(window, "fixture").starts.map((item: { prompt: string }) => item.prompt))).toEqual(["initial", "follow one", "follow two"]);
+    expect(await page.evaluate(() => Reflect.get(window, "fixture").starts.map((item: { prompt: string }) => item.prompt))).toEqual(["initial", "follow one", "follow two\nsecond line"]);
     expect(await page.evaluate(() => Reflect.get(window, "fixture").starts[2].providerSourceId)).toBe("a");
     await page.getByRole("button", { name: "打开 A", exact: true }).click();
-    await page.getByRole("button", { name: "运行中消息", exact: true }).click();
-    await page.getByRole("menuitemradio", { name: /^插话/ }).click();
-    await input.fill("retain on cancellation"); await input.press("Enter");
+    await input.fill("retain on cancellation"); await input.press("Alt+Enter");
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").pending())).toBe(1);
     await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));
     await expect.poll(() => page.getByRole("alert").last().innerText()).toContain("草稿已保留");
@@ -124,9 +124,7 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await page.keyboard.press("Escape");
     await input.fill("explicit source change"); await page.getByRole("button", { name: "运行", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.at(-1).providerSourceId)).toBe("b");
-    await page.getByRole("button", { name: "运行中消息", exact: true }).click();
-    await page.getByRole("menuitemradio", { name: /^排队/ }).click();
-    await input.fill("keep across reload"); await input.press("Enter");
+    await input.fill("/queue add keep across reload\nsecond line"); await input.press("Enter");
     await expect.poll(() => input.inputValue()).toBe("");
     await mkdir(resolve(".build/design-fixes-ui"), { recursive: true });
     for (const width of [320, 360, 390, 430, 1440]) for (const theme of ["light", "dark"]) {
@@ -167,22 +165,15 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
       });
       if (modelAlignment.edge === undefined || modelAlignment.caret === undefined) throw new Error("Missing model alignment anchors");
       expect(Math.abs(modelAlignment.edge - modelAlignment.caret - modelAlignment.inset)).toBeLessThanOrEqual(1);
-      for (const name of ["运行模式", "执行权限", "运行中消息"]) {
+      for (const name of ["运行模式", "执行权限"]) {
         const box = await page.getByRole("button", { name, exact: true }).boundingBox();
         if (!box) throw new Error(`Missing ${name}`);
         expect(box.width).toBeGreaterThanOrEqual(44);
         expect(box.height).toBeGreaterThanOrEqual(44);
-        if (name !== "运行中消息") {
-          expect(Math.abs(box.height - toolbarBox.height)).toBeLessThanOrEqual(1);
-          expect(Math.abs(box.y - toolbarBox.y)).toBeLessThanOrEqual(1);
-        }
+        expect(Math.abs(box.height - toolbarBox.height)).toBeLessThanOrEqual(1);
+        expect(Math.abs(box.y - toolbarBox.y)).toBeLessThanOrEqual(1);
       }
-      const resume = await page.getByRole("button", { name: "继续队列", exact: true }).boundingBox();
-      const clear = await page.getByRole("button", { name: "清空队列", exact: true }).boundingBox();
-      if (!resume || !clear) throw new Error("Missing queue actions");
-      expect(resume.y).toBe(clear.y);
-      expect(resume.height).toBeGreaterThanOrEqual(44);
-      expect(clear.height).toBeGreaterThanOrEqual(44);
+      expect(await page.locator(".composer-queue-actions").count()).toBe(0);
       expect(await page.locator('.composer-toolbar [aria-label="会话模型来源"]').count()).toBe(0);
     }
     await modelSummary.click();
