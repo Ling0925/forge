@@ -705,19 +705,25 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           onRemove={removeImage}
         />
         {images.length === 0 && slash.view}
-        <div className="composer-input-row">
-          <div className="composer-prompt composer-surface is-quiet">
-          <label htmlFor={promptId} className="visually-hidden">
-            {isNew ? "新会话消息" : "继续任务"}
-          </label>
-          <span
-            className={`composer-mode-arrow is-${mode}`}
-            aria-hidden="true"
-          />
-          <span
-            className="visually-hidden"
-            aria-live="polite"
-          >{`Mode: ${mode}${running || busy ? "；仅影响下一次运行，当前运行模式不变" : ""}`}</span>
+        {/* One integrated composer card: the prompt row and the control row are
+            two bands of a single rounded surface, so the text field, the send
+            button and the mode/model controls share one silhouette instead of
+            reading as three detached strips. The usage meter stays directly
+            beneath the card, inset to the card's text edge. */}
+        <div className="composer-card composer-surface">
+          <div className="composer-input-row">
+            <div className="composer-prompt">
+            <label htmlFor={promptId} className="visually-hidden">
+              {isNew ? "新会话消息" : "继续任务"}
+            </label>
+            <span
+              className={`composer-mode-arrow is-${mode}`}
+              aria-hidden="true"
+            />
+            <span
+              className="visually-hidden"
+              aria-live="polite"
+            >{`Mode: ${mode}${running || busy ? "；仅影响下一次运行，当前运行模式不变" : ""}`}</span>
           <textarea
             id={promptId}
             ref={promptRef}
@@ -1005,6 +1011,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               }
             />
           </div>
+        </div>
         </div>
         <UsagePopover
           snapshot={

@@ -58,11 +58,31 @@
 .wb-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .wb-header-actions > * {
   flex-shrink: 0;
+}
+/* One control size for the whole header cluster. The details toggle, session
+   actions and settings used to be 30/30/36px wide next to each other; they now
+   share a 32px box so the group reads as one aligned row. */
+.wb-app .wb-header-actions .wb-icon-btn,
+.wb-app .wb-header-actions .wb-overflow > summary,
+.wb-app .wb-header-actions .btn-icon {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-md);
+}
+/* The compact navigation bar already owns the settings entry, and the task
+   header keeps its session-scoped actions; a second gear directly below the
+   first one is pure duplication, so the header copy is retired below 1000px. */
+@media (max-width: 1000px) {
+  .wb-app .wb-header-actions > .btn-icon {
+    display: none;
+  }
 }
 /* Width-constrained header (<= 900px): session actions collapse first and the
    conversation title keeps a 160px minimum visible width per the spec. */
@@ -80,8 +100,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 26px;
-  padding: 0 10px;
+  height: 28px;
+  padding: 0 11px;
   font-size: var(--text-xs);
   font-weight: 600;
   border-radius: var(--radius-full);
@@ -90,10 +110,15 @@
   border: 1px solid var(--warning-border);
   cursor: pointer;
   transition: all var(--transition-fast);
+  white-space: nowrap;
 }
+/* Hover inverts the pill. The ink must therefore come from the warning
+   surface pair, not a fixed white: in the dark theme --warning is a light
+   amber, where white text would fall to ~1.6:1. */
 .wb-approval-pill:hover {
   background: var(--warning);
-  color: #fff;
+  color: var(--warning-bg);
+  border-color: var(--warning);
 }
 .wb-app .workbench-conversation-scroll {
   flex: 1;
@@ -109,13 +134,15 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  /* Inside one turn, blocks breathe at 12px; a human turn adds another 16px
+     so each new request opens a 28px phase boundary. */
+  gap: 12px;
   flex: 1;
 }
 /* A human turn starts a new phase: a slightly larger gap marks the boundary
    while everything inside a phase stays tight. */
 .wb-app .conversation-inner > .message-user {
-  margin-top: var(--space-2);
+  margin-top: 16px;
 }
 .wb-app .conversation-inner > .message-user:first-child {
   margin-top: 0;
@@ -207,14 +234,16 @@
   max-width: 100%;
   background: var(--surface-soft);
   border: none;
-  border-radius: var(--radius-card);
-  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
   box-shadow: none;
 }
 .wb-app .message-user .message-body {
   color: var(--text-primary);
   font-size: var(--prose-size);
-  line-height: 1.6;
+  /* Same 16px/1.75 body rhythm as assistant prose: the bubble is a container
+     change, not a typographic one, so mixed CJK/Latin text keeps one leading. */
+  line-height: var(--prose-leading);
 }
 .wb-app .message-assistant {
   align-self: stretch;
@@ -479,14 +508,17 @@
     flex-direction: column;
     flex-wrap: nowrap;
   }
+  /* Compact phone/tablet navigation. Every control here is a primary
+     destination, so each one keeps a real 44px touch target; the bar itself
+     is sized by those targets instead of clipping them. */
   .wb-mobile-nav {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    padding: 0 var(--space-3);
+    padding: 6px var(--space-3);
     width: 100%;
-    height: var(--space-12);
+    min-height: var(--mobile-nav-height);
     flex-shrink: 0;
     border-bottom: 1px solid var(--border-subtle);
     background-color: var(--sidebar-bg);
@@ -497,10 +529,11 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 32px;
+    min-width: var(--touch-min-target);
+    height: var(--touch-min-target);
     padding: 0 10px;
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     background: var(--surface-elevated);
     color: var(--text-secondary);
     font: inherit;
@@ -523,7 +556,7 @@
   }
 
   .wb-mobile-settings-btn {
-    width: 32px;
+    width: var(--touch-min-target);
     padding: 0;
     justify-content: center;
   }
@@ -532,12 +565,13 @@
     display: inline-flex;
     align-items: center;
     background-color: var(--surface-soft);
-    padding: 3px;
+    padding: 2px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-subtle);
-    max-width: 220px;
+    max-width: 260px;
     flex: 1;
     justify-content: center;
+    min-width: 0;
   }
 
   .wb-mobile-segment {
@@ -547,7 +581,7 @@
     gap: 5px;
     flex: 1;
     min-width: 0;
-    height: 26px;
+    height: calc(var(--touch-min-target) - 4px);
     padding: 0 8px;
     border: none;
     border-radius: calc(var(--radius-md) - 2px);
@@ -578,16 +612,23 @@
     height: 16px;
     padding: 0 4px;
     border-radius: var(--radius-full);
+    /* Warning text sits on a warning-tinted surface with a strong warning ink:
+       white-on-orange fails 4.5:1 in the dark theme, so the badge follows the
+       same pair as the approval pill's hover state. */
     background-color: var(--warning);
-    color: #ffffff;
+    color: var(--warning-bg);
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
+  /* The stacked shell is a column flex box: the nav keeps its intrinsic
+     height (it is sized by 44px targets, not by a magic number) and the single
+     visible pane takes the remainder. A hardcoded `100dvh - nav` height used
+     to drift by a few pixels whenever the bar's own metrics changed. */
   .wb-app .workbench-main,
   .wb-app .workbench-inspector {
-    height: calc(100dvh - var(--space-12));
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
     width: 100%;
   }
@@ -900,15 +941,24 @@
 .composer-surface {
   padding: 14px 16px 10px 16px;
   border: 1px solid var(--border-control);
-  border-radius: 16px;
+  border-radius: var(--radius-composer);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-composer);
   transition: all var(--transition-fast);
 }
+/* The card owns the only border and the only focus treatment: the text field
+   itself stays chromeless, so focus reads as one quiet edge change on the
+   card rather than a ring inside a box inside a card. */
+.wb-app .composer-card.composer-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 12px 8px;
+  min-width: 0;
+}
 .composer-surface:focus-within {
-  border-color: var(--focus-ring);
-  box-shadow: 0 0 0 2px var(--accent-sage-soft), 0 4px 24px -2px
-    rgba(0, 0, 0, 0.1);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-composer);
 }
 .composer-toolbar,
 .composer-toolbar-start,
@@ -920,7 +970,7 @@
 }
 .composer-toolbar {
   justify-content: space-between;
-  padding-top: 4px;
+  padding-top: 2px;
 }
 .composer-toolbar-start {
   gap: 6px;
@@ -1693,7 +1743,10 @@
   padding: 4px 6px 8px 6px;
 }
 .composer-mode-arrow {
-  display: inline-block;
+  /* Purely decorative. As a flex item it consumed one `gap` slot and pushed
+     the prompt band 8px past the send button; taking it out of layout keeps
+     both columns at exactly 44px. */
+  display: none;
   width: 0;
   height: 0;
   overflow: hidden;

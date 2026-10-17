@@ -34,7 +34,7 @@
   --reading-measure: 760px;
   --welcome-measure: 420px;
   --welcome-title-size: 22px;
-  --radius-composer: 12px;
+  --radius-composer: 18px;
   --composer-inset: 12px 32px 16px;
 }
 
@@ -72,9 +72,12 @@
   padding-inline: var(--space-6);
 }
 .wb-app .wb-header-title h1 {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
+  /* The active conversation is the primary wayfinding label of the whole
+     surface, so it keeps primary ink at 14px/600 inside the 44px header
+     rather than receding to muted 13px secondary text. */
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 .wb-app .sidebar-brand-row {
   flex-direction: column;
@@ -91,12 +94,21 @@
   border-color: transparent;
   min-height: var(--control-height-lg);
 }
+/* Brand row stacks on wide screens, so the primary action owns the full rail
+   width (DESIGN.md §7.2: 通栏静默新建任务按钮) instead of hugging its label. */
+.wb-app .sidebar-brand-actions {
+  width: 100%;
+}
+.wb-app .sidebar-brand-actions .sidebar-new-btn {
+  flex: 1;
+  min-width: 0;
+}
 .wb-app .sidebar-search-input-wrap {
   background: transparent;
   border-color: transparent;
 }
 .wb-app .sidebar-search-input-wrap:focus-within {
-  border-color: var(--border-control);
+  border-color: transparent;
 }
 .wb-app .sidebar-empty {
   margin-block: var(--space-12);
@@ -130,10 +142,13 @@
 .welcome-overview {
   max-width: var(--welcome-measure);
   margin-top: var(--space-6);
-  padding: var(--space-4);
-  border-radius: var(--radius-card);
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
+  padding: var(--space-4) 0 0;
+  border-radius: 0;
+  background: transparent;
+  /* A flat two-column summary divided by one hairline, not a nested card
+     sitting inside the empty canvas (DESIGN.md §8). */
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
 }
 .welcome-overview-heading {
   display: flex;
@@ -143,8 +158,11 @@
 }
 .welcome-overview h3 {
   margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 .welcome-overview-heading > span,
 .welcome-overview > p {
@@ -154,13 +172,12 @@
 .welcome-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-  margin: var(--space-3) 0;
+  gap: var(--space-5);
+  margin: var(--space-3) 0 var(--space-1);
 }
 .welcome-metrics > div {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: var(--space-2);
 }
 .welcome-metrics dt {
@@ -169,8 +186,12 @@
 }
 .welcome-metrics dd {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
 }
 .wb-app .wb-new-session .composer-fresh {
   width: min(var(--reading-measure), calc(100% - 2 * var(--space-8)));
@@ -183,26 +204,30 @@
   border-radius: var(--radius-composer);
   border-color: var(--border-control);
   box-shadow: var(--shadow-composer);
-  padding: var(--space-1-5) var(--space-2-5);
+  padding: 12px 12px 8px;
   gap: 0;
 }
 .wb-app .composer-surface:focus-within {
   border-color: var(--border-hover);
   box-shadow: var(--shadow-composer);
 }
+/* Keyboard focus stays visible on the card edge without drawing a second
+   inset ring around the textarea. */
 .wb-app .composer-surface:has(.composer-textarea:focus-visible) {
   border-color: var(--focus-ring);
 }
 .wb-app .composer-split .composer-textarea {
   min-height: 36px;
   height: 36px;
-  font-size: var(--text-base);
+  /* DESIGN.md §5.2 fixes the composer field at 15px; body prose is 16px. */
+  font-size: var(--text-md);
+  line-height: 1.6;
 }
 .wb-app .composer-split {
   gap: var(--space-1);
 }
 .wb-app .composer-split .composer-toolbar {
-  padding: 0 var(--space-1);
+  padding: 0;
 }
 .wb-app .composer-dropdown-trigger {
   background: transparent;

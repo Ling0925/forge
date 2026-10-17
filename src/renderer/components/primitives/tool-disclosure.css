@@ -496,6 +496,22 @@
   user-select: none;
   font-size: 11px;
   color: var(--text-muted);
+  /* A 22px text-only summary is a tiny hit area inside an evidence card; give
+     it a real target without adding visual weight. */
+  min-height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-1);
+  border-radius: var(--radius-xs);
+}
+
+.tool-debug-summary:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+@media (pointer: coarse) {
+  .tool-debug-summary {
+    min-height: var(--touch-min-target);
+  }
 }
 
 .tool-debug-summary::-webkit-details-marker {

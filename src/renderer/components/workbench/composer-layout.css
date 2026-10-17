@@ -9,8 +9,15 @@
 .wb-app .composer-split .composer-input-row .composer-prompt {
   min-width: 0;
   margin: 0;
-  padding-top: calc((var(--touch-min-target, 44px) - 36px - 2px) / 2);
-  padding-bottom: calc((var(--touch-min-target, 44px) - 36px - 2px) / 2);
+  /* 36px field + 4px + 4px = 44px, matching the send button's 44px box so both
+     columns of the row are exactly the same height and top edge. */
+  padding-top: 4px;
+  padding-bottom: 4px;
+  /* The prompt band is a plain region inside the composer card; it must not
+     paint a second surface or border of its own. */
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .wb-app .composer-split .composer-submit-col {
@@ -82,7 +89,9 @@
   max-width: 100%;
   min-width: 0;
   height: var(--touch-min-target, 44px);
-  font-size: var(--text-base, 14px);
+  /* Matches the prompt field's 15px so the composer reads as one typographic
+     system from the text you type to the model you type it with. */
+  font-size: var(--text-md, 15px);
   min-height: 44px;
   display: flex;
   align-items: center;
