@@ -1,4 +1,4 @@
-import { Gear, Info } from "@phosphor-icons/react";
+import { ChatText, Gear, Info, SidebarSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { useGlobalModalShortcuts } from "../../state/modal-shortcuts";
 import { WorkbenchProvider, useWorkbench } from "../../state/workbench-context";
@@ -71,39 +71,67 @@ function Workbench() {
       className={`workbench wb-app mobile-${state.mobileTab}${inspectorCollapsed ? " inspector-collapsed" : ""}${state.isMobileSidebarOpen ? " sidebar-open" : ""}`}
     >
       <nav className="wb-mobile-nav" aria-label="工作台导航">
-        <Button
+        <button
+          type="button"
+          className={`wb-mobile-nav-btn wb-mobile-drawer-btn${state.isMobileSidebarOpen ? " is-active" : ""}`}
           onClick={() => setMobileSidebar(!state.isMobileSidebarOpen)}
+          aria-label="打开会话列表"
           aria-pressed={state.isMobileSidebarOpen}
           aria-expanded={state.isMobileSidebarOpen}
+          title="会话列表"
         >
-          会话
-        </Button>
-        <Button
-          onClick={() => {
-            setMobileSidebar(false);
-            setMobileTab("task");
-          }}
-          aria-pressed={state.mobileTab === "task" && !state.isMobileSidebarOpen}
-        >
-          任务
-        </Button>
-        <Button
-          onClick={() => {
-            setMobileSidebar(false);
-            revealInspector();
-          }}
-          aria-pressed={state.mobileTab === "inspector"}
-        >
-          详情{pending ? ` · 待批准 ${pending}` : ""}
-        </Button>
-        <Button
+          <SidebarSimple size={17} weight="regular" />
+          <span className="wb-mobile-nav-label">会话</span>
+        </button>
+
+        <div className="wb-mobile-segmented-control" role="tablist" aria-label="视图模式">
+          <button
+            type="button"
+            role="tab"
+            className={`wb-mobile-segment${state.mobileTab === "task" && !state.isMobileSidebarOpen ? " is-active" : ""}`}
+            onClick={() => {
+              setMobileSidebar(false);
+              setMobileTab("task");
+            }}
+            aria-selected={state.mobileTab === "task" && !state.isMobileSidebarOpen}
+            title="主任务"
+          >
+            <ChatText size={15} weight="regular" />
+            <span>任务</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`wb-mobile-segment${state.mobileTab === "inspector" ? " is-active" : ""}`}
+            onClick={() => {
+              setMobileSidebar(false);
+              revealInspector();
+            }}
+            aria-selected={state.mobileTab === "inspector"}
+            title="执行详情"
+          >
+            <Info size={15} weight="regular" />
+            <span>详情</span>
+            {pending > 0 && (
+              <span className="wb-mobile-pending-badge" aria-label={`待批准 ${pending} 项`}>
+                {pending}
+              </span>
+            )}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="wb-mobile-nav-btn wb-mobile-settings-btn"
           onClick={() => {
             setMobileSidebar(false);
             openSettings(true);
           }}
+          aria-label="设置"
+          title="设置"
         >
-          设置
-        </Button>
+          <Gear size={17} weight="regular" />
+        </button>
       </nav>
       <div
         className={`wb-sidebar-backdrop${state.isMobileSidebarOpen ? " is-open" : ""}`}
