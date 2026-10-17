@@ -42,13 +42,9 @@ it("settings page saves real fields, retains failed drafts and fits desktop/mobi
     await page.getByText('设置已保存。执行配置用于新的运行；当前运行不会被中断。').waitFor();
     expect(await page.evaluate(() => Reflect.get(window, 'calls')[0])).toEqual({ settings: { theme: 'dark' } });
     await nav('模型连接').click();
-    await page.getByLabel('API 端点', { exact: true }).fill('http://localhost:8080/v1');
-    await page.getByRole('button', { name: '读取已保存连接的模型目录' }).click();
-    expect(await page.getByRole('alert').innerText()).toContain('连接信息尚未保存');
+    expect(await page.getByRole('button', { name: '从 /models 拉取' }).isDisabled()).toBe(true);
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toBe(0);
-    await page.getByLabel('精确模型 ID', { exact: true }).fill('fixture/model');
     await page.getByLabel('默认思考强度').selectOption('high');
-    await page.getByLabel('保存时清除已存密钥（不可撤销）').check();
     await nav('上下文与记忆').click();
     await page.getByLabel('上下文 token 上限').fill('32000');
     await page.getByRole('button', { name: '添加模型窗口' }).click();
@@ -68,7 +64,7 @@ it("settings page saves real fields, retains failed drafts and fits desktop/mobi
     await save.click();
     await page.getByText('设置已保存。执行配置用于新的运行；当前运行不会被中断。').waitFor();
     const last = await page.evaluate(() => Reflect.get(window, 'calls').at(-1));
-    expect(last.apiKey).toBe('');
+    expect(last.apiKey).toBeUndefined();
     expect(last.settings).toMatchObject({ contextBudgetTokens: 32000, modelContextWindows: { 'fixture/model': 128000 }, reasoningEffort: 'high', lspServers: [{ id: 'ts', args: ['--stdio'], extensions: ['.ts', '.tsx'] }] });
     expect(last.settings.theme).toBeUndefined();
     await page.getByLabel('搜索设置').fill('token');
@@ -87,9 +83,9 @@ it("settings page saves real fields, retains failed drafts and fits desktop/mobi
       }
     }
     await page.getByRole('button', { name: '返回工作台' }).click();
-    expect(await page.locator('.settings-page').count()).toBe(0);
+    expect(await page.locator('.settings-page').isVisible()).toBe(false);
     await page.getByRole('button', { name: '重开设置' }).click();
     await nav('模型连接').click();
-    expect(await page.getByLabel('API 密钥', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByLabel('来源 API 密钥', { exact: true }).inputValue()).toBe('');
   } finally { await browser.close(); }
 }, 30000);

@@ -24,7 +24,7 @@ import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
 import { Select } from "../primitives/Select";
-import { ModelCatalog } from "./ModelCatalog";
+import { ProviderSources } from "./ProviderSources";
 import { McpPanel } from "./McpPanel";
 import "./settings-page.css";
 
@@ -60,8 +60,7 @@ export function Settings() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [listing, setListing] = useState(false);
-  const [models, setModels] = useState<readonly string[]>([]);
-  const [modelError, setModelError] = useState("");
+  const sourceBusy = useRef(false);
   const locked = useRef(false);
   const alive = useRef(true);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -93,7 +92,7 @@ export function Settings() {
   }, [state.isSettingsOpen]);
 
   const close = () => {
-    if (!locked.current) openSettings(false);
+    if (!locked.current && !sourceBusy.current) openSettings(false);
   };
 
   useEffect(() => {
@@ -101,7 +100,7 @@ export function Settings() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("dialog[open]") && !event.isComposing) {
         event.preventDefault();
-        if (!locked.current) openSettings(false);
+        if (!locked.current && !sourceBusy.current) openSettings(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -121,7 +120,6 @@ export function Settings() {
     setRemoveKey(false);
     setError("");
     setNotice("");
-    setModels([]);
   };
 
   const save = async () => {
@@ -158,29 +156,6 @@ export function Settings() {
     }
   };
 
-  const list = async () => {
-    if (locked.current) return;
-    if (draft.baseUrl !== initial.baseUrl || draft.apiMode !== (initial.apiMode ?? "chat-completions") || key || removeKey) {
-      setModelError("连接信息尚未保存。请先保存设置，再读取模型目录；不会自动保存其他修改。");
-      return;
-    }
-    locked.current = true;
-    setListing(true);
-    setModelError("");
-    try {
-      const result = await window.forge.listModels();
-      if (alive.current) {
-        setModels(result);
-        if (!result.length) setModelError("目录为空，可手动输入精确模型 ID。");
-      }
-    } catch (err) {
-      if (alive.current) setModelError(err instanceof Error ? err.message : "读取失败，可手动输入模型 ID。");
-    } finally {
-      locked.current = false;
-      if (alive.current) setListing(false);
-    }
-  };
-
   const text = (name: TextKey, label: string, helper?: string, type = "text", placeholder?: string) => (
     <Field key={name} id={`setting-${name}`} label={label} helper={helper}>
       <Input
@@ -211,10 +186,9 @@ export function Settings() {
   const selected = sections.find(item => item.id === section)!;
   const visible = (id: Section) => query.trim() ? matching.some(item => item.id === id) : section === id;
 
-  if (!state.isSettingsOpen) return null;
-
   return (
-    <section className="settings-page" aria-label="设置工作区">
+    <section className="settings-page" hidden={!state.isSettingsOpen} inert={!state.isSettingsOpen}
+      style={!state.isSettingsOpen ? { display: "none" } : undefined} aria-label="设置工作区">
       <aside className="settings-navigation">
         <div className="settings-nav-header">
           <Button
@@ -305,93 +279,16 @@ export function Settings() {
             <div className="settings-empty">没有找到相关设置，试试“模型”“token”或“权限”。</div>
           )}
 
+          <div hidden={!visible("connection")}>
+            <ProviderSources onBusy={value => { sourceBusy.current = value; setListing(value); }} />
+          </div>
           <form id="settings-page-form" noValidate onSubmit={e => { e.preventDefault(); void save(); }}>
             <fieldset disabled={busy || listing || !state.settings} className="settings-page-fields">
               {visible("connection") && (
-                <section className="settings-section" aria-label="模型连接配置">
+                <section className="settings-section" aria-label="推理设置">
                   <div className="settings-card">
-                    <div className="settings-card-header">
-                      <h3>服务与模型</h3>
-                      <p>支持兼容 OpenAI 的服务。保存连接信息不会发起模型推理。</p>
-                    </div>
-                    <div className="settings-card-body">
-                      {text("baseUrl", "API 端点", "HTTP(S) 基础地址，例如 http://localhost:8080/v1；不包含密钥或查询参数。", "text", "http://localhost:8080/v1")}
-                      {select("apiMode", "API 协议", [
-                        { value: "chat-completions", label: "Chat Completions" },
-                        { value: "responses", label: "Responses" },
-                      ])}
-                      <Field
-                        id="setting-api-key"
-                        label="API 密钥"
-                        helper={initial.hasApiKey ? "已保存密钥；留空保留，不显示原文。" : "无已保存密钥；本地服务可留空。"}
-                      >
-                        <Input
-                          id="setting-api-key"
-                          type="password"
-                          autoComplete="new-password"
-                          placeholder={initial.hasApiKey ? "••••••••••••••••" : "例如 sk-..."}
-                          value={key}
-                          disabled={removeKey}
-                          onChange={e => { setKey(e.target.value); setNotice(""); }}
-                        />
-                      </Field>
-                      {initial.hasApiKey && (
-                        <label className="settings-check settings-danger-check">
-                          <input
-                            type="checkbox"
-                            checked={removeKey}
-                            onChange={e => {
-                              setRemoveKey(e.target.checked);
-                              setKey("");
-                              setNotice("");
-                            }}
-                          />
-                          <span>保存时清除已存密钥（不可撤销）</span>
-                        </label>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="settings-card">
-                    <div className="settings-card-header">
-                      <h3>模型与推理</h3>
-                      <p>指定新会话默认选用的模型 ID 及思考参数。</p>
-                    </div>
-                    <div className="settings-card-body">
-                      {text("model", "精确模型 ID", "作为新会话的默认模型；已有会话可在输入框单独选择。", "text", "例如 deepseek-chat 或 gpt-4o")}
-                      {select(
-                        "reasoningEffort",
-                        "默认思考强度",
-                        ["default", "none", "minimal", "low", "medium", "high", "xhigh"].map(value => ({
-                          value,
-                          label: value === "default" ? "模型默认" : value,
-                        })),
-                        "仅对支持该参数的服务生效，不保证所有模型都支持。"
-                      )}
-                      <div className="settings-card-action-row">
-                        <Button
-                          variant="secondary"
-                          onClick={() => void list()}
-                          loading={listing}
-                          icon={<Plugs size={15} />}
-                        >
-                          读取已保存连接的模型目录
-                        </Button>
-                      </div>
-                      {modelError && <p role="alert" className="form-error">{modelError}</p>}
-                      {models.length > 0 && (
-                        <div className="settings-catalog-wrap">
-                          <ModelCatalog
-                            value={draft.model}
-                            models={models}
-                            onSelect={value => change("model", value)}
-                            onRefresh={() => void list()}
-                            loading={listing}
-                            error=""
-                          />
-                        </div>
-                      )}
-                    </div>
+                    <div className="settings-card-header"><h3>通用推理偏好</h3><p>适用于支持该参数的 OpenAI 兼容模型，通过底部保存设置。</p></div>
+                    <div className="settings-card-body">{select("reasoningEffort", "默认思考强度", ["default", "none", "minimal", "low", "medium", "high", "xhigh"].map(value => ({ value, label: value === "default" ? "模型默认" : value })))}</div>
                   </div>
                 </section>
               )}

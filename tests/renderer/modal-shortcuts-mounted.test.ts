@@ -120,7 +120,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
 
     const openLabels = () =>
       page.evaluate(() =>
-        Array.from(document.querySelectorAll('dialog[open], .settings-page')).map((dialog) =>
+        Array.from(document.querySelectorAll('dialog[open], .settings-page:not([hidden])')).map((dialog) =>
           dialog.getAttribute("aria-label"),
         ),
       );
@@ -128,7 +128,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
     // frames to catch any late stacking before asserting the exact set.
     const expectOpen = async (labels: string[]) => {
       await page.waitForFunction((expected: string[]) => {
-        const open = Array.from(document.querySelectorAll('dialog[open], .settings-page')).map(
+        const open = Array.from(document.querySelectorAll('dialog[open], .settings-page:not([hidden])')).map(
           (dialog) => dialog.getAttribute("aria-label"),
         );
         return (

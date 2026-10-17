@@ -122,21 +122,13 @@ it("model search requires selection and settings retain drafts and save once", a
     await search.press("Escape");
     expect(await page.locator("details[open]").count()).toBe(0);
     await page.getByRole("button", { name: "打开设置" }).click();
-    await page.getByLabel("精确模型 ID", { exact: true }).fill("draft/model");
+    await page.getByRole("button", { name: "执行与权限", exact: true }).click();
+    await page.getByLabel("最大轮次", { exact: true }).fill("13");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "打开设置" }).click();
-    expect(
-      await page.getByLabel("精确模型 ID", { exact: true }).inputValue(),
-    ).toBe("draft/model");
+    expect(await page.getByLabel("最大轮次", { exact: true }).inputValue()).toBe("13");
     await page.getByRole("button", { name: "放弃未保存修改" }).click();
-    expect(
-      await page.getByLabel("精确模型 ID", { exact: true }).inputValue(),
-    ).toBe("provider/alpha");
-    await page.getByRole("button", { name: "读取已保存连接的模型目录" }).click();
-    await page.getByRole("button", { name: /beta.*provider\/beta/ }).waitFor();
-    expect(await page.locator("#saves").innerText()).toBe("0");
-    await page.getByRole("button", { name: /beta.*provider\/beta/ }).click();
-    await page.getByRole("button", { name: "执行与权限", exact: true }).click();
+    expect(await page.getByLabel("最大轮次", { exact: true }).inputValue()).toBe("20");
     await page.getByLabel("最大轮次", { exact: true }).fill("12");
     await page.getByRole("button", { name: "保存设置", exact: true }).click();
     await page.keyboard.press("Escape");
@@ -147,7 +139,7 @@ it("model search requires selection and settings retain drafts and save once", a
     await page.getByRole("button", { name: "打开设置" }).click();
     expect(await page.getByLabel("最大轮次", { exact: true }).inputValue()).toBe("12");
     await page.getByRole("button", { name: "模型连接", exact: true }).click();
-    expect(await page.getByLabel("精确模型 ID", { exact: true }).inputValue()).toBe("provider/beta");
+    expect(await page.getByLabel("来源名称", { exact: true }).count()).toBe(1);
   } finally {
     await browser.close();
   }

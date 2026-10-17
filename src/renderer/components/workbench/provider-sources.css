@@ -1,0 +1,12 @@
+.provider-source-list { display: flex; flex-direction: column; gap: 10px; padding: 20px 24px; }
+.provider-source-list > .btn { align-self: flex-start; }
+.provider-source-row { display: flex; gap: 14px; align-items: center; width: 100%; border: 1px solid var(--border-subtle); border-radius: 10px; padding: 16px; background: var(--canvas-bg); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.provider-source-row[aria-pressed=true] { background: var(--surface-selected); border-color: var(--text-muted); }
+.provider-source-row > span:first-of-type { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.provider-source-row small { color: var(--text-muted); overflow-wrap: anywhere; }
+.provider-source-row:disabled { cursor: default; }
+.provider-active { display: flex; gap: 4px; align-items: center; font-size: 12px; white-space: nowrap; }
+.provider-source-fields { display: flex; flex-direction: column; gap: 20px; padding: 0; border: 0; margin: 0; min-width: 0; }
+.provider-source-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.provider-source-fields small { color: var(--text-muted); line-height: 1.7; }
+@media (max-width: 600px) { .provider-source-list { padding: 16px; } .provider-source-row { padding: 12px; gap: 10px; } }

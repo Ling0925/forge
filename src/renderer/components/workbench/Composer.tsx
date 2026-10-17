@@ -131,7 +131,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
-  const modelSource = JSON.stringify([state.settings?.baseUrl ?? "", state.settings?.apiMode ?? "chat-completions"]);
+  const modelSource = JSON.stringify([state.settings?.activeSourceId ?? "legacy", state.settings?.baseUrl ?? "", state.settings?.apiMode ?? "chat-completions", state.settings?.environmentOverride ?? false]);
   const currentModelSource = useRef(modelSource);
   currentModelSource.current = modelSource;
   useEffect(() => {
@@ -609,6 +609,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </select>
           </div>
           <div className="composer-toolbar-end">
+            {state.settings?.activeSourceId && <Button size="sm" variant="ghost" onClick={() => openSettings(true)} title="当前模型来源；在设置中切换。已有会话请确认模型 ID 在此来源可用。">
+              {state.settings.providerSources?.find(source => source.id === state.settings?.activeSourceId)?.label ?? state.settings.activeSourceId}
+            </Button>}
             <ModelPicker
               value={model}
               models={[state.settings?.model ?? "", ...availableModels]}
