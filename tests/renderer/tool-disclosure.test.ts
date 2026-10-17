@@ -107,6 +107,180 @@ describe("tool disclosure row", () => {
     expect(html).toContain("{not json");
   });
 
+  it("decodes a command result envelope instead of printing escaped JSON", () => {
+    const html = render({
+      toolName: "run_command",
+      command: "ls -la",
+      status: "completed",
+      output: JSON.stringify({
+        stdout: "total 8\ndrwxr-xr-x 2 ling ling 4096 src",
+        stderr: "",
+        exit_code: 0,
+        duration_ms: 42,
+        truncated: false,
+      }),
+      defaultExpanded: true,
+    });
+    // The stdout is unescaped and readable, one line per row.
+    expect(html).toContain("drwxr-xr-x 2 ling ling 4096 src");
+    expect(html).not.toContain("total 8\\n");
+    // The envelope's own JSON keys are not dumped at the reader.
+    expect(html).not.toContain("&quot;stdout&quot;");
+    // Machine facts are shown as quiet labelled values, not raw fields.
+    expect(html).toContain("退出码 0");
+    expect(html).toContain("42ms");
+  });
+
+  it("shows a command envelope's stderr and flags a timeout", () => {
+    const html = render({
+      toolName: "run_command",
+      command: "sleep 30",
+      status: "failed",
+      output: JSON.stringify({
+        stdout: "",
+        stderr: "killed after deadline",
+        exit_code: null,
+        timed_out: true,
+        duration_ms: 30000,
+      }),
+      defaultExpanded: true,
+    });
+    expect(html).toContain("killed after deadline");
+    expect(html).toContain("命令超时后已被终止。");
+    expect(html).toContain("30s");
+  });
+
+  it("renders plain console output verbatim", () => {
+    const html = render({
+      toolName: "run_command",
+      command: "pnpm test",
+      status: "completed",
+      output: "✓ 4 tests passed\nTest Files  1 passed (1)",
+      defaultExpanded: true,
+    });
+    expect(html).toContain("✓ 4 tests passed");
+    expect(html).toContain("Test Files  1 passed (1)");
+  });
+
+  it("leads a failed non-command tool with its recorded reason", () => {
+    const html = render({
+      toolName: "read_file",
+      target: "src/a.ts",
+      status: "failed",
+      output: JSON.stringify({ error: "Workspace path rejected: outside root" }),
+      defaultExpanded: true,
+    });
+    expect(html).toContain("失败原因");
+    expect(html).toContain("Workspace path rejected: outside root");
+    // Shown once: the reason is not repeated in the result rows.
+    expect(html.match(/Workspace path rejected/g)).toHaveLength(1);
+  });
+
+  it("uses a plain-text result as the failure reason instead of printing it twice", () => {
+    const html = render({
+      toolName: "list_files",
+      status: "failed",
+      output: "boom",
+      parameters: JSON.stringify({ path: "src" }),
+      defaultExpanded: true,
+    });
+    expect(html).toContain("失败原因");
+    expect(html).toContain("boom");
+    // The plain-text result is the reason; it is not printed twice.
+    expect(html.match(/boom/g)).toHaveLength(1);
+  });
+
+  it("says no reason was recorded rather than inventing one", () => {
+    const html = render({
+      toolName: "read_file",
+      target: "src/a.ts",
+      status: "failed",
+      output: "",
+      parameters: JSON.stringify({ path: "src/a.ts" }),
+      defaultExpanded: true,
+    });
+    expect(html).toContain("失败原因");
+    expect(html).toContain("失败，但未记录具体原因。");
+  });
+
+  it("gives a long multi-line result its own block instead of a one-line cell", () => {
+    const html = render({
+      toolName: "read_file",
+      status: "completed",
+      output: JSON.stringify({
+        path: "src/a.ts",
+        content: "1: const a = 1;\n2: const b = 2;\n3: export { a, b };",
+      }),
+      defaultExpanded: true,
+    });
+    expect(html).toContain('class="tool-param-block"');
+    expect(html).toContain("3: export { a, b };");
+    // A real line break survives rendering, not a literal \n escape.
+    expect(html).not.toContain("1: const a = 1;\\n");
+  });
+
+  it("offers a copy control for the command and its output", () => {
+    const html = render({
+      toolName: "run_command",
+      command: "git status --short",
+      status: "completed",
+      output: " M src/a.ts",
+      defaultExpanded: true,
+    });
+    expect(html).toContain('aria-label="复制命令"');
+    expect(html).toContain('aria-label="复制输出"');
+  });
+
+  it("marks a failed row with the word 失败, not only a glyph", () => {
+    const html = render({
+      toolName: "run_command",
+      command: "false",
+      status: "failed",
+    });
+    expect(html).toContain("tool-disclosure-failure");
+    expect(html).toContain("失败");
+    expect(html).toContain('data-status="failed"');
+  });
+
+  it("shows a measured duration when one is recorded", () => {
+    const html = render({
+      toolName: "read_file",
+      target: "src/a.ts",
+      status: "completed",
+      durationMs: 1420,
+      timestamp: "2026-01-01T00:00:01.000Z",
+    });
+    expect(html).toContain("1.4s");
+  });
+
+  it("warns when the shown evidence was clipped by the interface", () => {
+    const html = render({
+      toolName: "list_files",
+      status: "completed",
+      output: "src/a.ts",
+      truncated: true,
+      defaultExpanded: true,
+    });
+    expect(html).toContain("展示内容已截断");
+  });
+
+  it("decodes a background command task page into a console", () => {
+    const html = render({
+      toolName: "command_task",
+      status: "running",
+      parameters: JSON.stringify({ action: "status", id: "task-1" }),
+      output: JSON.stringify({
+        id: "task-1",
+        status: "running",
+        output_available: false,
+        next_offset: null,
+      }),
+      defaultExpanded: true,
+    });
+    expect(html).not.toContain("&quot;output_available&quot;");
+    expect(html).toContain("命令仍在运行，输出尚未生成。");
+  });
+
   it("default-expands a file edit and shows the diff", () => {
     const html = render({
       toolName: "edit_file",

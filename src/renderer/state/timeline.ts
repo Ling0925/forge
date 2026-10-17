@@ -20,6 +20,10 @@ export type TimelineItem =
       readonly status: "running" | "completed" | "failed" | "unexecuted";
       readonly output: string;
       readonly changes?: readonly FileChange[];
+      /** Measured wall-clock time between the recorded start and finish events. */
+      readonly durationMs?: number;
+      /** Start timestamp, so the row can show when the action ran. */
+      readonly startedAt?: string;
     }
   | {
       readonly kind: "error";
@@ -31,6 +35,24 @@ export type TimelineItem =
 
 function isHumanTurn(message: SessionSnapshot["messages"][number]): boolean {
   return message.role === "user" && message.origin !== "agent_reconciliation";
+}
+
+/**
+ * Measured duration for one tool occurrence. Only real recorded timestamps
+ * count: an unparseable or out-of-order pair reports nothing rather than an
+ * invented number.
+ */
+function toolTiming(
+  start: { readonly timestamp?: string } | undefined,
+  finish: { readonly timestamp?: string } | undefined,
+): { readonly durationMs?: number; readonly startedAt?: string } {
+  const startedAt = start?.timestamp;
+  const finishedAt = finish?.timestamp;
+  if (!startedAt || !finishedAt) return startedAt ? { startedAt } : {};
+  const from = Date.parse(startedAt);
+  const to = Date.parse(finishedAt);
+  if (Number.isNaN(from) || Number.isNaN(to) || to < from) return { startedAt };
+  return { startedAt, durationMs: to - from };
 }
 
 /** Native message order is authoritative. IDs are only unique within a call occurrence. */
@@ -194,6 +216,7 @@ export function reduceTimeline(
                 ? "running"
                 : "unexecuted",
             output: finish?.result.content ?? "",
+            ...toolTiming(start, finish),
             ...(finish?.result.changes?.length
               ? { changes: finish.result.changes }
               : {}),
@@ -277,7 +300,8 @@ export function reduceTimeline(
         else {
           position = result.length;
           result.push({ kind: "tool", id: `live:${index}:${event.call.id}`,
-            call: event.call, status: "running", output: "" });
+            call: event.call, status: "running", output: "",
+            ...toolTiming(event, undefined) });
         }
         // Include represented starts as queue placeholders so their results can
         // never be consumed by a later same-ID live occurrence.
@@ -290,6 +314,9 @@ export function reduceTimeline(
         if (position === undefined || item?.kind !== "tool") continue;
         result[position] = { ...item, status: event.result.isError ? "failed" : "completed",
           output: event.result.content,
+          ...(item.startedAt === undefined
+            ? {}
+            : toolTiming({ timestamp: item.startedAt }, event)),
           ...(event.result.changes?.length ? { changes: event.result.changes } : {}) };
       }
     }

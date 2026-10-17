@@ -1,14 +1,30 @@
 import {
   CaretRight,
   Check,
-  FileCode,
+  Copy,
+  FilePlus,
+  FileText,
+  FolderPlus,
   GitDiff,
   Globe,
+  ListBullets,
+  ListChecks,
+  MagnifyingGlass,
+  PencilSimple,
+  PuzzlePiece,
   TerminalWindow,
+  WarningCircle,
   Wrench,
   X,
 } from "@phosphor-icons/react";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import type { FileChange } from "../../shared-types";
 import { DiffViewer, diffStats } from "./DiffViewer";
 import "./tool-disclosure.css";
@@ -42,6 +58,7 @@ const friendlyLabels: Readonly<Record<string, string>> = {
   search_files: "搜索文件",
   make_directory: "创建目录",
   run_command: "运行命令",
+  command_task: "查看后台命令",
   git_status: "查看 Git 状态",
   git_diff: "查看差异",
   git_log: "查看提交记录",
@@ -51,6 +68,9 @@ const friendlyLabels: Readonly<Record<string, string>> = {
   browser_fill: "填写网页",
   browser_screenshot: "截取网页",
   browser_close: "关闭浏览器",
+  update_plan: "更新计划",
+  mcp_list_tools: "列出 MCP 工具",
+  mcp_call_tool: "调用 MCP 工具",
 };
 
 function friendlyLabel(name: string): string {
@@ -60,22 +80,26 @@ function friendlyLabel(name: string): string {
   return "工具调用";
 }
 
+/** One glyph per action family, so a long transcript is scannable by shape. */
 function getToolIcon(name: string) {
-  if (name.includes("file") || name.includes("directory")) {
-    return <FileCode size={16} weight="regular" />;
-  }
-  if (
-    name.includes("command") ||
-    name.includes("shell") ||
-    name.includes("terminal")
-  ) {
+  if (name === "read_file") return <FileText size={16} weight="regular" />;
+  if (name === "write_file") return <FilePlus size={16} weight="regular" />;
+  if (name === "edit_file") return <PencilSimple size={16} weight="regular" />;
+  if (name === "make_directory")
+    return <FolderPlus size={16} weight="regular" />;
+  if (name === "list_files") return <ListBullets size={16} weight="regular" />;
+  if (name === "search_files")
+    return <MagnifyingGlass size={16} weight="regular" />;
+  if (name === "update_plan") return <ListChecks size={16} weight="regular" />;
+  if (name === "run_command" || name === "command_task") {
     return <TerminalWindow size={16} weight="regular" />;
   }
-  if (name.includes("browser")) {
-    return <Globe size={16} weight="regular" />;
-  }
-  if (name.includes("diff") || name.includes("git")) {
-    return <GitDiff size={16} weight="regular" />;
+  if (name.startsWith("git_")) return <GitDiff size={16} weight="regular" />;
+  if (name.startsWith("browser_")) return <Globe size={16} weight="regular" />;
+  if (name.startsWith("mcp_"))
+    return <PuzzlePiece size={16} weight="regular" />;
+  if (name.includes("file") || name.includes("directory")) {
+    return <FileText size={16} weight="regular" />;
   }
   return <Wrench size={16} weight="regular" />;
 }
@@ -87,6 +111,19 @@ function formatDuration(durationMs: number): string {
   if (seconds < 60)
     return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+}
+
+/** Local wall-clock for a start timestamp; null when it is not a real date. */
+function formatClock(timestamp: string): string | null {
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : parsed.toLocaleTimeString(undefined, { hour12: false });
+}
+
+function formatStamp(timestamp: string): string | undefined {
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toLocaleString();
 }
 
 /**
@@ -114,7 +151,50 @@ function StatusGlyph({
   );
 }
 
-/** Human labels for the most common tool argument keys. */
+/**
+ * Quiet copy action for a piece of evidence (command line, result, output). It
+ * only ever claims a copy that really happened: an unavailable clipboard leaves
+ * the label unchanged.
+ */
+function ToolCopyButton({
+  text,
+  label,
+}: {
+  readonly text: string;
+  readonly label: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard can be unavailable (insecure origin, denied permission).
+    }
+  }, [text]);
+  return (
+    <button
+      type="button"
+      className={`tool-copy${copied ? " is-copied" : ""}`}
+      onClick={() => void copy()}
+      aria-label={copied ? "已复制" : label}
+      title={copied ? "已复制" : label}
+    >
+      {copied ? (
+        <Check size={12} weight="bold" aria-hidden="true" />
+      ) : (
+        <Copy size={12} aria-hidden="true" />
+      )}
+      <span>{copied ? "已复制" : "复制"}</span>
+    </button>
+  );
+}
+
+/** Human labels for the most common tool argument and result keys. */
 const paramLabels: Readonly<Record<string, string>> = {
   path: "路径",
   file_path: "路径",
@@ -135,6 +215,7 @@ const paramLabels: Readonly<Record<string, string>> = {
   model: "模型",
   prompt: "提示词",
   line: "行",
+  column: "列",
   limit: "上限",
   offset: "偏移",
   recursive: "递归",
@@ -162,6 +243,19 @@ const paramLabels: Readonly<Record<string, string>> = {
   total_lines: "总行数",
   truncated: "已截断",
   scan_truncated: "扫描不完整",
+  // Console and result metadata.
+  status: "状态",
+  signal: "信号",
+  duration_ms: "进程耗时",
+  timed_out: "已超时",
+  spawn_failed: "启动失败",
+  partial_line: "末行不完整",
+  size_bytes: "字节数",
+  lines_returned: "返回行数",
+  next_offset: "下一页偏移",
+  total_chars: "总字符数",
+  output_available: "输出可用",
+  output_truncated: "原始输出已截断",
 };
 
 /** Best-effort pretty print for non-scalar argument values. */
@@ -173,34 +267,108 @@ function prettyValue(value: unknown): string {
   }
 }
 
-/** Argument values stay readable without dumping the whole raw JSON blob. */
-function paramValue(value: unknown): ReactNode {
+const BLOCK_TEXT_LIMIT = 12000;
+
+interface RenderedValue {
+  /** True when the value owns a full row: multiline or long text, JSON bodies. */
+  readonly block: boolean;
+  readonly node: ReactNode;
+}
+
+/**
+ * Argument and result values stay readable without dumping the whole raw JSON
+ * blob. Multi-line and long strings become their own block so line breaks,
+ * indentation and log structure survive; scalars stay on one quiet line.
+ */
+function renderValue(value: unknown): RenderedValue {
   if (value === null || value === undefined)
-    return <span className="tool-param-empty">空</span>;
-  if (typeof value === "string")
-    return value === "" ? (
-      <span className="tool-param-empty">空</span>
-    ) : (
-      <span className="tool-param-text">
-        {value.length > 2000 ? `${value.slice(0, 2000)}…` : value}
-      </span>
-    );
-  if (typeof value === "number" || typeof value === "boolean")
-    return <span className="tool-param-scalar">{String(value)}</span>;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="tool-param-empty">空</span>;
-    if (value.every((item) => typeof item !== "object" || item === null))
-      return (
-        <span className="tool-param-chips">
-          {value.map((item, index) => (
-            <span className="tool-param-chip" key={`${String(item)}-${index}`}>
-              {String(item)}
-            </span>
-          ))}
-        </span>
-      );
+    return { block: false, node: <span className="tool-param-empty">空</span> };
+  if (typeof value === "string") {
+    if (value === "")
+      return {
+        block: false,
+        node: <span className="tool-param-empty">空</span>,
+      };
+    if (value.includes("\n") || value.length > 160) {
+      const clipped = value.length > BLOCK_TEXT_LIMIT;
+      return {
+        block: true,
+        node: (
+          <pre className="tool-param-block">
+            {clipped ? value.slice(0, BLOCK_TEXT_LIMIT) : value}
+            {clipped && <span className="tool-param-empty">…（已截断）</span>}
+          </pre>
+        ),
+      };
+    }
+    return {
+      block: false,
+      node: <span className="tool-param-text">{value}</span>,
+    };
   }
-  return <pre className="tool-param-json">{prettyValue(value)}</pre>;
+  if (typeof value === "number" || typeof value === "boolean")
+    return {
+      block: false,
+      node: <span className="tool-param-scalar">{String(value)}</span>,
+    };
+  if (Array.isArray(value)) {
+    if (value.length === 0)
+      return {
+        block: false,
+        node: <span className="tool-param-empty">空</span>,
+      };
+    if (value.every((item) => typeof item !== "object" || item === null))
+      return {
+        block: false,
+        node: (
+          <span className="tool-param-chips">
+            {value.map((item, index) => (
+              <span
+                className="tool-param-chip"
+                key={`${String(item)}-${index}`}
+              >
+                {String(item)}
+              </span>
+            ))}
+          </span>
+        ),
+      };
+  }
+  return {
+    block: true,
+    node: <pre className="tool-param-json">{prettyValue(value)}</pre>,
+  };
+}
+
+/** Labelled rows for one argument or result object. */
+function ValueRows({
+  record,
+  skip,
+}: {
+  readonly record: Record<string, unknown>;
+  readonly skip?: ReadonlySet<string>;
+}) {
+  const entries = Object.entries(record).filter(([key]) => !skip?.has(key));
+  if (entries.length === 0)
+    return <span className="tool-section-empty">无其他字段</span>;
+  return (
+    <dl className="tool-params">
+      {entries.map(([key, value]) => {
+        const rendered = renderValue(value);
+        return (
+          <div
+            className={
+              rendered.block ? "tool-param-row is-block" : "tool-param-row"
+            }
+            key={key}
+          >
+            <dt className="tool-param-key">{paramLabels[key] ?? key}</dt>
+            <dd className="tool-param-value">{rendered.node}</dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
 }
 
 /** Parse the persisted argument string without throwing on malformed input. */
@@ -230,46 +398,267 @@ function ParameterFields({ parameters }: { readonly parameters: unknown }) {
     ) : (
       <span className="tool-section-empty">无参数</span>
     );
-  const entries = Object.entries(record);
-  if (entries.length === 0)
+  if (Object.keys(record).length === 0)
     return <span className="tool-section-empty">无参数</span>;
+  return <ValueRows record={record} />;
+}
+
+type ParsedResult =
+  | { readonly kind: "object"; readonly record: Record<string, unknown> }
+  | { readonly kind: "text"; readonly text: string };
+
+/** Result payloads: key/value rows for a JSON object, plain text otherwise. */
+function parseResult(output: string): ParsedResult {
+  try {
+    const parsed: unknown = JSON.parse(output);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      Object.keys(parsed).length > 0
+    )
+      return { kind: "object", record: parsed as Record<string, unknown> };
+  } catch {
+    // Plain text is the normal shape for command output and free-form results.
+  }
+  return { kind: "text", text: output };
+}
+
+interface ConsoleFact {
+  readonly label: string;
+  readonly value: string;
+}
+
+interface CommandConsoleModel {
+  /** The console body: stdout for a command, `output` for a background task. */
+  readonly body: string | null;
+  readonly stderr: string | null;
+  readonly error: string | null;
+  readonly exitCode: number | null;
+  readonly notices: readonly string[];
+  readonly facts: readonly ConsoleFact[];
+  /** A background task whose output has not been produced yet. */
+  readonly pending: boolean;
+}
+
+const consoleBodyKeys = ["stdout", "output"] as const;
+const consoleConsumedKeys: ReadonlySet<string> = new Set([
+  ...consoleBodyKeys,
+  "stderr",
+  "error",
+  "exit_code",
+  "signal",
+  "timed_out",
+  "spawn_failed",
+  "truncated",
+  "output_truncated",
+  "duration_ms",
+]);
+
+function scalarFact(value: unknown): string | null {
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value.length <= 160) return value;
+  return null;
+}
+
+/**
+ * Command results arrive as the tool's own JSON envelope
+ * (`{stdout, stderr, exit_code, …}`); the card decodes that envelope instead of
+ * printing escaped JSON at the reader. Anything unrecognised is shown verbatim.
+ */
+function decodeCommandConsole(
+  output: string | null | undefined,
+  toolName: string,
+): CommandConsoleModel {
+  const text = typeof output === "string" ? output : "";
+  let record: Record<string, unknown> | null = null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
+      record = parsed as Record<string, unknown>;
+  } catch {
+    // Plain console output.
+  }
+  if (!record)
+    return {
+      // An empty string means "no output", not an empty console viewport.
+      body: text === "" ? null : text,
+      stderr: null,
+      error: null,
+      exitCode: null,
+      notices: [],
+      facts: [],
+      pending: false,
+    };
+  const stringField = (key: string) =>
+    typeof record[key] === "string" ? (record[key] as string) : null;
+  const numberField = (key: string) => {
+    const value = record[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+  const body =
+    consoleBodyKeys
+      .map((key) => stringField(key))
+      .find((value) => value !== null) ?? null;
+  const pending = record.output_available === false;
+  const notices: string[] = [];
+  if (record.timed_out === true) notices.push("命令超时后已被终止。");
+  if (record.spawn_failed === true) notices.push("进程未能启动。");
+  const signal = stringField("signal");
+  if (signal) notices.push(`命令被信号 ${signal} 终止。`);
+  if (record.output_truncated === true)
+    notices.push("原始输出已在上限处截断。");
+  if (record.truncated === true)
+    notices.push(
+      toolName === "command_task"
+        ? "这是分页结果，还有更多输出可继续读取。"
+        : "输出超出采集上限，已停止采集。",
+    );
+  const facts: ConsoleFact[] = [];
+  const duration = numberField("duration_ms");
+  if (duration !== null)
+    facts.push({
+      label: paramLabels.duration_ms ?? "进程耗时",
+      value: formatDuration(duration),
+    });
+  for (const [key, value] of Object.entries(record)) {
+    if (facts.length >= 8) break;
+    if (consoleConsumedKeys.has(key)) continue;
+    const fact = scalarFact(value);
+    if (fact === null) continue;
+    facts.push({ label: paramLabels[key] ?? key, value: fact });
+  }
+  return {
+    body,
+    stderr: stringField("stderr"),
+    error: stringField("error"),
+    exitCode: numberField("exit_code"),
+    notices,
+    facts,
+    pending,
+  };
+}
+
+function SectionHead({
+  title,
+  action,
+}: {
+  readonly title: ReactNode;
+  readonly action?: ReactNode;
+}) {
   return (
-    <dl className="tool-params">
-      {entries.map(([key, value]) => (
-        <div className="tool-param-row" key={key}>
-          <dt className="tool-param-key">{paramLabels[key] ?? key}</dt>
-          <dd className="tool-param-value">{paramValue(value)}</dd>
-        </div>
-      ))}
-    </dl>
+    <div className="tool-section-head">
+      <span className="tool-section-title">{title}</span>
+      {action}
+    </div>
   );
 }
 
-/** Result payloads: parsed key/value rows for a JSON object, plain text otherwise. */
-function ResultFields({ output }: { readonly output: string }) {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(output);
-  } catch {
-    return <pre className="tool-section-content">{output}</pre>;
-  }
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    Object.keys(parsed).length === 0
-  )
-    return <pre className="tool-section-content">{output}</pre>;
-  const record = parsed as Record<string, unknown>;
+/** The integrated console: the command, its streams and its exit code as one unit. */
+function CommandConsole({
+  command,
+  cwd,
+  error,
+  exitCode,
+  model,
+  status,
+}: {
+  readonly command?: string | undefined;
+  readonly cwd?: string | undefined;
+  readonly error?: string | null;
+  readonly exitCode?: number | null;
+  readonly model: CommandConsoleModel;
+  readonly status: ToolDisclosureProps["status"];
+}) {
+  const resolvedExit = exitCode ?? model.exitCode;
+  const failure = error ?? model.error;
+  const emptyText = model.pending
+    ? "命令仍在运行，输出尚未生成。"
+    : status === "running"
+      ? "等待命令输出…"
+      : "工具未返回文本";
   return (
-    <dl className="tool-params">
-      {Object.entries(record).map(([key, value]) => (
-        <div className="tool-param-row" key={key}>
-          <dt className="tool-param-key">{paramLabels[key] ?? key}</dt>
-          <dd className="tool-param-value">{paramValue(value)}</dd>
+    <div className="tool-terminal-card">
+      {command && (
+        <div className="tool-terminal-header tool-section">
+          <div className="tool-terminal-prompt">
+            <span className="tool-terminal-sigil" aria-hidden="true">
+              $
+            </span>
+            <span className="tool-section-title">命令</span>
+            <pre className="tool-section-content tool-command">{command}</pre>
+          </div>
+          <div className="tool-terminal-header-meta">
+            {cwd && (
+              <span className="tool-command-cwd" title={`工作目录：${cwd}`}>
+                工作目录 {cwd}
+              </span>
+            )}
+            <ToolCopyButton text={command} label="复制命令" />
+          </div>
         </div>
-      ))}
-    </dl>
+      )}
+      <div className="tool-terminal-output tool-section">
+        <SectionHead
+          title="结果"
+          action={
+            <div className="tool-section-actions">
+              {resolvedExit !== undefined && resolvedExit !== null && (
+                <span
+                  className={`tool-exit tool-exit-${resolvedExit === 0 ? "ok" : "bad"}`}
+                >
+                  退出码 {resolvedExit}
+                </span>
+              )}
+              {model.body !== null && (
+                <ToolCopyButton text={model.body} label="复制输出" />
+              )}
+            </div>
+          }
+        />
+        {failure && (
+          <pre className="tool-section-content tool-section-error">
+            {failure}
+          </pre>
+        )}
+        {model.stderr !== null && model.stderr !== "" && (
+          <>
+            <span className="tool-section-title tool-stream-title">
+              标准错误
+            </span>
+            <pre className="tool-section-content tool-console-stderr">
+              {model.stderr}
+            </pre>
+          </>
+        )}
+        {model.body === null ? (
+          failure ? null : (
+            <span className="tool-section-empty">{emptyText}</span>
+          )
+        ) : (
+          <pre className="tool-section-content tool-terminal-pre">
+            {model.body}
+          </pre>
+        )}
+        {model.notices.map((notice) => (
+          <p className="tool-notice" key={notice}>
+            <WarningCircle size={13} weight="regular" aria-hidden="true" />
+            {notice}
+          </p>
+        ))}
+        {model.facts.length > 0 && (
+          <div className="tool-console-facts">
+            {model.facts.map((fact) => (
+              <span className="tool-fact" key={fact.label}>
+                <span className="tool-fact-label">{fact.label}</span>
+                <span className="tool-fact-value">{fact.value}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -295,14 +684,18 @@ export function ToolDisclosure({
   // All other tools (including completed commands, file reads, searches, etc.)
   // default to collapsed quiet rows.
   const writesFiles = toolName === "edit_file" || toolName === "write_file";
-  const isCommand = toolName === "run_command";
+  // A plain command's arguments are its command line (shown in the console); a
+  // background task's arguments are the only record of the requested action.
+  const isRunCommand = toolName === "run_command";
+  const isConsole = isRunCommand || toolName === "command_task";
   const isWaiting = status === "running";
   const initialExpanded =
     defaultExpanded !== undefined ? defaultExpanded : isWaiting || writesFiles;
   const [expanded, setExpanded] = useState(initialExpanded);
   const detailsId = useId();
   const label = friendlyLabel(toolName);
-  const displayTarget = target || (isCommand ? command : undefined);
+  const displayTarget = target || (isRunCommand ? command : undefined);
+  const showParameters = !writesFiles && !isRunCommand;
 
   // Phases fold once when they pass into history. Remember which phase already
   // folded so a manual reopen is respected until the item enters a new phase.
@@ -336,6 +729,37 @@ export function ToolDisclosure({
   const statusLabel =
     status === "running" ? "执行中" : status === "completed" ? "完成" : "失败";
 
+  const consoleModel = isConsole
+    ? decodeCommandConsole(output, toolName)
+    : null;
+  const result =
+    !isConsole && output !== null && output !== undefined && output !== ""
+      ? parseResult(output)
+      : null;
+  const explicitReason =
+    result?.kind === "object" && typeof result.record.error === "string"
+      ? result.record.error
+      : null;
+  // A failed card leads with why it failed: the recorded reason, the plain-text
+  // result, or an explicit statement that no reason was recorded. The reason is
+  // shown once — a plain-text result becomes the reason instead of being
+  // repeated under "结果".
+  const textFailure = status === "failed" && result?.kind === "text";
+  const failureReason =
+    status === "failed"
+      ? (explicitReason ??
+        (result?.kind === "text" ? result.text : null) ??
+        (result ? null : "失败，但未记录具体原因。"))
+      : null;
+  // Only drop the `error` row when that exact text is already rendered above.
+  const reasonShownAsFailure =
+    failureReason !== null && explicitReason !== null;
+  const clock = timestamp ? formatClock(timestamp) : null;
+  const stamp = timestamp ? formatStamp(timestamp) : undefined;
+  const resolvedExit = consoleModel
+    ? (exitCode ?? consoleModel.exitCode)
+    : (exitCode ?? null);
+
   return (
     <section
       className={`tool-disclosure ${className}`.trim()}
@@ -362,6 +786,9 @@ export function ToolDisclosure({
           )}
         </div>
         <div className="tool-disclosure-meta">
+          {status === "failed" && (
+            <span className="tool-disclosure-failure">失败</span>
+          )}
           {diffTotals.added > 0 && (
             <span className="tool-diff-stat tool-diff-added">
               +{diffTotals.added}
@@ -372,13 +799,15 @@ export function ToolDisclosure({
               -{diffTotals.removed}
             </span>
           )}
-          {durationMs !== undefined && (
-            <span className="tool-disclosure-time">
-              {formatDuration(durationMs)}
+          {(durationMs !== undefined || clock) && (
+            <span
+              className="tool-disclosure-time"
+              {...(stamp === undefined ? {} : { title: stamp })}
+            >
+              {durationMs !== undefined
+                ? formatDuration(durationMs)
+                : (clock ?? "")}
             </span>
-          )}
-          {timestamp && durationMs === undefined && (
-            <span className="tool-disclosure-time">{timestamp}</span>
           )}
           <StatusGlyph status={status} label={statusLabel} />
           <span
@@ -392,56 +821,33 @@ export function ToolDisclosure({
 
       {expanded && (
         <div id={detailsId} className="tool-disclosure-body">
-          {/* A command card stays minimal: the executed command and its raw
-              result combined in a clean console viewport. */}
-          {isCommand ? (
-            <div className="tool-terminal-card">
-              {command && (
-                <div className="tool-terminal-header tool-section">
-                  <div className="tool-terminal-prompt">
-                    <span className="tool-terminal-sigil" aria-hidden="true">
-                      $
-                    </span>
-                    <span className="tool-section-title">命令</span>
-                    <pre className="tool-section-content tool-command">
-                      {command}
-                    </pre>
-                  </div>
-                  <div className="tool-terminal-header-meta">
-                    {cwd && (
-                      <span className="tool-command-cwd" title={`工作目录：${cwd}`}>
-                        工作目录 {cwd}
-                      </span>
-                    )}
-                    {exitCode !== undefined && exitCode !== null && (
-                      <span
-                        className={`tool-exit tool-exit-${exitCode === 0 ? "ok" : "bad"}`}
-                      >
-                        {exitCode === 0 ? "退出码 0" : `退出码 ${exitCode}`}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="tool-terminal-output tool-section">
-                <span className="tool-section-title">
-                  结果{" "}
-                  {truncated && (
-                    <span className="tool-truncated">（已截断）</span>
-                  )}
-                </span>
-                {output === null || output === undefined || output === "" ? (
-                  <span className="tool-section-empty">工具未返回文本</span>
-                ) : (
-                  <pre className="tool-section-content tool-terminal-pre">{output}</pre>
-                )}
-              </div>
-            </div>
+          {truncated && (
+            <p className="tool-notice">
+              <WarningCircle size={13} weight="regular" aria-hidden="true" />
+              展示内容已截断（超出界面展示上限）。
+            </p>
+          )}
+          {consoleModel ? (
+            /* A command card stays minimal: the executed command and its raw
+               result combined in one console viewport. */
+            <CommandConsole
+              command={command}
+              cwd={cwd}
+              model={consoleModel}
+              status={status}
+              {...(error === undefined || error === null ? {} : { error })}
+              {...(exitCode === undefined || exitCode === null
+                ? {}
+                : { exitCode })}
+            />
           ) : (
             <>
               {command && (
                 <div className="tool-section">
-                  <span className="tool-section-title">命令</span>
+                  <SectionHead
+                    title="命令"
+                    action={<ToolCopyButton text={command} label="复制命令" />}
+                  />
                   <pre className="tool-section-content tool-command">
                     {command}
                   </pre>
@@ -471,44 +877,62 @@ export function ToolDisclosure({
               )}
               {/* A file edit shows only the diff: its raw before/after argument
                   rows ("原内容"/"新内容") would just duplicate the comparison. */}
-              {!writesFiles && (
+              {showParameters && (
                 <div className="tool-section">
-                  <span className="tool-section-title">参数输入</span>
+                  <SectionHead title="调用参数" />
                   <ParameterFields parameters={parsedParams} />
                 </div>
               )}
-
-              {exitCode !== undefined && exitCode !== null && (
+              {failureReason && (
                 <div className="tool-section">
-                  <span className="tool-section-title">退出码</span>
-                  <span
-                    className={`tool-exit tool-exit-${exitCode === 0 ? "ok" : "bad"}`}
-                  >
-                    {exitCode}
-                  </span>
+                  <SectionHead title="失败原因" />
+                  <pre className="tool-section-content tool-section-error">
+                    {failureReason}
+                  </pre>
                 </div>
               )}
-
               {error && (
                 <div className="tool-section">
-                  <span className="tool-section-title">执行错误</span>
+                  <SectionHead title="执行错误" />
                   <pre className="tool-section-content tool-section-error">
                     {error}
                   </pre>
                 </div>
               )}
-
+              {resolvedExit !== undefined && resolvedExit !== null && (
+                <div className="tool-section">
+                  <SectionHead title="退出码" />
+                  <span
+                    className={`tool-exit tool-exit-${resolvedExit === 0 ? "ok" : "bad"}`}
+                  >
+                    {resolvedExit}
+                  </span>
+                </div>
+              )}
               <div className="tool-section">
-                <span className="tool-section-title">
-                  输出结果{" "}
-                  {truncated && (
-                    <span className="tool-truncated">（已截断）</span>
-                  )}
-                </span>
-                {output === null || output === undefined || output === "" ? (
+                <SectionHead
+                  title="结果"
+                  {...(result?.kind === "text" && !textFailure
+                    ? {
+                        action: (
+                          <ToolCopyButton text={result.text} label="复制结果" />
+                        ),
+                      }
+                    : {})}
+                />
+                {!result ? (
                   <span className="tool-section-empty">工具未返回文本</span>
+                ) : result.kind === "text" ? (
+                  textFailure ? null : (
+                    <pre className="tool-section-content">{result.text}</pre>
+                  )
                 ) : (
-                  <ResultFields output={output} />
+                  <ValueRows
+                    record={result.record}
+                    {...(reasonShownAsFailure
+                      ? { skip: new Set(["error"]) }
+                      : {})}
+                  />
                 )}
               </div>
             </>

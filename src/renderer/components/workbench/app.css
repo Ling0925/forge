@@ -559,10 +559,6 @@
 .wb-details dd {
   user-select: text;
 }
-.wb-app .tool-disclosure-name {
-  flex-shrink: 1;
-  overflow-wrap: anywhere;
-}
 @media (max-width: 1000px) {
   .wb-app {
     flex-direction: column;
@@ -770,10 +766,6 @@
   }
   .wb-app .workbench-conversation-scroll {
     padding: var(--space-5);
-  }
-
-  .wb-app .tool-disclosure-header {
-    flex-wrap: wrap;
   }
 }
 

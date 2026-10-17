@@ -205,6 +205,10 @@ export const StoredTranscript = memo(function StoredTranscript({
               item.call.function.arguments.length > 12000
             }
             status={item.status}
+            {...(item.durationMs === undefined
+              ? {}
+              : { durationMs: item.durationMs })}
+            {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
             changes={item.changes}
             autoCollapsed={foldedTool(index, phases)}
           />

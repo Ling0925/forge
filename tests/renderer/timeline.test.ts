@@ -82,6 +82,42 @@ describe("chronological execution timeline", () => {
       output: "ok",
     });
   });
+  it("measures a tool duration from the recorded start and finish timestamps", () => {
+    // base: tool_started at 00:00:01Z, tool_finished at 00:00:02Z.
+    expect(reduceTimeline(base)[2]).toMatchObject({
+      kind: "tool",
+      durationMs: 1000,
+      startedAt: "2026-01-01T00:00:01Z",
+    });
+  });
+  it("reports no duration when the recorded timestamps are out of order", () => {
+    const timed = (start?: string, finish?: string) =>
+      reduceTimeline(
+        sessionSnapshotSchema.parse({
+          ...base,
+          events: [
+            {
+              ...base.events[0],
+              ...(start === undefined ? {} : { timestamp: start }),
+            },
+            {
+              ...base.events[1],
+              ...(finish === undefined ? {} : { timestamp: finish }),
+            },
+          ],
+        }),
+      )[2];
+    // Out of order: a negative or invented duration is never displayed.
+    // (Unparseable timestamps never reach here: sessionSnapshotSchema rejects
+    // them before the transcript sees the snapshot.)
+    expect(timed("2026-01-01T00:00:09Z", "2026-01-01T00:00:02Z")).not.toHaveProperty(
+      "durationMs",
+    );
+    // A recorded start without a finish still reports when the action began.
+    expect(timed("2026-01-01T00:00:01Z", undefined)).toMatchObject({
+      startedAt: "2026-01-01T00:00:01Z",
+    });
+  });
   it("extracts file changes from a persisted tool result for the diff viewer", () => {
     const call = {
       id: "e1",
