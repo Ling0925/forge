@@ -6,9 +6,7 @@
 .tool-disclosure {
   display: flex;
   flex-direction: column;
-  align-self: flex-start;
-  width: fit-content;
-  max-width: 100%;
+  width: 100%;
   border-radius: var(--radius-sm);
   background: transparent;
   transition: all var(--transition-fast);
@@ -22,16 +20,16 @@
 }
 
 /* --------------------------------------------------------------------------
-   1. Header: Quiet single-line resting state, left-aligned
+   1. Header: Quiet single-line resting state
    -------------------------------------------------------------------------- */
 .tool-disclosure-header {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: var(--space-2-5);
   width: 100%;
-  height: 30px;
-  min-height: 30px;
+  height: 32px;
+  min-height: 32px;
   padding: 0 var(--space-2-5);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -41,8 +39,8 @@
   text-align: left;
   cursor: pointer;
   user-select: none;
-  transition: background-color var(--transition-fast),
-    border-color var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color
+    var(--transition-fast);
 }
 
 .tool-disclosure-header:hover {
@@ -55,9 +53,8 @@
   outline-offset: -1px;
 }
 
-/* Unified resting-to-expanded card transition: stretches to full reading width */
+/* Unified resting-to-expanded card transition */
 .tool-disclosure[data-expanded="true"] {
-  align-self: stretch;
   width: 100%;
   border: 1px solid var(--border-subtle);
   background-color: var(--surface-elevated);
@@ -71,17 +68,12 @@
   background-color: var(--surface-hover);
 }
 
-.tool-disclosure[data-expanded="true"] .tool-disclosure-meta {
-  margin-left: auto;
-}
-
 .tool-disclosure-summary {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-shrink: 0;
+  flex: 1;
   min-width: 0;
-  max-width: 100%;
 }
 
 .tool-disclosure-icon {
@@ -106,8 +98,7 @@
 }
 
 .tool-disclosure-target {
-  flex-shrink: 1;
-  max-width: 380px;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -123,6 +114,7 @@
   align-items: center;
   gap: var(--space-2);
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .tool-disclosure-time {
