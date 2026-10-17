@@ -56,6 +56,24 @@ describe('shared slash semantics', () => {
     expect(bridge.compactSession).not.toHaveBeenCalled();
     await expect(executeDesktopSlash('/rename title',{...host,sessionId:undefined})).rejects.toThrow('No active session');
   });
+  it('reports compact sizes, fallback and unchanged history instead of only a session ID', async () => {
+    const {host,bridge} = fixture();
+    const summary = { content: 'memory', boundary: 3, fallback: false };
+    const snapshot = { id, contextSummary: summary, events: [{ type: 'context_compacted', beforeChars: 50000, afterChars: 1500 }] };
+    bridge.compactSession.mockResolvedValue(snapshot);
+    const success = await executeDesktopSlash('/compact', host);
+    expect(success.text).toContain('压缩完成');
+    expect(success.text).toContain('50000 → 1500');
+    expect(success.text).toContain('原始聊天记录保留');
+    expect(host.applySnapshot).toHaveBeenCalledWith(snapshot, false);
+    const fallbackSnapshot = { ...snapshot, contextSummary: { ...summary, fallback: true } };
+    bridge.compactSession.mockResolvedValue(fallbackSnapshot);
+    expect((await executeDesktopSlash('/compact', host)).text).toContain('降级摘要');
+    bridge.getSession.mockResolvedValue({ ...snapshot, plan: null });
+    expect((await executeDesktopSlash('/compact', host)).text).toContain('没有新增可压缩内容');
+    bridge.compactSession.mockRejectedValueOnce(new Error('provider unavailable'));
+    await expect(executeDesktopSlash('/compact', host)).rejects.toThrow('provider unavailable');
+  });
   it('keeps no-argument mode/permission informational and accepts explicit values', async () => {
     const {host} = fixture();
     expect(await executeDesktopSlash('/mode',host)).toEqual({text:'Mode: build'});

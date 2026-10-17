@@ -79,7 +79,19 @@ export async function executeDesktopSlash(line: string, host: DesktopSlashHost):
     case "/fork": return apply(await actions.fork(id(), value));
     case "/rename": return apply(await actions.rename(id(), value));
     case "/archive": return apply(await actions.archive(id()));
-    case "/compact": return apply(await actions.compact(id()));
+    case "/compact": {
+      const sessionId = id();
+      const before = await host.bridge.getSession(sessionId);
+      const snapshot = await actions.compact(sessionId);
+      await host.applySnapshot(snapshot, false);
+      const summary = snapshot.contextSummary;
+      if (!summary || summary.boundary === before.contextSummary?.boundary)
+        return { text: "没有新增可压缩内容；当前摘要保持不变。" };
+      const result = snapshot.events.findLast(event => event.type === "context_compacted");
+      const size = result?.type === "context_compacted"
+        ? `投影上下文：${result.beforeChars} → ${result.afterChars} 字符。` : "";
+      return { text: `${summary.fallback ? "已生成降级摘要（模型摘要未成功），内容可能不完整。" : "上下文压缩完成。"}${size}原始聊天记录保留，后续请求使用摘要；累计 token 用量不会清零。` };
+    }
     case "/plan": return data(await actions.plan(id()));
     case "/diagnostics": return data(await actions.diagnostics(id()));
     case "/context": return data(await actions.context(id()));
