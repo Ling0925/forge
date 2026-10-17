@@ -55,7 +55,7 @@ it("model search requires selection and settings retain drafts and save once", a
           const updateSettings=async ({settings})=>{
             setSaves(n=>n+1);
             await new Promise(resolve=>setTimeout(resolve,150));
-            setSettings(settings); return true;
+            setSettings(old=>({...old,...settings})); return true;
           };
           return <Context.Provider value={{state:{settings,isSettingsOpen},openSettings,updateSettings,saves}}>{children}</Context.Provider>;
         }
@@ -132,25 +132,22 @@ it("model search requires selection and settings retain drafts and save once", a
     expect(
       await page.getByLabel("精确模型 ID", { exact: true }).inputValue(),
     ).toBe("provider/alpha");
-    await page
-      .getByRole("button", { name: "保存并读取模型列表 / 重试" })
-      .click();
+    await page.getByRole("button", { name: "读取已保存连接的模型目录" }).click();
     await page.getByRole("button", { name: /beta.*provider\/beta/ }).waitFor();
+    expect(await page.locator("#saves").innerText()).toBe("0");
     await page.getByRole("button", { name: /beta.*provider\/beta/ }).click();
-    await page.getByText("高级设置", { exact: false }).click();
+    await page.getByRole("button", { name: "执行与权限", exact: true }).click();
     await page.getByLabel("最大轮次", { exact: true }).fill("12");
     await page.getByRole("button", { name: "保存设置", exact: true }).click();
     await page.keyboard.press("Escape");
-    expect(await page.locator("dialog[open]").count()).toBe(1);
-    await expect.poll(() => page.locator("dialog[open]").count()).toBe(0);
-    expect(await page.locator("#saves").innerText()).toBe("2");
+    expect(await page.locator(".settings-page").count()).toBe(1);
+    await page.getByText("设置已保存。执行配置用于新的运行；当前运行不会被中断。").waitFor();
+    expect(await page.locator("#saves").innerText()).toBe("1");
+    await page.getByRole("button", { name: "返回工作台" }).click();
     await page.getByRole("button", { name: "打开设置" }).click();
-    expect(
-      await page.getByLabel("精确模型 ID", { exact: true }).inputValue(),
-    ).toBe("provider/beta");
-    expect(
-      await page.getByLabel("最大轮次", { exact: true }).inputValue(),
-    ).toBe("12");
+    expect(await page.getByLabel("最大轮次", { exact: true }).inputValue()).toBe("12");
+    await page.getByRole("button", { name: "模型连接", exact: true }).click();
+    expect(await page.getByLabel("精确模型 ID", { exact: true }).inputValue()).toBe("provider/beta");
   } finally {
     await browser.close();
   }

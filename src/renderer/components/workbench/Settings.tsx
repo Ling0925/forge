@@ -1,411 +1,181 @@
+import { ArrowLeft, Gear, MagnifyingGlass, Plugs, Globe, Cpu, ShieldCheck, Palette, Code } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { z } from "zod";
-import {
-  configureInputSchema,
-  defaultPublicSettings,
-  settingsFields,
-} from "../../../shared/schemas";
+import { defaultPublicSettings, publicSettingsSchema } from "../../../shared/schemas";
+import { buildSettingsUpdate, createSettingsDraft, type SettingsDraft } from "../../state/settings-draft";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
 import { Select } from "../primitives/Select";
-import { Dialog } from "./Dialog";
 import { ModelCatalog } from "./ModelCatalog";
+import { McpPanel } from "./McpPanel";
+import "./settings-page.css";
+
 export const permissionLabels = {
   readonly: "只读 · 不修改文件或执行命令",
   workspace: "工作区文件 · 命令逐次批准",
   unrestricted: "无限制 · 可执行命令（非 OS 沙箱）",
 };
+const sections = [
+  { id: "connection", title: "模型连接", description: "连接你的模型服务，选择协议与默认模型。", keywords: "API 端点 密钥 model reasoning 思考强度", icon: Plugs },
+  { id: "appearance", title: "外观", description: "让工作台适应你的使用习惯。", keywords: "主题 深色 浅色 系统 theme", icon: Palette },
+  { id: "execution", title: "执行与权限", description: "为新的运行设置权限边界与资源上限。", keywords: "只读 工作区 无限制 最大轮次 工具调用 超时", icon: ShieldCheck },
+  { id: "context", title: "上下文与记忆", description: "控制输入预算与模型窗口，平衡连续性和成本。", keywords: "token 压缩 compact 字符预算 模型窗口", icon: Cpu },
+  { id: "browser", title: "浏览器", description: "明确授权浏览器可以访问的网络来源。", keywords: "origin Chromium 可执行路径 网络", icon: Globe },
+  { id: "language", title: "语言服务", description: "配置本机 LSP，为代码提供诊断和语言能力。", keywords: "LSP 命令 参数 扩展名", icon: Code },
+  { id: "mcp", title: "MCP 扩展", description: "管理外部工具服务器及其连接。", keywords: "stdio 服务器 工具 注册", icon: Plugs },
+] as const;
+type Section = typeof sections[number]["id"];
+type TextKey = { [K in keyof SettingsDraft]: SettingsDraft[K] extends string ? K : never }[keyof SettingsDraft];
+
 export function Settings() {
   const { state, updateSettings, openSettings } = useWorkbench();
   const initial = state.settings ?? defaultPublicSettings;
-  const [draft, setDraft] = useState(initial);
-  const dirty = useRef(false);
-  const changeDraft: typeof setDraft = (next) => {
-    dirty.current = true;
-    setDraft(next);
-  };
+  const [original, setOriginal] = useState(initial);
+  const [draft, setDraft] = useState(() => createSettingsDraft(initial));
   const [key, setKey] = useState("");
-  const [origins, setOrigins] = useState(
-    initial.browserAllowedOrigins.join("\n"),
-  );
-  useEffect(() => {
-    if (state.isSettingsOpen && !dirty.current && state.settings) {
-      setDraft(state.settings);
-      setOrigins(state.settings.browserAllowedOrigins.join("\n"));
-    }
-  }, [state.settings, state.isSettingsOpen]);
+  const [removeKey, setRemoveKey] = useState(false);
+  const [section, setSection] = useState<Section>("connection");
+  const [query, setQuery] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [listing, setListing] = useState(false);
   const [models, setModels] = useState<readonly string[]>([]);
   const [modelError, setModelError] = useState("");
-  const [listing, setListing] = useState(false);
-  const saving = useRef(false);
+  const locked = useRef(false);
   const alive = useRef(true);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(createSettingsDraft(original)) || !!key || removeKey;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
+    if (!dirtyRef.current && state.settings) {
+      setOriginal(state.settings);
+      setDraft(createSettingsDraft(state.settings));
+    }
+  }, [state.settings, state.isSettingsOpen]);
+  useEffect(() => {
+    if (!state.isSettingsOpen) return;
+    const previous = document.activeElement;
+    heading.current?.focus();
+    return () => { if (previous instanceof HTMLElement) requestAnimationFrame(() => previous.focus()); };
+  }, [state.isSettingsOpen]);
+  const close = () => { if (!locked.current) openSettings(false); };
+  useEffect(() => {
+    if (!state.isSettingsOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented && !document.querySelector("dialog[open]") && !event.isComposing) {
+        event.preventDefault();
+        if (!locked.current) openSettings(false);
+      }
     };
-  }, []);
-  const save = async (close: boolean) => {
-    if (saving.current) return false;
-    setError("");
-    const { hasApiKey: _has, isConfigured: _configured, ...settings } = draft;
-    const parsed = configureInputSchema.safeParse({
-      settings: {
-        ...settings,
-        browserAllowedOrigins: origins
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      },
-      ...(key ? { apiKey: key } : {}),
-    });
-    const required = z
-      .object({
-        baseUrl: settingsFields.baseUrl,
-        model: close ? settingsFields.model : z.string(),
-      })
-      .safeParse(settings);
-    if (!parsed.success || !required.success) {
-      setError(
-        (!parsed.success
-          ? parsed.error
-          : !required.success
-            ? required.error
-            : null
-        )?.issues
-          .map((i) => `${i.path.join(".")}: ${i.message}`)
-          .join("\n") ?? "检查设置",
-      );
-      return false;
-    }
-    setBusy(true);
-    saving.current = true;
-    let ok = false;
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state.isSettingsOpen, openSettings]);
+  const change = <K extends keyof SettingsDraft>(name: K, value: SettingsDraft[K]) => {
+    setDraft(old => ({ ...old, [name]: value })); setNotice(""); setError("");
+  };
+  const reset = () => {
+    setOriginal(initial); setDraft(createSettingsDraft(initial)); setKey(""); setRemoveKey(false); setError(""); setNotice(""); setModels([]);
+  };
+  const save = async () => {
+    if (locked.current) return;
+    setError(""); setNotice("");
     try {
-      ok = await updateSettings(parsed.data);
-    } catch (failure) {
-      if (alive.current)
-        setError(
-          failure instanceof Error ? failure.message : "保存失败，请重试。",
-        );
-      return false;
-    } finally {
-      saving.current = false;
-      if (alive.current) setBusy(false);
-    }
-    if (!alive.current) return ok;
-    setBusy(false);
-    if (ok) {
-      dirty.current = false;
-      setKey("");
-      if (close) openSettings(false);
-    } else setError("保存失败。请检查工作台错误详情并重试。");
-    return ok;
+      const input = buildSettingsUpdate(draft, original, key, removeKey);
+      if (!Object.keys(input).length) { setNotice("没有需要保存的修改。"); return; }
+      locked.current = true; setBusy(true);
+      if (!await updateSettings(input)) throw Error("保存失败，草稿已保留。请检查连接或稍后重试。");
+      if (!alive.current) return;
+      // Merge only our patch; unrelated externally updated settings stay intact.
+      const merged = { ...initial, ...input.settings };
+      const next = publicSettingsSchema.parse({ ...merged, isConfigured: !!merged.baseUrl && !!merged.model,
+        hasApiKey: input.apiKey === undefined ? initial.hasApiKey : !!input.apiKey });
+      setOriginal(next); setDraft(createSettingsDraft(next)); setKey(""); setRemoveKey(false);
+      setNotice("设置已保存。执行配置用于新的运行；当前运行不会被中断。");
+    } catch (err) { if (alive.current) setError(err instanceof Error ? err.message : "保存失败，草稿已保留。"); }
+    finally { locked.current = false; if (alive.current) setBusy(false); }
   };
   const list = async () => {
-    if (listing) return;
-    setListing(true);
-    setModelError("");
-    if (!(await save(false))) {
-      if (alive.current) setListing(false);
-      return;
+    if (locked.current) return;
+    if (draft.baseUrl !== initial.baseUrl || draft.apiMode !== (initial.apiMode ?? "chat-completions") || key || removeKey) {
+      setModelError("连接信息尚未保存。请先保存设置，再读取模型目录；不会自动保存其他修改。"); return;
     }
-    try {
-      const result = await window.forge.listModels();
-      if (alive.current) setModels(result);
-    } catch (err) {
-      if (alive.current)
-        setModelError(
-          err instanceof Error
-            ? err.message
-            : "模型列表读取失败，可手动输入精确 ID",
-        );
-    } finally {
-      if (alive.current) setListing(false);
-    }
+    locked.current = true; setListing(true); setModelError("");
+    try { const result = await window.forge.listModels(); if (alive.current) { setModels(result); if (!result.length) setModelError("目录为空，可手动输入精确模型 ID。"); } }
+    catch (err) { if (alive.current) setModelError(err instanceof Error ? err.message : "读取失败，可手动输入模型 ID。"); }
+    finally { locked.current = false; if (alive.current) setListing(false); }
   };
-  return (
-    <Dialog
-      open={state.isSettingsOpen}
-      title="设置 · 模型与执行"
-      dismissible={!busy && !listing}
-      onClose={() => {
-        if (!busy && !listing) openSettings(false);
-      }}
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save(true);
-        }}
-        className="settings-form"
-      >
-        <div className="modal-content settings-scroll">
-          <fieldset disabled={busy || listing} className="settings-groups">
-            <div className="settings-toolbar">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  dirty.current = false;
-                  setDraft(state.settings ?? defaultPublicSettings);
-                  setOrigins(
-                    (
-                      state.settings ?? defaultPublicSettings
-                    ).browserAllowedOrigins.join("\n"),
-                  );
-                  setKey("");
-                  setError("");
-                  setModels([]);
-                  setModelError("");
-                }}
-              >
-                放弃未保存修改
-              </Button>
-            </div>
-            <section
-              className="settings-group"
-              aria-labelledby="settings-connection"
-            >
-              <h3 className="settings-group-title" id="settings-connection">
-                连接
-              </h3>
-              <Field
-                id="endpoint"
-                label="API 端点"
-                helper="支持 HTTP LAN 与 HTTPS；网络请求由本地主机发起。"
-              >
-                <Input
-                  id="endpoint"
-                  value={draft.baseUrl}
-                  onChange={(e) =>
-                    changeDraft({ ...draft, baseUrl: e.target.value })
-                  }
-                  placeholder="http://localhost:8080/v1"
-                />
-              </Field>
-              <Field id="api-mode" label="API 协议">
-                <Select
-                  id="api-mode"
-                  value={draft.apiMode ?? "chat-completions"}
-                  onChange={(e) =>
-                    changeDraft({
-                      ...draft,
-                      apiMode: z
-                        .enum(["chat-completions", "responses"])
-                        .parse(e.target.value),
-                    })
-                  }
-                  options={[
-                    { value: "chat-completions", label: "Chat Completions" },
-                    { value: "responses", label: "Responses" },
-                  ]}
-                />
-              </Field>
-              <Field
-                id="api-key"
-                label="API 密钥"
-                helper={
-                  initial.hasApiKey
-                    ? "已保存密钥；留空保留，不显示原文。"
-                    : "无已保存密钥；本地服务可留空。"
-                }
-              >
-                <Input
-                  id="api-key"
-                  type="password"
-                  autoComplete="new-password"
-                  value={key}
-                  onChange={(e) => {
-                    dirty.current = true;
-                    setKey(e.target.value);
-                  }}
-                />
-              </Field>
-              <Field id="model" label="精确模型 ID">
-                <Input
-                  id="model"
-                  value={draft.model}
-                  onChange={(e) =>
-                    changeDraft({ ...draft, model: e.target.value })
-                  }
-                />
-              </Field>
-              <Button size="sm" loading={listing} onClick={() => void list()}>
-                保存并读取模型列表 / 重试
-              </Button>
-              {modelError && (
-                <p role="alert" className="form-error">
-                  {modelError}。仍可输入精确模型 ID。
-                </p>
-              )}
-              {models.length > 0 && (
-                <ModelCatalog
-                  value={draft.model}
-                  models={models}
-                  onSelect={(model) => changeDraft({ ...draft, model })}
-                  onRefresh={() => void list()}
-                  loading={listing}
-                  error=""
-                />
-              )}
-            </section>
-            <section
-              className="settings-group settings-pair"
-              aria-labelledby="settings-appearance"
-            >
-              <h3 className="settings-group-title" id="settings-appearance">
-                外观与权限
-              </h3>
-              <Field id="theme" label="主题">
-                <Select
-                  id="theme"
-                  value={draft.theme}
-                  onChange={(e) => {
-                    const theme = settingsFields.theme.parse(e.target.value);
-                    changeDraft({ ...draft, theme });
-                  }}
-                  options={[
-                    { value: "system", label: "跟随系统" },
-                    { value: "dark", label: "深色" },
-                    { value: "light", label: "浅色" },
-                  ]}
-                />
-              </Field>
-              <Field id="permission" label="默认权限">
-                <Select
-                  id="permission"
-                  value={draft.defaultPermission}
-                  onChange={(e) =>
-                    changeDraft({
-                      ...draft,
-                      defaultPermission: settingsFields.defaultPermission.parse(
-                        e.target.value,
-                      ),
-                    })
-                  }
-                  options={Object.entries(permissionLabels).map(
-                    ([value, label]) => ({ value, label }),
-                  )}
-                />
-              </Field>
-            </section>
-            <details className="settings-advanced">
-              <summary>
-                高级设置 <span>预算与浏览器</span>
-              </summary>
-              <section
-                className="settings-group settings-pair"
-                aria-labelledby="settings-limits"
-              >
-                <h3 className="settings-group-title" id="settings-limits">
-                  预算
-                </h3>
-                {(
-                  [
-                    "requestTimeoutMs",
-                    "maxTurns",
-                    "maxToolCalls",
-                    "contextBudgetChars",
-                  ] as const
-                ).map((name) => (
-                  <Field
-                    key={name}
-                    id={name}
-                    label={
-                      {
-                        requestTimeoutMs: "请求超时（毫秒）",
-                        maxTurns: "最大轮次",
-                        maxToolCalls: "工具调用预算",
-                        contextBudgetChars: "上下文字符预算",
-                      }[name]
-                    }
-                  >
-                    <Input
-                      id={name}
-                      type="number"
-                      value={draft[name]}
-                      onChange={(e) =>
-                        changeDraft({
-                          ...draft,
-                          [name]: Number(e.target.value),
-                        })
-                      }
-                    />
-                  </Field>
-                ))}
-              </section>
-              <section
-                className="settings-group"
-                aria-labelledby="settings-browser"
-              >
-                <h3 className="settings-group-title" id="settings-browser">
-                  浏览器
-                </h3>
-                <Field
-                  id="origins"
-                  label="浏览器允许来源"
-                  helper="每行一个精确 origin，例如 http://localhost:3000；空列表禁止浏览器网络。"
-                >
-                  <textarea
-                    className="form-textarea"
-                    id="origins"
-                    value={origins}
-                    onChange={(e) => {
-                      dirty.current = true;
-                      setOrigins(e.target.value);
-                    }}
-                  />
-                </Field>
-                <Field
-                  id="browser-path"
-                  label="Chromium 可执行路径"
-                  helper="可留空使用主机默认；不是 renderer 的浏览器连接。"
-                >
-                  <Input
-                    id="browser-path"
-                    value={draft.browserExecutablePath}
-                    onChange={(e) =>
-                      changeDraft({
-                        ...draft,
-                        browserExecutablePath: e.target.value,
-                      })
-                    }
-                  />
-                </Field>
-              </section>
-            </details>
-            {error && (
-              <p role="alert" className="form-error">
-                {error}
-              </p>
-            )}
+  const text = (name: TextKey, label: string, helper?: string, type = "text") => <Field key={name} id={`setting-${name}`} label={label} helper={helper}>
+    <Input id={`setting-${name}`} type={type} value={draft[name]} onChange={e => change(name, e.target.value)} aria-describedby={helper ? `setting-${name}-helper` : undefined} />
+  </Field>;
+  const select = (name: TextKey, label: string, options: { value: string; label: string }[], helper?: string) => <Field id={`setting-${name}`} label={label} helper={helper}>
+    <Select id={`setting-${name}`} value={draft[name]} onChange={e => change(name, e.target.value)} options={options} />
+  </Field>;
+  const matching = sections.filter(item => `${item.title} ${item.keywords} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const selected = sections.find(item => item.id === section)!;
+  const visible = (id: Section) => query.trim() ? matching.some(item => item.id === id) : section === id;
+  if (!state.isSettingsOpen) return null;
+  return <section className="settings-page" aria-label="设置工作区">
+    <aside className="settings-navigation">
+      <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={close} disabled={busy || listing}>返回工作台</Button>
+      <div className="settings-brand"><Gear size={23} /><h1 ref={heading} tabIndex={-1}>设置</h1></div>
+      <div className="settings-search"><MagnifyingGlass size={16} /><Input aria-label="搜索设置" placeholder="搜索设置…" value={query} onChange={e => setQuery(e.target.value)} /></div>
+      <nav aria-label="设置分类">{sections.map(item => <button type="button" key={item.id} aria-current={!query && section === item.id ? "page" : undefined} onClick={() => { setSection(item.id); setQuery(""); }}>
+        <item.icon size={18} /><span>{item.title}</span>
+      </button>)}</nav>
+      <p className="settings-local-note">本机配置<br />与 CLI 共享执行设置<br />密钥不会回显到页面</p>
+    </aside>
+    <div className="settings-body">
+      <header className="settings-page-header"><div><small>偏好设置 / {query ? "搜索" : selected.title}</small><h2>{query ? "搜索结果" : selected.title}</h2><p>{query ? `找到 ${matching.length} 个相关分区` : selected.description}</p></div><span className="settings-status">{initial.isConfigured ? "已配置模型服务" : "尚未配置模型服务"}</span></header>
+      <div className="settings-page-scroll">
+        {!state.settings && <p role="status">设置尚未加载，加载完成后即可编辑。</p>}
+        {query && !matching.length && <p className="settings-empty">没有找到相关设置，试试“模型”“token”或“权限”。</p>}
+        <form id="settings-page-form" noValidate onSubmit={e => { e.preventDefault(); void save(); }}>
+          <fieldset disabled={busy || listing || !state.settings} className="settings-page-fields">
+            {visible("connection") && <section className="settings-section" aria-label="模型连接配置"><h3>服务与模型</h3><p>支持兼容 OpenAI 的服务。保存连接信息不会发起模型推理。</p>
+              {text("baseUrl", "API 端点", "HTTP(S) 基础地址，例如 http://localhost:8080/v1；不包含密钥或查询参数。")}
+              {select("apiMode", "API 协议", [{ value: "chat-completions", label: "Chat Completions" }, { value: "responses", label: "Responses" }])}
+              <Field id="setting-api-key" label="API 密钥" helper={initial.hasApiKey ? "已保存密钥；留空保留，不显示原文。" : "无已保存密钥；本地服务可留空。"}><Input id="setting-api-key" type="password" autoComplete="new-password" value={key} disabled={removeKey} onChange={e => { setKey(e.target.value); setNotice(""); }} /></Field>
+              {initial.hasApiKey && <label className="settings-check"><input type="checkbox" checked={removeKey} onChange={e => { setRemoveKey(e.target.checked); setKey(""); setNotice(""); }} />保存时清除已存密钥（不可撤销）</label>}
+              {text("model", "精确模型 ID", "作为新会话的默认模型；已有会话可在输入框单独选择。")}
+              {select("reasoningEffort", "默认思考强度", ["default", "none", "minimal", "low", "medium", "high", "xhigh"].map(value => ({ value, label: value === "default" ? "模型默认" : value })), "仅对支持该参数的服务生效，不保证所有模型都支持。")}
+              <Button onClick={() => void list()} loading={listing}>读取已保存连接的模型目录</Button>
+              {modelError && <p role="alert" className="form-error">{modelError}</p>}
+              {models.length > 0 && <ModelCatalog value={draft.model} models={models} onSelect={value => change("model", value)} onRefresh={() => void list()} loading={listing} error="" />}
+            </section>}
+            {visible("appearance") && <section className="settings-section" aria-label="外观配置"><h3>界面主题</h3><p>保存后立即应用，不影响正在进行的任务。</p>
+              <div className="settings-theme-options">{[{ value: "system", label: "跟随系统" }, { value: "light", label: "浅色" }, { value: "dark", label: "深色" }].map(theme => <button type="button" key={theme.value} aria-pressed={draft.theme === theme.value} onClick={() => change("theme", theme.value)}><span className={`settings-theme-preview preview-${theme.value}`}><i /><i /><i /></span>{theme.label}</button>)}</div>
+            </section>}
+            {visible("execution") && <section className="settings-section" aria-label="执行配置"><h3>权限与运行上限</h3><p>更改默认权限不会提升当前运行的权限。命令不在 OS 沙箱内执行。</p>
+              {select("defaultPermission", "默认权限", Object.entries(permissionLabels).map(([value, label]) => ({ value, label })))}
+              {draft.defaultPermission === "unrestricted" && <p className="settings-warning">无限制模式允许直接执行命令，可能访问工作区以外的文件和网络。仅在信任任务时使用。</p>}
+              <div className="settings-columns">{text("maxTurns", "最大轮次", "每次运行 1–1000 轮模型请求。", "number")}{text("maxToolCalls", "工具调用预算", "每次运行 1–10000 次。", "number")}</div>
+              {text("requestTimeoutMs", "请求空闲超时（毫秒）", "1000–600000；持续接收数据时不会按总时长中断。", "number")}
+            </section>}
+            {visible("context") && <section className="settings-section" aria-label="上下文配置"><h3>上下文预算</h3><p>自动压缩保留可检索的原始历史。压缩影响后续请求，不会删除聊天或清零累计用量。</p>
+              {text("contextBudgetTokens", "上下文 token 上限", "可留空自动按模型窗口的 80% 计算；手动值范围 4096–10000000，仍受窗口限制。", "number")}
+              <h4>逐模型窗口覆盖</h4><p>填写精确模型 ID，适用于网关别名。留空窗口表示自动解析；未知模型当前按 300K 估算。</p>
+              {draft.modelContextWindows.map((row, index) => <div className="settings-entry" key={index}><div className="settings-columns"><Field id={`window-model-${index}`} label="模型 ID"><Input id={`window-model-${index}`} value={row.model} onChange={e => change("modelContextWindows", draft.modelContextWindows.map((v, i) => i === index ? { ...v, model: e.target.value } : v))} /></Field><Field id={`window-tokens-${index}`} label="窗口 tokens"><Input id={`window-tokens-${index}`} type="number" value={row.tokens} onChange={e => change("modelContextWindows", draft.modelContextWindows.map((v, i) => i === index ? { ...v, tokens: e.target.value } : v))} /></Field></div><Button size="sm" variant="ghost" onClick={() => change("modelContextWindows", draft.modelContextWindows.filter((_, i) => i !== index))}>移除此窗口覆盖</Button></div>)}
+              <Button size="sm" onClick={() => change("modelContextWindows", [...draft.modelContextWindows, { model: "", tokens: "" }])}>添加模型窗口</Button>
+              <details className="settings-legacy"><summary>兼容性设置</summary>{text("contextBudgetChars", "旧版字符预算", "仅用于无 token 窗口的兼容路径；当前默认 300K 窗口下不会作为压缩上限。", "number")}</details>
+            </section>}
+            {visible("browser") && <section className="settings-section" aria-label="浏览器配置"><h3>网络访问范围</h3><p>空列表不启用浏览器工具。这里的配置用于主机浏览器，不是当前设置页面的连接。</p>
+              <Field id="setting-origins" label="浏览器允许来源" helper="每行一个精确 origin，例如 http://localhost:3000。不能含路径、通配符或凭据。"><textarea id="setting-origins" className="form-textarea" rows={5} value={draft.browserAllowedOrigins} onChange={e => change("browserAllowedOrigins", e.target.value)} /></Field>
+              {text("browserExecutablePath", "Chromium 可执行路径", "留空使用主机默认浏览器安装。不自动下载或安装。")}
+            </section>}
+            {visible("language") && <section className="settings-section" aria-label="语言服务配置"><h3>LSP 服务器</h3><p>最多 8 个服务。ID 和文件扩展名必须唯一；保存不安装服务。后续使用时会执行本机命令，请仅配置可信程序。</p>
+              {!draft.lspServers.length && <div className="settings-empty">尚未配置语言服务。添加已安装的语言服务器以启用代码诊断。</div>}
+              {draft.lspServers.map((row, index) => <article className="settings-entry" key={index}><h4>语言服务 {index + 1}</h4>{([ ["id", "服务 ID"], ["command", "启动命令"], ["args", "参数（JSON 字符串数组）"], ["extensions", "文件扩展名（逗号分隔）"] ] as const).map(([name, label]) => <Field key={name} id={`lsp-${index}-${name}`} label={label}><Input id={`lsp-${index}-${name}`} value={row[name]} onChange={e => change("lspServers", draft.lspServers.map((v, i) => i === index ? { ...v, [name]: e.target.value } : v))} /></Field>)}<Button variant="ghost" size="sm" onClick={() => change("lspServers", draft.lspServers.filter((_, i) => i !== index))}>移除此语言服务</Button></article>)}
+              <Button size="sm" disabled={draft.lspServers.length >= 8} onClick={() => change("lspServers", [...draft.lspServers, { id: "", command: "", args: "[]", extensions: "" }])}>添加语言服务</Button>
+            </section>}
           </fieldset>
-        </div>
-        <footer className="modal-footer">
-          <output className="wb-muted">
-            {listing
-              ? "正在读取模型…"
-              : busy
-                ? "正在保存…"
-                : "关闭后保留未保存草稿"}
-          </output>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            loading={busy}
-            disabled={listing}
-          >
-            保存设置
-          </Button>
-        </footer>
-      </form>
-    </Dialog>
-  );
+        </form>
+        {visible("mcp") && <section className="settings-section" aria-label="MCP 配置"><h3>工具扩展</h3><p>MCP 操作独立保存并立即生效，不受底部“保存设置”或“放弃修改”影响。连接测试会启动服务器进程。</p><McpPanel /></section>}
+      </div>
+      <footer className="settings-save-bar"><div aria-live="polite">{error ? <p role="alert" className="form-error">{error}</p> : <p>{busy ? "正在保存…" : notice || (dirty ? "有未保存的修改" : "所有设置已同步")}</p>}<small>返回工作台保留草稿；退出应用不保留草稿。</small></div><div className="settings-save-actions"><Button variant="ghost" disabled={busy || listing || !dirty} onClick={reset}>放弃未保存修改</Button><Button type="submit" form="settings-page-form" variant="primary" loading={busy} disabled={listing || !state.settings || !dirty}>保存设置</Button></div></footer>
+    </div>
+  </section>;
 }

@@ -37,7 +37,7 @@ export function CommandPalette() {
         event.preventDefault();
         // Ctrl/Cmd+K toggles the palette itself, but must never stack it on
         // top of another open dialog (settings, new task, or a local panel).
-        if (!open && findOpenModalDialog()) return;
+        if (state.isSettingsOpen || (!open && findOpenModalDialog())) return;
         setOpen((value) => !value);
         setQuery("");
         setSelected(0);
@@ -45,7 +45,7 @@ export function CommandPalette() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [open]);
+  }, [open, state.isSettingsOpen]);
   const actions = [
     { id: "new", label: "新建会话", run: () => openNewSession(true) },
     { id: "settings", label: "打开设置", run: () => openSettings(true) },

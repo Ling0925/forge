@@ -52,7 +52,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
         };
         window.setLocalDialog = setLocalOpen;
         useGlobalModalShortcuts({
-          onNewSession: openNewSession,
+          onNewSession: (open) => { if (!state.isSettingsOpen) openNewSession(open); },
           onSettings: openSettings,
           onEscape: () => setLocalOpen(false),
         });
@@ -113,14 +113,14 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
     await page.addStyleTag({ content: globalCss });
     await page.addScriptTag({ content: bundle.outputFiles[0]?.text ?? "" });
 
-    const SETTINGS = "设置 · 模型与执行";
+    const SETTINGS = "设置工作区";
     const NEW_TASK = "新建会话";
     const PALETTE = "命令与会话导航";
     const LOCAL_RESTORE = "确认恢复文件";
 
     const openLabels = () =>
       page.evaluate(() =>
-        Array.from(document.querySelectorAll("dialog[open]")).map((dialog) =>
+        Array.from(document.querySelectorAll('dialog[open], .settings-page')).map((dialog) =>
           dialog.getAttribute("aria-label"),
         ),
       );
@@ -128,7 +128,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
     // frames to catch any late stacking before asserting the exact set.
     const expectOpen = async (labels: string[]) => {
       await page.waitForFunction((expected: string[]) => {
-        const open = Array.from(document.querySelectorAll("dialog[open]")).map(
+        const open = Array.from(document.querySelectorAll('dialog[open], .settings-page')).map(
           (dialog) => dialog.getAttribute("aria-label"),
         );
         return (

@@ -32,7 +32,7 @@ function Workbench() {
   // Global new/settings shortcuts never stack over an open native dialog
   // (settings, new task, palette, or a local MCP / restore / rename panel).
   useGlobalModalShortcuts({
-    onNewSession: openNewSession,
+    onNewSession: (open) => { if (!state.isSettingsOpen) openNewSession(open); },
     onSettings: openSettings,
     onEscape: () => setMobileSidebar(false),
   });
@@ -67,7 +67,9 @@ function Workbench() {
     setFocusToken((token) => token + 1);
   };
   return (
-    <div
+    <>
+    <div hidden={state.isSettingsOpen} inert={state.isSettingsOpen}
+      style={state.isSettingsOpen ? { display: "none" } : undefined}
       className={`workbench wb-app mobile-${state.mobileTab}${inspectorCollapsed ? " inspector-collapsed" : ""}${state.isMobileSidebarOpen ? " sidebar-open" : ""}`}
     >
       <nav className="wb-mobile-nav" aria-label="工作台导航">
@@ -233,8 +235,9 @@ function Workbench() {
           detailsToggleRef.current?.focus();
         }}
       />
-      <Settings />
     </div>
+    <Settings />
+    </>
   );
 }
 export function App() {
