@@ -76,6 +76,7 @@ describe("tool disclosure row", () => {
       parameters: JSON.stringify({ argv: ["node", "--version"] }),
       output: "v22.0.0",
       status: "completed",
+      defaultExpanded: true,
     });
     // The parsed "参数输入" rows are dropped from a command card.
     expect(html).not.toContain('class="tool-param-chips"');
@@ -83,6 +84,17 @@ describe("tool disclosure row", () => {
     // The command and its raw result are both shown.
     expect(html).toContain("node --version");
     expect(html).toContain("v22.0.0");
+  });
+
+  it("defaults to collapsed quiet rows for completed commands and reads", () => {
+    const html = render({
+      toolName: "run_command",
+      command: "node --version",
+      status: "completed",
+    });
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("node --version");
+    expect(html).not.toContain('class="tool-terminal-output"');
   });
 
   it("falls back to plain text for malformed arguments", () => {

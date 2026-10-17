@@ -287,20 +287,22 @@ export function ToolDisclosure({
   error,
   changes,
   truncated = false,
-  defaultExpanded = false,
+  defaultExpanded,
   autoCollapsed = false,
   className = "",
 }: ToolDisclosureProps) {
-  // Command rows and file edits open by default: a command reads as one
-  // command+result unit, and a file edit shows its diff preview without a
-  // click. The diff itself only previews its leading lines until expanded.
+  // Only running tasks ("等待中") and file edits ("编辑文件") open by default.
+  // All other tools (including completed commands, file reads, searches, etc.)
+  // default to collapsed quiet rows.
   const writesFiles = toolName === "edit_file" || toolName === "write_file";
   const isCommand = toolName === "run_command";
-  const [expanded, setExpanded] = useState(
-    defaultExpanded || writesFiles || isCommand,
-  );
+  const isWaiting = status === "running";
+  const initialExpanded =
+    defaultExpanded !== undefined ? defaultExpanded : isWaiting || writesFiles;
+  const [expanded, setExpanded] = useState(initialExpanded);
   const detailsId = useId();
   const label = friendlyLabel(toolName);
+  const displayTarget = target || (isCommand ? command : undefined);
 
   // Phases fold once when they pass into history. Remember which phase already
   // folded so a manual reopen is respected until the item enters a new phase.
@@ -353,9 +355,9 @@ export function ToolDisclosure({
             {getToolIcon(toolName)}
           </span>
           <span className="tool-disclosure-label">{label}</span>
-          {target && (
-            <span className="tool-disclosure-target" title={target}>
-              {target}
+          {displayTarget && (
+            <span className="tool-disclosure-target" title={displayTarget}>
+              {displayTarget}
             </span>
           )}
         </div>

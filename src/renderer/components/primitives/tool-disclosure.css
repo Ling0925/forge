@@ -6,10 +6,14 @@
 .tool-disclosure {
   display: flex;
   flex-direction: column;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
   border-radius: var(--radius-sm);
   background: transparent;
   transition: all var(--transition-fast);
   margin: 2px 0;
+  text-align: left;
 }
 
 /* Tight stream spacing for sequential tool operations */
@@ -18,16 +22,16 @@
 }
 
 /* --------------------------------------------------------------------------
-   1. Header: Quiet single-line resting state
+   1. Header: Quiet single-line resting state, left-aligned
    -------------------------------------------------------------------------- */
 .tool-disclosure-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2-5);
+  justify-content: flex-start;
+  gap: var(--space-2);
   width: 100%;
-  height: 32px;
-  min-height: 32px;
+  height: 30px;
+  min-height: 30px;
   padding: 0 var(--space-2-5);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -51,8 +55,10 @@
   outline-offset: -1px;
 }
 
-/* Unified resting-to-expanded card transition */
+/* Unified resting-to-expanded card transition: stretches to full reading width */
 .tool-disclosure[data-expanded="true"] {
+  align-self: stretch;
+  width: 100%;
   border: 1px solid var(--border-subtle);
   background-color: var(--surface-elevated);
   box-shadow: var(--shadow-sm);
@@ -65,12 +71,17 @@
   background-color: var(--surface-hover);
 }
 
+.tool-disclosure[data-expanded="true"] .tool-disclosure-meta {
+  margin-left: auto;
+}
+
 .tool-disclosure-summary {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex: 1;
+  flex-shrink: 0;
   min-width: 0;
+  max-width: 100%;
 }
 
 .tool-disclosure-icon {
@@ -95,7 +106,8 @@
 }
 
 .tool-disclosure-target {
-  flex: 1;
+  flex-shrink: 1;
+  max-width: 380px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
