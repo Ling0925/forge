@@ -19,7 +19,37 @@ import { Reasoning } from "./Reasoning";
 import { ImageAttachments } from "./ImageAttachments";
 import { foldedTool, transcriptStages, type TranscriptStage } from "../../state/transcript-stages";
 import "./transcript.css";
+import "./tool-live.css";
 export { phaseMarkers, foldedTool } from "../../state/transcript-stages";
+
+/**
+ * Live argument-generation rows. They are display metadata only: no arguments,
+ * no call, and explicitly not an execution (`status: generating`). A run whose
+ * card already exists as a validated tool call is filtered out by previewId in
+ * the reducer, so these rows never duplicate a real tool row.
+ */
+function ToolPreviews({
+  previews,
+}: {
+  readonly previews: NonNullable<
+    import("../../state/workbench-reducer").ActiveRunState["toolPreviews"]
+  >;
+}) {
+  return (
+    <div className="tool-live-list" role="status" aria-label="工具参数生成中">
+      {previews.map((preview) => (
+        <div className="tool-live-item" key={preview.previewId}>
+          <span className="tool-live-dot" aria-hidden="true" />
+          <span className="tool-live-name">{preview.name || "工具调用"}</span>
+          <span className="tool-live-sep" aria-hidden="true">·</span>
+          <span className="tool-live-status">生成参数中</span>
+          <span className="tool-live-sep" aria-hidden="true">·</span>
+          <span className="tool-live-chars">{preview.argumentsChars} 字符</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function StageHeader({ stage }: { readonly stage: TranscriptStage }) {
   return (
@@ -219,7 +249,7 @@ export function Transcript() {
   // pulled into view like any new message.
   // Reasoning deltas grow the live tail too, so they must count as arriving
   // content or the follow-scroll would stall while the model is still thinking.
-  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning ?? ""}:${run?.streamingText ?? ""}:${pendingApproval?.id ?? ""}`;
+  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning ?? ""}:${run?.streamingText ?? ""}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
   const jumpToLatest = () => {
     navigation.current.reset();
     setHasNewContent(false);
@@ -344,6 +374,9 @@ export function Transcript() {
                 />
               </div>
             </article>
+          )}
+          {(run?.toolPreviews?.length ?? 0) > 0 && (
+            <ToolPreviews previews={run?.toolPreviews ?? []} />
           )}
           {showInlineApproval && pendingApproval && sessionId && (
             <InlineApproval

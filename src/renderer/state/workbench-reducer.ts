@@ -21,8 +21,21 @@ import {
 // Draft-only ceiling. Stored snapshots are never sliced by this reducer.
 export const STREAMING_TEXT_LIMIT = 1000000;
 export const STREAMING_REASONING_LIMIT = 131072;
+/** Display-only generation metadata; bounded so a hostile stream cannot grow state. */
+export const TOOL_PREVIEW_LIMIT = 256;
+export interface ToolPreviewEntry {
+  readonly previewId: string;
+  readonly name: string;
+  readonly argumentsChars: number;
+}
 
 export interface ActiveRunState {
+  /**
+   * Ephemeral tool-argument generation metadata, keyed by `previewId`. Entries
+   * are never tool calls, never executable and never written to
+   * `activeSnapshot.events` (high-frequency display state only).
+   */
+  readonly toolPreviews?: readonly ToolPreviewEntry[];
   readonly providerRetry?: number | undefined;
   readonly streamingReasoning?: string;
   readonly reasoningTruncated?: boolean;
@@ -97,6 +110,25 @@ function retainReasoning(
   return reasoningSaved(output, snapshot?.id === run.sessionId ? snapshot : null)
     ? pending
     : [...pending, output];
+}
+
+/** Same-id preview updates replace in place; a new id appends within the bound. */
+function upsertPreview(
+  previews: readonly ToolPreviewEntry[] | undefined,
+  entry: ToolPreviewEntry,
+): readonly ToolPreviewEntry[] {
+  const list = previews ?? [];
+  const existing = list.findIndex((p) => p.previewId === entry.previewId);
+  if (existing >= 0) {
+    const next = [...list];
+    next[existing] = entry;
+    return next;
+  }
+  const bounded =
+    list.length >= TOOL_PREVIEW_LIMIT
+      ? list.slice(list.length - TOOL_PREVIEW_LIMIT + 1)
+      : list;
+  return [...bounded, entry];
 }
 
 export const initialWorkbenchState: WorkbenchState = {
@@ -328,9 +360,33 @@ export function workbenchReducer(
         runId,
       };
       let next = run;
-      if (event.type === "retry_reset")
+      // Live tool-argument metadata is display-only: it never becomes a call,
+      // never executes, and never enters the stored transcript.
+      if (event.type === "tool_call_preview")
         next = {
           ...run,
+          toolPreviews: upsertPreview(run.toolPreviews, {
+            previewId: event.previewId,
+            name: event.name,
+            argumentsChars: event.argumentsChars,
+          }),
+        };
+      if (event.type === "tool_preview_reset")
+        next = { ...run, toolPreviews: [] };
+      if (event.type === "tool_started") {
+        // The validated call supersedes its own preview stream.
+        const previews = run.toolPreviews ?? [];
+        next = {
+          ...run,
+          toolPreviews: event.previewId
+            ? previews.filter((preview) => preview.previewId !== event.previewId)
+            : previews,
+        };
+      }
+      if (event.type === "retry_reset")
+        next = {
+          ...next,
+          toolPreviews: [],
           streamingText: "",
           streamingReasoning: "",
           streamingTruncated: false,
@@ -341,7 +397,12 @@ export function workbenchReducer(
       if (event.type === "context_usage")
         next = { ...run, providerRetry: undefined };
       if (event.type === "run_started")
-        next = { ...run, accepted: true, permission: event.permission };
+        next = {
+          ...next,
+          accepted: true,
+          permission: event.permission,
+          toolPreviews: [],
+        };
       if (event.type === "permission_changed") {
         const queue = (
           run.approvalQueue ??
@@ -390,7 +451,7 @@ export function workbenchReducer(
         };
       if (event.type === "tool_started")
         next = {
-          ...run,
+          ...next,
           pendingOutputs: retainOutput(
             run,
             state.activeSnapshot,
@@ -422,11 +483,14 @@ export function workbenchReducer(
           ...run,
           pendingApproval: run.pendingApproval,
           status: run.pendingApproval ? "awaiting_approval" : event.status,
+          ...(["cancelled", "failed", "completed", "interrupted"].includes(event.status)
+            ? { toolPreviews: [] } : {}),
         };
       if (event.type === "run_finished")
         next = {
           ...run,
           providerRetry: undefined,
+          toolPreviews: [],
           pendingOutputs: retainOutput(run, state.activeSnapshot),
           pendingReasoning: retainReasoning(run, state.activeSnapshot),
           streamingReasoning: "",
@@ -439,9 +503,18 @@ export function workbenchReducer(
           isCancelling: false,
           isSubmittingApproval: false,
         };
-      if (event.type === "error") next = { ...run, error: event.error };
+      if (event.type === "error")
+        next = { ...run, error: event.error, toolPreviews: [] };
       const result = putRun(state, next);
-      if (event.type === "text_delta" || event.type === "reasoning_delta" || event.type === "retry_reset" || event.type === "provider_retry")
+      if (
+        event.type === "text_delta" ||
+        event.type === "reasoning_delta" ||
+        event.type === "retry_reset" ||
+        event.type === "provider_retry" ||
+        // High-frequency ephemeral previews never touch the stored transcript.
+        event.type === "tool_call_preview" ||
+        event.type === "tool_preview_reset"
+      )
         return result; // transient text never copies the stored transcript
       const snapshot = state.activeSnapshot;
       return {

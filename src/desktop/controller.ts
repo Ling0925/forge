@@ -137,6 +137,15 @@ export function createWorkerController(
       value.type === "provider_retry"
     )
       run.recovery.set(value.type, value);
+    if (value.type === "tool_call_preview") {
+      const key = `tool-preview:${value.previewId}`;
+      if (run.recovery.has(key) || run.recovery.size < 264) run.recovery.set(key, value);
+    }
+    if (value.type === "tool_started" && value.previewId)
+      run.recovery.delete(`tool-preview:${value.previewId}`);
+    if (value.type === "tool_preview_reset" || value.type === "retry_reset" || value.type === "error")
+      for (const key of run.recovery.keys())
+        if (key.startsWith("tool-preview:")) run.recovery.delete(key);
     if (value.type === "tool_started" || value.type === "retry_reset") {
       run.recovery.delete("text_delta");
       run.recovery.delete("reasoning_delta");
@@ -500,6 +509,8 @@ export function createWorkerController(
         const event = run.recovery.get(type);
         if (event) result.push({ runId, event });
       }
+      for (const [key, event] of run.recovery)
+        if (key.startsWith("tool-preview:")) result.push({ runId, event });
       for (const approval of run.approvals.values()) {
         if (!approval.consumed)
           result.push({ runId, event: { ...base, type: "approval_requested", request: approval.request } });

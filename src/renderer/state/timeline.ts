@@ -251,7 +251,49 @@ export function reduceTimeline(
         historical: true,
       });
   });
-  const result = [...historical, ...items];
+  const result: TimelineItem[] = [...historical, ...items];
+  // Only the active run may have calls still in transit. Historical/orphan events
+  // must not manufacture evidence after a saved final answer. Native messages
+  // remain authoritative as soon as they arrive; match occurrences, not just IDs.
+  if (snapshot.status === "running" || snapshot.status === "awaiting_approval") {
+    const from = runStarts.at(-1) ?? -1;
+    const currentMessages = alignedRuns
+      ? snapshot.messages.slice(snapshot.messages.findLastIndex(isHumanTurn))
+      : snapshot.messages;
+    const represented = new Map<string, number>();
+    const key = (call: ToolCall) => JSON.stringify(call);
+    for (const message of currentMessages)
+      if (message.role === "assistant")
+        for (const call of message.tool_calls ?? [])
+          represented.set(key(call), (represented.get(key(call)) ?? 0) + 1);
+    const open = new Map<string, (number | undefined)[]>();
+    for (let index = from + 1; index < snapshot.events.length; index++) {
+      const event = snapshot.events[index];
+      if (!event) continue;
+      if (event.type === "tool_started") {
+        const count = represented.get(key(event.call)) ?? 0;
+        let position: number | undefined;
+        if (count) represented.set(key(event.call), count - 1);
+        else {
+          position = result.length;
+          result.push({ kind: "tool", id: `live:${index}:${event.call.id}`,
+            call: event.call, status: "running", output: "" });
+        }
+        // Include represented starts as queue placeholders so their results can
+        // never be consumed by a later same-ID live occurrence.
+        const queue = open.get(event.call.id) ?? [];
+        queue.push(position);
+        open.set(event.call.id, queue);
+      } else if (event.type === "tool_finished") {
+        const position = open.get(event.toolCallId)?.shift();
+        const item = position === undefined ? undefined : result[position];
+        if (position === undefined || item?.kind !== "tool") continue;
+        result[position] = { ...item, status: event.result.isError ? "failed" : "completed",
+          output: event.result.content,
+          ...(event.result.changes?.length ? { changes: event.result.changes } : {}) };
+      }
+    }
+  }
   timelineCache.set(snapshot, result);
   return result;
 }
