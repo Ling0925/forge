@@ -192,8 +192,8 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
   plus padding, then scrolls internally. Empty drafts return to 36px; width changes
   also recalculate height. The send and stop buttons live in a dedicated 44px
   right column beside the input without overlaying text. Below the input sits a
-  single unbordered toolbar row with mode and permission icons, a shrinkable
-  model label opening the model panel where the source chooser and seven-step
+  single unbordered toolbar row with mode and permission icons aligned left, a shrinkable
+  right-aligned model group opening the model panel where the source chooser and seven-step
   reasoning effort range reside. Composer notices, activity, queue actions,
   errors and hints remain above the input in normal DOM and visual order,
   keeping the input itself clear; conversation approval surfaces outside this

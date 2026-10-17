@@ -144,6 +144,14 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
       expect(actionBox.width).toBeGreaterThanOrEqual(44);
       expect(actionBox.height).toBeGreaterThanOrEqual(44);
       expect(toolbarBox.height).toBeLessThanOrEqual(48);
+      const modelAlignment = await modelSummary.evaluate(node => {
+        const edge = node.closest(".composer-toolbar-end")?.getBoundingClientRect().right;
+        const caret = node.querySelector("svg:last-child")?.getBoundingClientRect().right;
+        const style = getComputedStyle(node);
+        return { edge, caret, inset: Number.parseFloat(style.paddingRight) + Number.parseFloat(style.borderRightWidth) };
+      });
+      if (modelAlignment.edge === undefined || modelAlignment.caret === undefined) throw new Error("Missing model alignment anchors");
+      expect(Math.abs(modelAlignment.edge - modelAlignment.caret - modelAlignment.inset)).toBeLessThanOrEqual(1);
       for (const name of ["运行模式", "执行权限", "运行中消息"]) {
         const box = await page.getByRole("button", { name, exact: true }).boundingBox();
         if (!box) throw new Error(`Missing ${name}`);
