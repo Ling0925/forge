@@ -339,6 +339,7 @@ export function ToolDisclosure({
       className={`tool-disclosure ${className}`.trim()}
       aria-label={`工具调用：${toolName}`}
       data-status={status}
+      data-expanded={expanded ? "true" : "false"}
     >
       <button
         type="button"
@@ -382,7 +383,7 @@ export function ToolDisclosure({
             className={`tool-disclosure-chevron ${expanded ? "is-expanded" : ""}`}
             aria-hidden="true"
           >
-            <CaretRight size={14} weight="bold" />
+            <CaretRight size={13} weight="bold" />
           </span>
         </div>
       </button>
@@ -390,22 +391,37 @@ export function ToolDisclosure({
       {expanded && (
         <div id={detailsId} className="tool-disclosure-body">
           {/* A command card stays minimal: the executed command and its raw
-              result only. Parsed argument/result rows would just duplicate the
-              command line and clutter the evidence. */}
+              result combined in a clean console viewport. */}
           {isCommand ? (
-            <>
+            <div className="tool-terminal-card">
               {command && (
-                <div className="tool-section">
-                  <span className="tool-section-title">命令</span>
-                  <pre className="tool-section-content tool-command">
-                    {command}
-                  </pre>
-                  {cwd && (
-                    <span className="tool-command-cwd">工作目录 {cwd}</span>
-                  )}
+                <div className="tool-terminal-header tool-section">
+                  <div className="tool-terminal-prompt">
+                    <span className="tool-terminal-sigil" aria-hidden="true">
+                      $
+                    </span>
+                    <span className="tool-section-title">命令</span>
+                    <pre className="tool-section-content tool-command">
+                      {command}
+                    </pre>
+                  </div>
+                  <div className="tool-terminal-header-meta">
+                    {cwd && (
+                      <span className="tool-command-cwd" title={`工作目录：${cwd}`}>
+                        工作目录 {cwd}
+                      </span>
+                    )}
+                    {exitCode !== undefined && exitCode !== null && (
+                      <span
+                        className={`tool-exit tool-exit-${exitCode === 0 ? "ok" : "bad"}`}
+                      >
+                        {exitCode === 0 ? "退出码 0" : `退出码 ${exitCode}`}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
-              <div className="tool-section">
+              <div className="tool-terminal-output tool-section">
                 <span className="tool-section-title">
                   结果{" "}
                   {truncated && (
@@ -415,10 +431,10 @@ export function ToolDisclosure({
                 {output === null || output === undefined || output === "" ? (
                   <span className="tool-section-empty">工具未返回文本</span>
                 ) : (
-                  <pre className="tool-section-content">{output}</pre>
+                  <pre className="tool-section-content tool-terminal-pre">{output}</pre>
                 )}
               </div>
-            </>
+            </div>
           ) : (
             <>
               {command && (
