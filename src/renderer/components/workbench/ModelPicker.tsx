@@ -1,5 +1,5 @@
 import { CaretDown, Cpu } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ModelCatalog } from "./ModelCatalog";
 
 const efforts = [
@@ -26,6 +26,7 @@ export function ModelPicker(props: {
     onChange: (value: string) => void;
   };
   readonly hideSearch?: boolean;
+  readonly sourceControl?: ReactNode;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
@@ -194,6 +195,14 @@ export function ModelPicker(props: {
                 ))}
               </div>
             </fieldset>
+          )}
+          {props.sourceControl && (
+            <div className="composer-model-source-area">
+              <div className="composer-model-source-label">模型来源</div>
+              <div className="composer-model-source-control">
+                {props.sourceControl}
+              </div>
+            </div>
           )}
           <ModelCatalog
             value={props.value}

@@ -46,16 +46,17 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
   ` }, bundle: true, write: false, format: "iife", jsx: "automatic", outfile: "steering.js", loader: { ".woff2": "dataurl" }, define: { "process.env.NODE_ENV": '"development"' } });
   const browser = await chromium.launch({ headless: true, ...(process.env.FORGE_BROWSER_EXECUTABLE ? { executablePath: process.env.FORGE_BROWSER_EXECUTABLE } : {}) });
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, hasTouch: true, isMobile: true });
     page.setDefaultTimeout(3000);
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.route("http://forge.test/**", route => route.fulfill({ body: '<html><head></head><body><div id="root"></div></body></html>', contentType: "text/html" }));
+    await page.route("http://forge.test/**", route => route.fulfill({ body: '<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div></body></html>', contentType: "text/html" }));
     await page.goto("http://forge.test");
     const js = bundle.outputFiles.find(file => file.path.endsWith(".js"))?.text;
     if (!js) throw new Error("Missing mounted bundle");
     const css = bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
     await page.addStyleTag({ content: css });
+    await page.addStyleTag({ content: ".wb-app{height:auto!important;padding-top:400px}body,#root{overflow:auto!important}" });
     await page.addScriptTag({ content: js });
     await page.getByRole("button", { name: "打开 A", exact: true }).click();
     const input = page.locator("textarea.composer-textarea");
@@ -65,8 +66,8 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     const effortSlider = page.getByRole("slider", { name: "思考等级", exact: true });
     await effortSlider.waitFor();
     expect(await effortSlider.isVisible()).toBe(true);
-    await page.keyboard.press("Escape");
     await expect.poll(() => page.getByRole("button", { name: "会话模型来源", exact: true }).innerText()).toBe("Source A");
+    await page.keyboard.press("Escape");
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").catalogues.includes("a"))).toBe(true);
     await input.fill("initial"); await input.press("Enter");
     await expect.poll(() => input.inputValue()).toBe("");
@@ -117,8 +118,10 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     if (!inputRect3 || !alertRect) throw new Error("Missing rects for alert check");
     expect(alertRect.y + alertRect.height).toBeLessThanOrEqual(inputRect3.y);
     expect(await input.inputValue()).toBe("retain on cancellation");
+    await modelSummary.click();
     await page.getByRole("button", { name: "会话模型来源", exact: true }).click();
     await page.getByRole("menuitemradio", { name: /^Source B/ }).click();
+    await page.keyboard.press("Escape");
     await input.fill("explicit source change"); await page.getByRole("button", { name: "运行", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.at(-1).providerSourceId)).toBe("b");
     await page.getByRole("button", { name: "运行中消息", exact: true }).click();
@@ -126,11 +129,34 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await input.fill("keep across reload"); await input.press("Enter");
     await expect.poll(() => input.inputValue()).toBe("");
     await mkdir(resolve(".build/design-fixes-ui"), { recursive: true });
-    for (const width of [390, 1440]) for (const theme of ["light", "dark"]) {
+    for (const width of [320, 360, 390, 430, 1440]) for (const theme of ["light", "dark"]) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
       await page.screenshot({ path: resolve(`.build/design-fixes-ui/steering-${width}-${theme}.png`), animations: "disabled" });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const promptBox = await page.locator(".composer-prompt").boundingBox();
+      const actionBox = await page.locator(".composer-action").boundingBox();
+      const toolbarBox = await page.locator(".composer-toolbar").boundingBox();
+      if (!promptBox || !actionBox || !toolbarBox) throw new Error("Missing composer layout");
+      expect(actionBox.x).toBeGreaterThanOrEqual(promptBox.x + promptBox.width);
+      expect(actionBox.y).toBeLessThan(promptBox.y + promptBox.height);
+      expect(actionBox.y + actionBox.height).toBeGreaterThan(promptBox.y);
+      expect(actionBox.width).toBeGreaterThanOrEqual(44);
+      expect(actionBox.height).toBeGreaterThanOrEqual(44);
+      expect(toolbarBox.height).toBeLessThanOrEqual(48);
+      for (const name of ["运行模式", "执行权限", "运行中消息"]) {
+        const box = await page.getByRole("button", { name, exact: true }).boundingBox();
+        if (!box) throw new Error(`Missing ${name}`);
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+      const resume = await page.getByRole("button", { name: "继续队列", exact: true }).boundingBox();
+      const clear = await page.getByRole("button", { name: "清空队列", exact: true }).boundingBox();
+      if (!resume || !clear) throw new Error("Missing queue actions");
+      expect(resume.y).toBe(clear.y);
+      expect(resume.height).toBeGreaterThanOrEqual(44);
+      expect(clear.height).toBeGreaterThanOrEqual(44);
+      expect(await page.locator('.composer-toolbar [aria-label="会话模型来源"]').count()).toBe(0);
     }
     await modelSummary.click();
     await page.locator(".composer-model-panel").waitFor();

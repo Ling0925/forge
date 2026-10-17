@@ -1,9 +1,12 @@
 import {
   ArrowUp,
   CaretDown,
+  Compass,
   FolderOpen,
   Lightning,
+  Lock,
   ShieldCheck,
+  ShieldWarning,
   Stop,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +26,7 @@ import { UsagePopover } from "./UsagePopover";
 import { useAutosizePrompt } from "./useAutosizePrompt";
 import { useSlashCommands } from "./useSlashCommands";
 import "./composer-activity.css";
+import "./composer-layout.css";
 import "./composer-live-input.css";
 
 const taskSchema = z.object({
@@ -561,6 +565,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                   ? "正在停止"
                   : run?.status === "awaiting_approval"
                     ? "等待审批"
+                    : run?.providerRetry
+                      ? `重试 ${run.providerRetry}/5`
                     : "正在执行"}
               </span>
             </output>
@@ -590,27 +596,29 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           )}
         </div>
         {pendingInputs.length > 0 && (
-          <output className="composer-status">
-            <span>
+          <output className="composer-status composer-queue">
+            <span className="composer-queue-text">
               待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{pendingInputs[0]?.prompt.slice(0, 80)}
             </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={running || busy}
-              onClick={resumeInputs}
-            >
-              继续队列
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={clearInputs}
-            >
-              清空队列
-            </Button>
+            <div className="composer-queue-actions">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={running || busy}
+                onClick={resumeInputs}
+              >
+                继续队列
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={clearInputs}
+              >
+                清空队列
+              </Button>
+            </div>
           </output>
         )}
         {(!isConfigured || mode === "plan" || error) && (
@@ -641,7 +649,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           </div>
         )}
         {slash.view}
-        <div className="composer-prompt composer-surface is-quiet">
+        <div className="composer-input-row">
+          <div className="composer-prompt composer-surface is-quiet">
           <label htmlFor={promptId} className="visually-hidden">
             {isNew ? "新会话消息" : "继续任务"}
           </label>
@@ -661,8 +670,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             rows={1}
             placeholder={
               isNew
-                ? "想让 Forge 做点什么？输入任务描述或提问…"
-                : "继续对话，或描述要执行的工作…"
+                ? "描述任务或提问…"
+                : "继续对话，或输入新要求…"
             }
             title={
               manualSend
@@ -707,6 +716,45 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             }}
           />
         </div>
+          <div className="composer-submit-col">
+            {running ? (
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                className="composer-cancel composer-action"
+                loading={Boolean(run?.isCancelling)}
+                aria-label={run?.isCancelling ? "正在取消" : "取消"}
+                title={run?.isCancelling ? "正在取消…" : "停止生成"}
+                icon={<Stop size={14} weight="fill" aria-hidden="true" />}
+                onClick={() => void cancelRun()}
+              />
+            ) : (
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="composer-submit composer-run composer-action"
+                loading={busy || !!submission}
+                disabled={
+                  (!isConfigured && !slash.isCommand) ||
+                  !prompt.trim() ||
+                  !!submission ||
+                  savingEffort
+                }
+                aria-label={isNew ? "发送并开始会话" : "运行"}
+                title={
+                  busy || submission
+                    ? "正在发送…"
+                    : manualSend
+                      ? "发送消息"
+                      : "发送 · Enter"
+                }
+                icon={<ArrowUp size={16} weight="bold" aria-hidden="true" />}
+              />
+            )}
+          </div>
+        </div>
         <div className="composer-toolbar">
           <div className="composer-toolbar-start">
             {/* Custom Mode Selector */}
@@ -719,7 +767,14 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 { value: "build", label: "Build", sub: "执行与修改" },
                 { value: "plan", label: "Plan", sub: "只读规划" },
               ]}
-              icon={<Lightning size={12} weight="fill" />}
+              iconOnly={true}
+              icon={
+                mode === "plan" ? (
+                  <Compass size={14} weight="fill" />
+                ) : (
+                  <Lightning size={14} weight="fill" />
+                )
+              }
               ariaLabel="运行模式"
             />
             {/* Hidden native select for Playwright test compatibility */}
@@ -763,7 +818,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                     : "允许执行系统命令",
                 },
               ]}
-              icon={<ShieldCheck size={12} />}
+              iconOnly={true}
+              icon={
+                (mode === "plan" ? "readonly" : displayedPermission) === "readonly" ? (
+                  <Lock size={14} />
+                ) : (mode === "plan" ? "readonly" : displayedPermission) === "unrestricted" ? (
+                  <ShieldWarning size={14} />
+                ) : (
+                  <ShieldCheck size={14} />
+                )
+              }
               ariaLabel="执行权限"
             />
             {/* Hidden native select for Playwright test compatibility */}
@@ -784,20 +848,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </select>
           </div>
           <div className="composer-toolbar-end">
-            {providerSourceId && (
-              <ComposerDropdown ariaLabel="会话模型来源" value={providerSourceId}
-                disabled={busy || !!submission}
-                options={[
-                  ...(!providerSource ? [{ value: providerSourceId, label: `${providerSourceId}（不可用）` }] : []),
-                  ...(state.settings?.providerSources?.map(source => ({ value: source.id, label: source.label,
-                    sub: "后续运行使用此来源" })) ?? []),
-                ]}
-                onChange={value => {
-                  setSourcesByDraft(old => ({ ...old, [draftId]: value }));
-                  const selected = state.settings?.providerSources?.find(source => source.id === value);
-                  if (selected) setModel(selected.model);
-                }} />
-            )}
             <ModelPicker
               value={model}
               models={allKnownModels}
@@ -812,43 +862,29 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 disabled: savingEffort || busy || !!submission,
                 onChange: (value) => void changeEffort(value),
               }}
+              sourceControl={
+                providerSourceId ? (
+                  <ComposerDropdown
+                    ariaLabel="会话模型来源"
+                    value={providerSourceId}
+                    disabled={busy || !!submission}
+                    options={[
+                      ...(!providerSource ? [{ value: providerSourceId, label: `${providerSourceId}（不可用）` }] : []),
+                      ...(state.settings?.providerSources?.map((source) => ({
+                        value: source.id,
+                        label: source.label,
+                        sub: "后续运行使用此来源",
+                      })) ?? []),
+                    ]}
+                    onChange={(value) => {
+                      setSourcesByDraft((old) => ({ ...old, [draftId]: value }));
+                      const selected = state.settings?.providerSources?.find((source) => source.id === value);
+                      if (selected) setModel(selected.model);
+                    }}
+                  />
+                ) : undefined
+              }
             />
-            {running ? (
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                className="composer-cancel composer-action"
-                loading={Boolean(run?.isCancelling)}
-                aria-label={run?.isCancelling ? "正在取消" : "取消"}
-                title={run?.isCancelling ? "正在取消…" : "停止生成"}
-                icon={<Stop size={14} weight="fill" aria-hidden="true" />}
-                onClick={() => void cancelRun()}
-              />
-            ) : (
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                className="composer-submit composer-run composer-action"
-                loading={busy || !!submission}
-                disabled={
-                  (!isConfigured && !slash.isCommand) ||
-                  !prompt.trim() ||
-                  !!submission ||
-                  savingEffort
-                }
-                aria-label={isNew ? "发送并开始会话" : "运行"}
-                title={
-                  busy || submission
-                    ? "正在发送…"
-                    : manualSend
-                      ? "发送消息"
-                      : "发送 · Enter"
-                }
-                icon={<ArrowUp size={16} weight="bold" aria-hidden="true" />}
-              />
-            )}
           </div>
         </div>
         <UsagePopover

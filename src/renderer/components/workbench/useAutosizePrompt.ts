@@ -8,6 +8,11 @@ export function useAutosizePrompt(
     const input = ref.current;
     if (!input || input.value !== value) return;
     const resize = () => {
+      if (!input.value) {
+        input.style.height = "36px";
+        input.style.overflowY = "hidden";
+        return;
+      }
       const style = getComputedStyle(input);
       const padding =
         Number.parseFloat(style.paddingTop) +

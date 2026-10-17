@@ -38,6 +38,7 @@ export async function installWebHost(): Promise<void> {
   const fail = (message: string) => {
     if (stopped) return;
     stopped = true;
+    status.title = "";
     eventSocket?.close();
     status.textContent = message;
     status.style.background = "#f7d4cf";
@@ -103,11 +104,13 @@ export async function installWebHost(): Promise<void> {
       },
     });
     for (const event of handshake.recovery) receive(event);
-    const connectedStatus = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 断线自动重连 · 后端修改需重启`;
+    const connectedTitle = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 断线自动重连 · 后端修改需重启`;
+    const connectedStatus = "Web Dev · 已连接";
     await new Promise<void>((ready, reject) => {
       let failures = 0;
       const retry = () => {
         if (stopped) { reject(new Error("Web connection stopped")); return; }
+        status.title = "";
         status.textContent = "连接中断，正在自动重连…任务继续在后台运行。";
         status.style.background = "#eee9d7";
         setTimeout(() => void connect(true), Math.min(10_000, 500 * 2 ** Math.min(failures++, 5)));
@@ -152,6 +155,7 @@ export async function installWebHost(): Promise<void> {
               socket.send(JSON.stringify({ cursor }));
               clearTimeout(timeout);
               failures = 0;
+              status.title = connectedTitle;
               status.textContent = connectedStatus;
               status.style.background = "#eee9d7";
               ready();

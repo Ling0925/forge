@@ -301,18 +301,18 @@ it("composer grows to six lines and latches multiline drafts into click-only sen
         .poll(() =>
           page
             .getByRole("button", { name: "执行权限", exact: true })
-            .innerText(),
+            .getAttribute("title"),
         )
-        .toBe("无限制");
+        .toBe("执行权限：无限制");
       await page.getByRole("button", { name: "执行权限", exact: true }).click();
       await page.getByRole("menuitemradio", { name: /^工作区/ }).click();
       await expect
         .poll(() =>
           page
             .getByRole("button", { name: "执行权限", exact: true })
-            .innerText(),
+            .getAttribute("title"),
         )
-        .toBe("工作区");
+        .toBe("执行权限：工作区");
       await action.click();
       await expect.poll(() => action.getAttribute("aria-busy")).toBe("true");
       expect(await action.boundingBox()).toEqual(initial);

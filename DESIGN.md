@@ -190,11 +190,14 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
   6px vertical / 10px horizontal, radius 12px, initial prompt height 36px;
   prompt height follows content and soft wrapping up to six computed line heights
   plus padding, then scrolls internally. Empty drafts return to 36px; width changes
-  also recalculate height. The input alone owns the border/background;
-  mode, permission, model and send controls live in a separate unbordered toolbar
-  below it with a 4px gap. Composer notices, activity, queue actions, errors and
-  hints remain above the input in normal DOM and visual order, keeping the input itself
-  clear; conversation approval surfaces outside this composer remain unchanged.
+  also recalculate height. The send and stop buttons live in a dedicated 44px
+  right column beside the input without overlaying text. Below the input sits a
+  single unbordered toolbar row with mode and permission icons, a shrinkable
+  model label opening the model panel where the source chooser and seven-step
+  reasoning effort range reside. Composer notices, activity, queue actions,
+  errors and hints remain above the input in normal DOM and visual order,
+  keeping the input itself clear; conversation approval surfaces outside this
+  composer remain unchanged.
   Sidebar sessions: 28px desktop rows, 44px coarse-pointer targets. No inline
   time/model metadata. Completed sessions have no status dot; pending approval
   takes precedence. Hover/focus opens a 280px viewport-bounded metadata tooltip

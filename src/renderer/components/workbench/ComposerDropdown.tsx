@@ -7,6 +7,7 @@ export function ComposerDropdown<T extends string>({
   options,
   icon,
   ariaLabel,
+  iconOnly = false,
   disabled = false,
 }: {
   readonly value: T;
@@ -18,6 +19,7 @@ export function ComposerDropdown<T extends string>({
   }[];
   readonly icon?: ReactNode;
   readonly ariaLabel: string;
+  readonly iconOnly?: boolean;
   readonly disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -25,6 +27,7 @@ export function ComposerDropdown<T extends string>({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const descId = useId();
   const current = options.find((option) => option.value === value);
 
   useEffect(() => {
@@ -89,22 +92,29 @@ export function ComposerDropdown<T extends string>({
       <button
         ref={triggerRef}
         type="button"
-        className="composer-dropdown-trigger"
+        className={`composer-dropdown-trigger ${iconOnly ? "is-icon-only" : ""}`}
         onClick={() => setOpen(!open)}
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-describedby={descId}
+        title={iconOnly && current ? `${ariaLabel}：${current.label}` : undefined}
         aria-haspopup="menu"
         aria-controls={menuId}
         aria-expanded={open}
       >
         {icon && <span className="composer-dropdown-icon">{icon}</span>}
-        <span className="composer-dropdown-label">{current?.label}</span>
+        {!iconOnly && <span className="composer-dropdown-label">{current?.label}</span>}
+        {!iconOnly && (
         <CaretDown
           size={10}
           aria-hidden="true"
           className="composer-dropdown-caret"
         />
+        )}
       </button>
+      <span id={descId} className="visually-hidden">
+        {current?.label}
+      </span>
       {open && !disabled && (
         <div
           ref={menuRef}
