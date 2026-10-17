@@ -248,6 +248,14 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
    - 完整保留 390px 视口下输入区模型弹窗的 fixed 定位与视口内部滚动约束，防止弹窗溢出或挤压界面。
    - 保持所有 `:disabled` 状态可读性（对比度 ≥ 4.5:1）、`[hidden]` 原生隐藏守卫、动态减弱媒体查询与 2px 键盘焦点环。
 
+## 图片附件
+
+图片入口沿用左侧工具栏的 44px 点击区域、16px 图标和 12px 圆角，发送按钮仍位于输入框右侧，模型信息保持右对齐。
+附件与错误提示位于输入框上方；缩略图采用 80px 方形区域、8px 间距与现有表面、文字和圆角 token，文件名单行省略。
+删除控件使用真实 44px 点击区域；多图在窄屏内横向滚动，不能撑宽页面。
+历史缩略图通过现有 Dialog 查看原图，支持 Escape 关闭与焦点返回；读取指示遵循减少动态效果设置。
+每个会话独立保留尚未发送的附件，确认发送后只移除本次捕获的图片；发送失败保留草稿。
+
 ## 9 思考内容显示契约 (Reasoning Display, Web + Desktop)
 
 共享 renderer（`src/renderer/**`）同时服务 Electron 桌面与 Web dev；CLI 走 `src/cli/render/reasoning.ts` 的单行 `✻` 预览，二者语义一致但呈现不同。以下为共享 renderer 的目标契约，标记的是设计意图，**不是**已通过验收的声明。

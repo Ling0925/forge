@@ -16,6 +16,7 @@ import { ToolDisclosure } from "../primitives/ToolDisclosure";
 import { Markdown } from "./Markdown";
 import { StreamingMarkdown } from "./StreamingMarkdown";
 import { Reasoning } from "./Reasoning";
+import { ImageAttachments } from "./ImageAttachments";
 import { foldedTool, transcriptStages, type TranscriptStage } from "../../state/transcript-stages";
 import "./transcript.css";
 export { phaseMarkers, foldedTool } from "../../state/transcript-stages";
@@ -68,6 +69,9 @@ export const StoredTranscript = memo(function StoredTranscript({
               {headers[index] && <StageHeader stage={headers[index]} />}
               <article className={`message message-${item.role}`}>
                 {item.role === "user" && <div className="message-header">你</div>}
+                {item.role === "user" && item.images && item.images.length > 0 && (
+                  <ImageAttachments key={snapshot.id} images={item.images} />
+                )}
                 {item.reasoning && (
                   <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
                 )}

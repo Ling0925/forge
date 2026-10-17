@@ -150,7 +150,10 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
         const box = node.getBoundingClientRect();
         return { width: box.width, height: box.height };
       }));
-      expect(iconSizes.length).toBe(5);
+      expect(iconSizes.length).toBe(6);
+      const imageTriggerBox = await page.getByRole("button", { name: "添加图片", exact: true }).boundingBox();
+      expect(imageTriggerBox?.width).toBe(44);
+      expect(imageTriggerBox?.height).toBe(44);
       for (const icon of iconSizes) {
         expect(icon.width).toBeGreaterThanOrEqual(16);
         expect(icon).toEqual(iconSizes[0]);

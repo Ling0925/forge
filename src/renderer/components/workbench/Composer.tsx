@@ -3,6 +3,7 @@ import {
   CaretDown,
   Compass,
   FolderOpen,
+  Images,
   Lightning,
   Lock,
   ShieldCheck,
@@ -13,6 +14,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { permissionSchema, settingsFields } from "../../../shared/schemas";
 import type { SessionId } from "../../shared-types";
+import {
+  type ImageAttachment,
+  imageAttachmentsSchema,
+} from "../../../shared/images";
 import { parseDrafts } from "../../state/drafts";
 import { modelCatalogCache } from "../../state/model-catalog-cache";
 import { useWorkbench } from "../../state/workbench-context";
@@ -24,26 +29,39 @@ import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
 import { UsagePopover } from "./UsagePopover";
 import { OutputSpeed } from "./OutputSpeed";
+import {
+  ImageAttachments,
+  useImageAttachments,
+} from "./ImageAttachments";
 import { useAutosizePrompt } from "./useAutosizePrompt";
 import { useSlashCommands } from "./useSlashCommands";
 import "./composer-activity.css";
 import "./composer-layout.css";
 import "./composer-live-input.css";
 
-const taskSchema = z.object({
-  workspace: z
-    .string()
-    .trim()
-    .min(1, "请选择一个工作区")
-    .max(4096)
-    .refine(
-      (s) =>
-        s.startsWith("/") || /^[A-Za-z]:[\\/]/.test(s) || s.startsWith("\\\\"),
-      "请输入绝对工作区路径",
-    ),
-  model: settingsFields.model,
-  prompt: z.string().trim().min(1).max(1000000),
-});
+const taskSchema = z
+  .object({
+    workspace: z
+      .string()
+      .trim()
+      .min(1, "请选择一个工作区")
+      .max(4096)
+      .refine(
+        (s) =>
+          s.startsWith("/") || /^[A-Za-z]:[\\/]/.test(s) || s.startsWith("\\\\"),
+        "请输入绝对工作区路径",
+      ),
+    model: settingsFields.model,
+    prompt: z.string().max(1000000),
+    images: imageAttachmentsSchema.optional(),
+  })
+  .refine(
+    (data) => Boolean(data.prompt.trim() || (data.images && data.images.length > 0)),
+    {
+      message: "请输入内容或添加图片",
+      path: ["prompt"],
+    },
+  );
 function readDrafts(): Readonly<Record<string, string>> {
   try {
     return {
@@ -96,6 +114,15 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const draftId = isNew ? "new" : (state.activeSessionId ?? "none");
   const prompt = drafts[draftId] ?? "";
   const manualSend = Boolean(manualDrafts[draftId]) || /[\r\n]/.test(prompt);
+  const {
+    images,
+    reading,
+    error: imageError,
+    addFiles,
+    removeImage,
+    clearImages,
+  } = useImageAttachments(draftId);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const promptId = isNew ? "new-prompt" : `prompt-${draftId}`;
   const selectedDraft = useRef(draftId);
   selectedDraft.current = draftId;
@@ -219,6 +246,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     id: SessionId;
     draftId: string;
     prompt: string;
+    images?: readonly ImageAttachment[];
   } | null>(null);
   useEffect(() => {
     if (!submission) return;
@@ -241,12 +269,15 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         ? { ...old, [submission.draftId]: "" }
         : old,
     );
+    if (submission.images && submission.images.length > 0) {
+      clearImages(submission.images, submission.draftId);
+    }
     setSubmission(null);
     if (submission.draftId === "new") pendingNew.current = null;
     // Do not steal navigation if the user opened a different session while starting.
     if (submission.draftId === "new" && selectedDraft.current === "new")
       void selectSession(submission.id);
-  }, [submission, state.activeRuns, selectSession]);
+  }, [submission, state.activeRuns, selectSession, clearImages]);
   const [mode, setMode] = useState<"build" | "plan">("build");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
@@ -301,7 +332,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     prompt,
     draftId,
     input: promptRef,
-    busy: busy || !!submission || savingEffort,
+    busy: busy || !!submission || savingEffort || reading,
     setPrompt: (value) => {
       setDrafts((old) => ({ ...old, [draftId]: value }));
       setManualDrafts((old) => ({ ...old, [draftId]: false }));
@@ -377,6 +408,10 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   });
   const submit = async (kind: "follow-up" | "steer" = "follow-up") => {
     if (slash.isCommand) {
+      if (images.length > 0) {
+        setError("图片请直接发送；运行中 Enter 排队，Alt+Enter 插话。");
+        return;
+      }
       await slash.execute();
       return;
     }
@@ -384,36 +419,46 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       submitting.current ||
       effortSaving.current ||
       submission ||
-      slash.executing
+      slash.executing ||
+      reading
     )
       return;
-    if (running && state.activeSessionId && prompt.trim()) {
+    if (running && state.activeSessionId && (prompt.trim() || images.length > 0)) {
       const id = state.activeSessionId;
+      const capturedDraftId = draftId;
       const capturedPrompt = prompt;
+      const capturedImages = images;
       submitting.current = true;
       setBusy(true);
       setError("");
       const accepted = kind === "follow-up"
         ? queueInput({ sessionId: id, prompt: capturedPrompt, model, permission: mode === "plan" ? "readonly" : permission, mode,
+          ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
           ...(providerSourceId ? { providerSourceId } : {}) })
-        : await sendSteering(capturedPrompt, id);
+        : await sendSteering(capturedPrompt, id, capturedImages.length > 0 ? capturedImages : undefined);
       submitting.current = false;
       if (!alive.current) return;
       setBusy(false);
       if (accepted) {
-        setDrafts(old => old[draftId] === capturedPrompt ? { ...old, [draftId]: "" } : old);
-        setManualDrafts(old => ({ ...old, [draftId]: false }));
-      } else if (selectedDraft.current === draftId) setError("消息未确认写入，草稿已保留。请核对会话后手动发送。");
+        setDrafts(old => old[capturedDraftId] === capturedPrompt ? { ...old, [capturedDraftId]: "" } : old);
+        setManualDrafts(old => ({ ...old, [capturedDraftId]: false }));
+        if (capturedImages.length > 0) {
+          clearImages(capturedImages, capturedDraftId);
+        }
+      } else if (selectedDraft.current === capturedDraftId) setError("消息未确认写入，草稿已保留。请核对会话后手动发送。");
       return;
     }
     if (!isConfigured) {
       setError(configurationHint);
       return;
     }
+    const capturedDraftId = draftId;
+    const capturedImages = images;
     const parsed = taskSchema.safeParse({
       workspace: isNew ? workspace : state.activeSnapshot?.workspace,
       model,
       prompt,
+      ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
     });
     if (!parsed.success) {
       setError(parsed.error.issues.map((issue) => issue.message).join("；"));
@@ -454,14 +499,20 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           id,
           mode,
           providerSourceId,
+          capturedImages.length > 0 ? capturedImages : undefined,
         )
       : false;
     submitting.current = false;
     if (!alive.current) return;
     setBusy(false);
     if (ok && id) {
-      setSubmission({ id, draftId, prompt });
-    } else if (selectedDraft.current === draftId)
+      setSubmission({
+        id,
+        draftId: capturedDraftId,
+        prompt,
+        ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
+      });
+    } else if (selectedDraft.current === capturedDraftId)
       setError("未能开始对话，草稿已保留。请检查错误详情后重试。");
   };
   const listModels = async (refresh = false) => {
@@ -489,6 +540,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       if (alive.current) setListing(false);
     }
   };
+  const queuedSummary = (() => {
+    const first = pendingInputs[0];
+    if (!first) return "";
+    const trimmed = first.prompt.trim();
+    if (trimmed) return trimmed.slice(0, 80);
+    if (first.images && first.images.length > 0) {
+      return `图片 ${first.images.length} 张`;
+    }
+    return "";
+  })();
   return (
     <form
       className={`workbench-composer composer${isNew ? " composer-fresh" : ""}`}
@@ -597,7 +658,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         {pendingInputs.length > 0 && (
           <output className="composer-status composer-queue">
             <span className="composer-queue-text">
-              待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{pendingInputs[0]?.prompt.slice(0, 80)}
+              待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{queuedSummary}
             </span>
             <span className="composer-queue-hint">
               <span>/queue run 继续</span>
@@ -606,7 +667,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </span>
           </output>
         )}
-        {(!isConfigured || mode === "plan" || error) && (
+        {(!isConfigured || mode === "plan" || error || imageError) && (
           <div className="composer-status" aria-live="polite">
             {!isConfigured && (
               <span className="wb-muted">
@@ -631,9 +692,19 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 {error}
               </span>
             )}
+            {imageError && (
+              <span role="alert" className="form-error composer-error">
+                {imageError}
+              </span>
+            )}
           </div>
         )}
-        {slash.view}
+        <ImageAttachments
+          images={images}
+          reading={reading}
+          onRemove={removeImage}
+        />
+        {images.length === 0 && slash.view}
         <div className="composer-input-row">
           <div className="composer-prompt composer-surface is-quiet">
           <label htmlFor={promptId} className="visually-hidden">
@@ -666,9 +737,27 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             onChange={(event) => {
               setDrafts((old) => ({ ...old, [draftId]: event.target.value }));
             }}
+            onPaste={(event) => {
+              const clipboardData = event.clipboardData;
+              if (!clipboardData) return;
+              const items = Array.from(clipboardData.items ?? []);
+              const imageFiles: File[] = [];
+              for (const item of items) {
+                if (item.type.startsWith("image/")) {
+                  const file = item.getAsFile();
+                  if (file) imageFiles.push(file);
+                }
+              }
+              if (imageFiles.length === 0) return;
+              const hasText = Boolean(clipboardData.getData("text/plain"));
+              if (!hasText) {
+                event.preventDefault();
+              }
+              void addFiles(imageFiles);
+            }}
             {...slash.inputProps}
             onKeyDown={(event) => {
-              if (slash.onKeyDown(event)) return;
+              if (images.length === 0 && slash.onKeyDown(event)) return;
               if (
                 event.key === "Tab" &&
                 event.shiftKey &&
@@ -687,6 +776,10 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 !event.nativeEvent.isComposing &&
                 event.nativeEvent.keyCode !== 229
               ) {
+                if (reading) {
+                  event.preventDefault();
+                  return;
+                }
                 if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
                   event.preventDefault();
                   if (running) {
@@ -735,7 +828,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 loading={busy || !!submission}
                 disabled={
                   (!isConfigured && !slash.isCommand) ||
-                  !prompt.trim() ||
+                  (!prompt.trim() && images.length === 0) ||
+                  reading ||
                   !!submission ||
                   savingEffort
                 }
@@ -743,6 +837,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 title={
                   busy || submission
                     ? "正在发送…"
+                    : reading
+                      ? "正在读取图片…"
                     : manualSend
                       ? "发送消息"
                       : "发送 · Enter"
@@ -793,7 +889,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             <ComposerDropdown
               value={mode === "plan" ? "readonly" : displayedPermission}
               disabled={
-                mode === "plan" || changingPermission || busy || !!submission
+                mode === "plan" || changingPermission || busy || !!submission || reading
               }
               onChange={(next) => void changePermission(next)}
               options={[
@@ -835,7 +931,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               aria-hidden="true"
               value={mode === "plan" ? "readonly" : displayedPermission}
               disabled={
-                mode === "plan" || changingPermission || busy || !!submission
+                mode === "plan" || changingPermission || busy || !!submission || reading
               }
               onChange={(event) => void changePermission(event.target.value)}
             >
@@ -843,6 +939,32 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               <option value="readonly">只读</option>
               <option value="unrestricted">无限制</option>
             </select>
+            <button
+              type="button"
+              className="composer-dropdown-trigger is-icon-only composer-image-trigger"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={reading}
+              aria-label="添加图片"
+              title="添加图片"
+            >
+              <Images size={16} aria-hidden="true" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              aria-label="选择图片文件"
+              className="visually-hidden"
+              tabIndex={-1}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                if (files.length > 0) {
+                  void addFiles(files);
+                }
+              }}
+            />
           </div>
           <div className="composer-toolbar-end">
             <ModelPicker
