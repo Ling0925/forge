@@ -76,7 +76,7 @@ const friendlyLabels: Readonly<Record<string, string>> = {
   mcp_call_tool: "调用 MCP 工具",
 };
 
-function friendlyLabel(name: string): string {
+export function friendlyLabel(name: string): string {
   const known = friendlyLabels[name];
   if (known) return known;
   if (name.startsWith("mcp_")) return "MCP 工具";
@@ -84,7 +84,7 @@ function friendlyLabel(name: string): string {
 }
 
 /** One glyph per action family, so a long transcript is scannable by shape. */
-function getToolIcon(name: string) {
+export function getToolIcon(name: string) {
   if (name === "read_file") return <FileText size={16} weight="regular" />;
   if (name === "write_file") return <FilePlus size={16} weight="regular" />;
   if (name === "edit_file") return <PencilSimple size={16} weight="regular" />;

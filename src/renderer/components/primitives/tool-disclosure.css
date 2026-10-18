@@ -18,6 +18,19 @@
   margin: 2px 0;
   transition: background-color var(--transition-fast), border-color
     var(--transition-fast);
+  animation: tool-card-appear 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
+@keyframes tool-card-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Sequential operations in one phase read as a tight group. */
@@ -230,6 +243,19 @@
   margin: 2px var(--space-2) 2px 14px;
   padding: var(--space-1) 0 0 var(--space-2);
   border-left: 1px solid var(--border-subtle);
+  animation: tool-body-slide-down 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top;
+}
+
+@keyframes tool-body-slide-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scaleY(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
 }
 
 .tool-section {
@@ -363,6 +389,18 @@
   background-color: var(--surface-soft);
   overflow: hidden;
   min-width: 0;
+  animation: tool-terminal-reveal 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes tool-terminal-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tool-terminal-header {
@@ -982,5 +1020,13 @@
 .status-pending {
   background: transparent;
   color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-disclosure,
+  .tool-disclosure-body,
+  .tool-terminal-card {
+    animation: none;
+  }
 }
 
