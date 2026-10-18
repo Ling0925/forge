@@ -34,7 +34,7 @@ export async function installWebHost(): Promise<void> {
   document.body.prepend(status);
   const layout = document.createElement("style");
   layout.textContent =
-    "body{display:flex;flex-direction:column;height:100dvh;max-width:100vw;overflow-x:hidden}#root{flex:1;min-height:0;min-width:0;max-width:100%}#root .wb-app{height:100%}";
+    "body{display:flex;flex-direction:column;height:100dvh;max-width:100vw;overflow:hidden}#root{flex:1;min-height:0;min-width:0;max-width:100%;overflow:hidden;display:flex;flex-direction:column}#root .wb-app,#root .settings-page{height:100%}";
   document.head.append(layout);
   let stopped = false;
   let clientId = "";

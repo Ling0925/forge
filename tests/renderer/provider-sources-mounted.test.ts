@@ -103,6 +103,8 @@ it("manages independent sources, fetches selected /models, saves model selection
     expect(await page.locator('.settings-page').evaluate(el => el.clientWidth <= 390)).toBe(true);
     expect(await page.locator('.settings-navigation').evaluate(el => el.clientWidth <= 390)).toBe(true);
     expect(await page.locator('.settings-save-bar').evaluate(el => el.clientWidth <= 390)).toBe(true);
+    const saveBarBox = (await page.locator('.settings-save-bar').boundingBox())!;
+    expect(saveBarBox.y + saveBarBox.height).toBeLessThanOrEqual(844 + 1);
     expect(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth)).toBe(true);
     const captureDirectory = process.env.FORGE_QA_DIR;
     if (captureDirectory) {
