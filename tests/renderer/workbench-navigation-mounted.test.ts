@@ -109,7 +109,8 @@ it("unifies navigation and opens recent tasks without loading their histories up
         const intro = await page.locator(".wb-new-session-intro").boundingBox();
         const composer = await page.locator(".composer-fresh").boundingBox();
         if (!intro || !composer) throw new Error("Missing home bounds");
-        expect(composer.y - intro.y - intro.height).toBeLessThanOrEqual(25);
+        expect(composer.y).toBeGreaterThanOrEqual(intro.y + intro.height);
+        expect(composer.y + composer.height).toBeGreaterThanOrEqual(850);
         expect(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= innerWidth,
@@ -144,8 +145,10 @@ it("unifies navigation and opens recent tasks without loading their histories up
       await page.evaluate(() => Reflect.get(window, "fixture").reads.length),
     ).toBe(readCount);
     await page.setViewportSize({ width: 390, height: 500 });
-    await page.locator(".composer-textarea").scrollIntoViewIfNeeded();
+    await page.locator(".welcome-task").last().scrollIntoViewIfNeeded();
     expect(await page.locator("main").evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    const shortComposer = await page.locator(".composer-fresh").boundingBox();
+    expect(shortComposer && shortComposer.y + shortComposer.height).toBeGreaterThanOrEqual(480);
     expect((await header.boundingBox())?.y).toBe(0);
     await page.screenshot({ path: `${evidence}/home-390-short-scrolled.png` });
     await page.setViewportSize({ width: 1440, height: 900 });

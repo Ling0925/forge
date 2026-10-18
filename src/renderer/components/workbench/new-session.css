@@ -5,7 +5,7 @@
 .wb-new-session-intro {
   flex-shrink: 0;
   width: min(720px, calc(100% - 48px));
-  margin: auto auto 24px;
+  margin: 0 auto 24px;
 }
 .welcome-recent {
   margin-top: var(--space-8);
@@ -98,10 +98,13 @@
 .wb-new-session .composer-fresh {
   flex: 0 0 auto;
   width: min(720px, calc(100% - 48px));
-  margin: 0 auto auto;
+  margin: auto auto 0;
   padding: 0;
   border: 0;
   background: transparent;
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
 }
 .composer-project {
   position: relative;
@@ -156,11 +159,12 @@
 @media (max-width: 640px) {
   .wb-new-session-intro {
     width: calc(100% - 32px);
-    margin-top: auto;
+    margin-top: 0;
   }
   .wb-new-session .composer-fresh {
     width: calc(100% - 32px);
-    margin-bottom: auto;
+    margin-top: auto;
+    margin-bottom: 0;
   }
   .composer-project-panel .composer-workspace-row {
     flex-wrap: wrap;
