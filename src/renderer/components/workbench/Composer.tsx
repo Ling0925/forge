@@ -19,7 +19,7 @@ import {
   imageAttachmentsSchema,
 } from "../../../shared/images";
 import { parseDrafts } from "../../state/drafts";
-import { modelCatalogCache } from "../../state/model-catalog-cache";
+import { modelCatalogCache, modelCatalogKey } from "../../state/model-catalog-cache";
 import { useWorkbench } from "../../state/workbench-context";
 import { hostCapabilities } from "../../web-host";
 import { Button } from "../primitives/Button";
@@ -182,12 +182,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
-  const modelSource = JSON.stringify([
-    providerSourceId ?? "legacy",
-    providerSource?.baseUrl ?? state.settings?.baseUrl ?? "",
-    providerSource?.apiMode ?? state.settings?.apiMode ?? "chat-completions",
-    state.settings?.environmentOverride ?? false,
-  ]);
+  const modelSource = modelCatalogKey({
+    id: providerSourceId,
+    baseUrl: providerSource?.baseUrl ?? state.settings?.baseUrl ?? "",
+    apiMode: providerSource?.apiMode ?? state.settings?.apiMode,
+  }, state.settings?.environmentOverride ?? false);
   const currentModelSource = useRef(modelSource);
   currentModelSource.current = modelSource;
   useEffect(() => {

@@ -36,15 +36,23 @@ it("manages independent sources, fetches selected /models, saves model selection
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage(); page.setDefaultTimeout(3000);
-    await page.setContent('<div id="root"></div>');
+    await page.route('https://forge.test/**', route => route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }));
+    await page.goto('https://forge.test/');
     await page.addStyleTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.css'))!.text });
     await page.addScriptTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.js'))!.text });
     expect(await page.getByLabel('来源名称').count()).toBe(0);
     await page.getByRole('region', { name: '源 A的模型' }).getByText('a/two', { exact: true }).waitFor();
+    expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual(['a']);
+    // A new page/module instance must reuse localStorage without another remote request.
+    await page.reload();
+    await page.addStyleTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.css'))!.text });
+    await page.addScriptTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.js'))!.text });
+    await page.getByRole('region', { name: '源 A的模型' }).getByText('a/two', { exact: true }).waitFor();
+    expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual([]);
     await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).click();
     await page.getByRole('dialog', { name: '编辑来源 · 源 A' }).waitFor();
     await page.getByRole('button', { name: 'a/two', exact: true }).waitFor();
-    expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual(['a']);
+    expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual([]);
     await page.getByRole('button', { name: '关闭', exact: true }).click();
     await page.getByRole('button', { name: '添加来源' }).click();
     await page.getByRole('dialog', { name: '添加来源', exact: true }).waitFor();
@@ -152,7 +160,7 @@ it("manages independent sources, fetches selected /models, saves model selection
     expect(await page.getByRole('button', { name: '删除来源', exact: true }).isDisabled()).toBe(true);
     await page.getByRole('button', { name: '关闭', exact: true }).click();
     await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).click();
-    expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual(['a', b, 'a']);
+    expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual([b, 'a']);
     expect(await page.getByLabel('默认模型 ID').inputValue()).toBe('a/one');
     expect(await page.getByLabel('来源 API 密钥').inputValue()).toBe('');
     await page.getByLabel('协议', { exact: true }).selectOption('responses');

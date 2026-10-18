@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { createModelCatalogCache } from "../../src/renderer/state/model-catalog-cache";
+import { createModelCatalogCache, modelCatalogKey } from "../../src/renderer/state/model-catalog-cache";
 
 it("persists model lists and refreshes only explicitly, retaining data after errors", async () => {
   let saved: string | null = null;
@@ -20,6 +20,28 @@ it("persists model lists and refreshes only explicitly, retaining data after err
   expect(loader).toHaveBeenCalledTimes(3);
   await reloaded.load("different-provider", loader);
   expect(loader).toHaveBeenCalledTimes(4);
+});
+
+it("retains all 20 supported sources across page reloads", async () => {
+  let saved: string | null = null;
+  const storage = () => ({ getItem: () => saved, setItem: (_key: string, value: string) => { saved = value; } });
+  const cache = createModelCatalogCache(storage);
+  const loader = vi.fn(async () => ["provider/alpha"]);
+  for (let index = 0; index < 20; index++) await cache.load(`source-${index}`, loader);
+  const reloaded = createModelCatalogCache(storage);
+  for (let index = 0; index < 20; index++) {
+    expect(await reloaded.load(`source-${index}`, loader)).toEqual(["provider/alpha"]);
+  }
+  expect(loader).toHaveBeenCalledTimes(20);
+});
+
+it("shares explicit-source keys independently of environment overrides, isolating endpoints and protocols", () => {
+  const source = { id: "a", baseUrl: "https://a.test/v1" };
+  expect(modelCatalogKey(source)).toBe(modelCatalogKey(source, true));
+  expect(modelCatalogKey(source)).toBe(JSON.stringify(["a", source.baseUrl, "chat-completions", false]));
+  expect(modelCatalogKey({ ...source, baseUrl: "https://b.test/v1" })).not.toBe(modelCatalogKey(source));
+  expect(modelCatalogKey({ ...source, apiMode: "anthropic" })).not.toBe(modelCatalogKey(source));
+  expect(modelCatalogKey({ baseUrl: source.baseUrl }, true)).not.toBe(modelCatalogKey({ baseUrl: source.baseUrl }));
 });
 
 it("caches empty lists and keeps working without browser storage", async () => {

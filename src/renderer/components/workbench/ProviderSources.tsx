@@ -15,6 +15,7 @@ import {
   MagnifyingGlass,
 } from "@phosphor-icons/react";
 import { configureInputSchema } from "../../../shared/schemas";
+import { modelCatalogCache, modelCatalogKey as catalogKey } from "../../state/model-catalog-cache";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
@@ -48,17 +49,6 @@ const fresh = (): Draft => ({
   key: "",
   removeKey: false,
 });
-
-const catalogKey = (source: {
-  id: string;
-  baseUrl: string;
-  apiMode?: Draft["apiMode"] | undefined;
-}) =>
-  JSON.stringify([
-    source.id,
-    source.baseUrl,
-    source.apiMode ?? "chat-completions",
-  ]);
 
 export function ProviderSources({
   onBusy,
@@ -181,15 +171,21 @@ export function ProviderSources({
   }, []);
 
   const loadCatalog = useCallback(
-    (profile: Parameters<typeof catalogKey>[0]) => {
+    (profile: Parameters<typeof catalogKey>[0], refresh = false) => {
       const key = catalogKey(profile);
       const pending = pendingCatalogs.current.get(key);
       if (pending) return pending;
       requestedCatalogs.current.add(key);
-      setCatalogLoading((old) => ({ ...old, [key]: true }));
+      const cached = modelCatalogCache.read(key);
+      if (cached) setCatalogs((old) => ({ ...old, [key]: cached }));
       setCatalogErrors((old) => ({ ...old, [key]: "" }));
-      const request = Promise.resolve()
-        .then(() => window.forge.listModels(profile.id))
+      if (cached && !refresh) return Promise.resolve(cached);
+      setCatalogLoading((old) => ({ ...old, [key]: true }));
+      const request = modelCatalogCache.load(
+        key,
+        async () => [...new Set(await window.forge.listModels(profile.id))],
+        refresh,
+      )
         .then((result) => {
           const unique = [...new Set(result)];
           if (alive.current) setCatalogs((old) => ({ ...old, [key]: unique }));
@@ -289,7 +285,7 @@ export function ProviderSources({
     operation(async () => {
       if (!source || dirty) throw Error("请先保存此来源，再拉取模型。");
       setLoadingModels(true);
-      const unique = await loadCatalog(source);
+      const unique = await loadCatalog(source, true);
       if (!alive.current) return;
       setVisibleCount(50);
       setMessage(
@@ -413,7 +409,7 @@ export function ProviderSources({
                     aria-label={`刷新${item.label}的模型`}
                     loading={catalogLoading[key] ?? false}
                     onClick={() =>
-                      void loadCatalog(item).catch(() => undefined)
+                      void loadCatalog(item, true).catch(() => undefined)
                     }
                   >
                     刷新模型

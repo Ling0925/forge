@@ -1,8 +1,19 @@
 import { z } from "zod";
 
 const modelsSchema = z.array(z.string().min(1).max(256)).max(10000);
-const recordsSchema = z.array(z.object({ source: z.string(), models: modelsSchema })).max(4);
+// Keep all 20 supported provider sources, with room for legacy/changed endpoints.
+const maxCatalogs = 24;
+const recordsSchema = z.array(z.object({ source: z.string(), models: modelsSchema })).max(maxCatalogs);
 const storageKey = "forge-model-catalog-v1";
+
+export function modelCatalogKey(source: {
+  id?: string | undefined;
+  baseUrl: string;
+  apiMode?: "chat-completions" | "responses" | "anthropic" | undefined;
+}, environmentOverride = false): string {
+  // Explicit sources ignore environment overrides, just like getProviderConfig.
+  return JSON.stringify([source.id ?? "legacy", source.baseUrl, source.apiMode ?? "chat-completions", source.id ? false : environmentOverride]);
+}
 
 export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" | "setItem"> = () => localStorage) {
   const memory = new Map<string, readonly string[]>();
@@ -27,7 +38,7 @@ export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" |
       const models = modelsSchema.parse(raw);
       memory.delete(source);
       memory.set(source, models);
-      while (memory.size > 4) {
+      while (memory.size > maxCatalogs) {
         const oldest = memory.keys().next().value;
         if (oldest === undefined) break;
         memory.delete(oldest);
