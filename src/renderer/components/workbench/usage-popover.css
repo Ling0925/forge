@@ -21,7 +21,7 @@
 .usage-trigger {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-2, 8px);
   min-height: 24px;
   width: 100%;
   cursor: pointer;
@@ -54,7 +54,7 @@
 .usage-memory { background: var(--context-memory); }
 .usage-conversation { background: var(--context-conversation); }
 .usage-tools { background: var(--context-tools); }
-.usage-footer-stats { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.usage-footer-stats { display: flex; align-items: center; gap: var(--space-2, 8px); white-space: nowrap; flex-shrink: 0; }
 .usage-footer-total { color: var(--text-primary); }
 .usage-panel .usage-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
 .usage-legend > div { display: flex; justify-content: space-between; gap: 8px; }

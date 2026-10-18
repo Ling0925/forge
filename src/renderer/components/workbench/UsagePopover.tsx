@@ -82,8 +82,11 @@ export function UsagePopover({
         <span className="usage-footer-stats">
           <span className="usage-cache-chip" title="最近请求缓存命中率">CH {percent(usage.latestCache)}</span>
           <span className="usage-footer-total">
-            {usage.compacted ? "压缩后 " : context?.basis === "request" ? "输入 " : "预估 "}
-            {context ? `${context.estimated ? "≈" : ""}${compactTokens(context.usedTokens)}${context.windowTokens ? ` / ${compactTokens(context.windowTokens)}` : " tokens"}` : "上下文 —"}
+            {context?.windowTokens
+              ? compactTokens(context.windowTokens)
+              : context
+                ? `${compactTokens(context.usedTokens)} tokens`
+                : "—"}
           </span>
         </span>
       </summary>

@@ -167,7 +167,7 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         }, theme);
         const trigger = page.getByLabel("上下文与用量", { exact: true });
         expect(await trigger.innerText()).toContain("CH 97.6%");
-        expect(await trigger.innerText()).toContain("486.3K / 1M");
+        expect(await trigger.innerText()).toContain("1M");
         const track = await page.locator(".usage-track").boundingBox();
         if (!track) throw new Error("Missing context track");
         expect(track.height).toBe(3);
@@ -209,15 +209,15 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     await page.evaluate(event => Reflect.get(window, 'appendUsage')(event), projected);
     const detail = page.getByRole('region', { name: '用量详情' });
     await expect.poll(() => detail.innerText()).toContain('≈120K tokens');
-    expect(await page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('486.3K / 1M');
+    expect(await page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('1M');
     expect(await detail.innerText()).toContain('最近请求输入（实报）');
     await page.evaluate(event => Reflect.get(window, 'appendUsage')(event), { ...base, type: 'context_compacted', removedMessages: 10, beforeChars: 1000000, afterChars: 400000 });
     await page.evaluate(event => Reflect.get(window, 'appendUsage')(event), projected);
-    await expect.poll(() => page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('≈120K / 1M');
+    await expect.poll(() => page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('1M');
     expect(await detail.innerText()).toContain('压缩后预估（待实报）');
     expect(await detail.innerText()).toContain('累计用量不清零');
     await page.goto("http://usage.test/?unknown-window");
-    await page.getByText("输入 61.6K tokens", { exact: true }).click();
+    await page.getByText("61.6K tokens", { exact: true }).click();
     const unknownPanel = page.getByRole("region", { name: "用量详情" });
     expect(await unknownPanel.innerText()).toContain("61.6K tokens 已用");
     expect(await unknownPanel.innerText()).toContain("上下文窗口未知，暂不计算百分比");
