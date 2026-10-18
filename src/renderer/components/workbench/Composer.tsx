@@ -333,6 +333,20 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     }
   }, [running]);
 
+  const isDual = running && Boolean(prompt.trim() || images.length > 0);
+  const wasDualRef = useRef(false);
+  const [rebounding, setRebounding] = useState(false);
+  useEffect(() => {
+    if (isDual) {
+      setRebounding(false);
+    } else if (wasDualRef.current && running) {
+      setRebounding(true);
+      const timer = setTimeout(() => setRebounding(false), 260);
+      return () => clearTimeout(timer);
+    }
+    wasDualRef.current = isDual;
+  }, [isDual, running]);
+
   const displayRun = running ? run : lastActiveRun.current;
   const showActivity = activityVisible || running;
   const [changingPermission, setChangingPermission] = useState(false);
@@ -895,10 +909,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         </div>
           <div
             className={`composer-submit-col ${
-              running && Boolean(prompt.trim() || images.length > 0)
-                ? "is-dual"
-                : ""
-            }`}
+              isDual ? "is-dual" : ""
+            } ${rebounding ? "is-rebounding" : ""}`}
           >
             {running ? (
               <>

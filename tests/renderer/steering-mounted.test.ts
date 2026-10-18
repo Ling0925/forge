@@ -77,6 +77,16 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     expect(await page.locator(".composer-cancel").count()).toBe(1);
     expect(await page.locator(".composer-submit").count()).toBe(1);
     expect(await page.locator(".composer-submit-col.is-dual").count()).toBe(1);
+    const cancelAnim = await page.evaluate(() => {
+      const el = document.querySelector(".composer-cancel");
+      return el ? window.getComputedStyle(el).animationName : "";
+    });
+    expect(cancelAnim).toContain("composer-cancel-shift-left");
+    const sendAnim = await page.evaluate(() => {
+      const el = document.querySelector(".composer-dual-send-wrap");
+      return el ? window.getComputedStyle(el).animationName : "";
+    });
+    expect(sendAnim).toContain("composer-dual-send-in");
     const steerBtn = page.locator(".composer-btn-steer-hold");
     await steerBtn.dispatchEvent("pointerdown", { button: 0 });
     await expect.poll(() => page.locator(".composer-longpress-tip").innerText()).toContain("松开立即插话");
@@ -93,6 +103,17 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     expect(actRect.y + actRect.height).toBeLessThanOrEqual(inputRect1.y);
     await page.evaluate(() => Reflect.get(window, "fixture").apply());
     await expect.poll(() => input.inputValue()).toBe("");
+    await expect.poll(() => page.locator(".composer-submit-col.is-dual").count()).toBe(0);
+    const reboundAnim = await page.evaluate(() => {
+      const col = document.querySelector(".composer-submit-col");
+      const btn = document.querySelector(".composer-cancel");
+      return {
+        colClass: col?.className ?? "",
+        btnAnim: btn ? window.getComputedStyle(btn).animationName : "",
+      };
+    });
+    expect(reboundAnim.colClass).toContain("is-rebounding");
+    expect(reboundAnim.btnAnim).toContain("composer-cancel-shift-right");
     await input.fill("follow one");
     await page.locator(".composer-btn-steer-hold").click();
     await expect.poll(() => input.inputValue()).toBe("");
