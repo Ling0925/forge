@@ -83,7 +83,6 @@ public class WebAppActivity extends AppCompatActivity {
         webView = findViewById(R.id.webview);
         errorPanel = findViewById(R.id.error_panel);
         errorDetail = findViewById(R.id.error_detail);
-        TextView addressLabel = findViewById(R.id.address_label);
 
         String url;
         try {
@@ -95,10 +94,8 @@ public class WebAppActivity extends AppCompatActivity {
             return;
         }
         currentUrl = url;
-        addressLabel.setText(url);
         RecentServers.remember(this, url);
 
-        findViewById(R.id.reload_button).setOnClickListener(v -> reload());
         findViewById(R.id.change_button).setOnClickListener(v -> finish());
         findViewById(R.id.retry_button).setOnClickListener(v -> reload());
 
@@ -172,10 +169,6 @@ public class WebAppActivity extends AppCompatActivity {
                 super.onPageFinished(view, url);
                 if (currentUrl != null && url != null && !url.equals(currentUrl)) {
                     currentUrl = url;
-                    TextView label = findViewById(R.id.address_label);
-                    if (label != null) {
-                        label.setText(url);
-                    }
                 }
             }
 
