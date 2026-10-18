@@ -225,17 +225,17 @@
 .tool-disclosure-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-1-5);
   min-width: 0;
-  margin: var(--space-1) var(--space-2-5) var(--space-1) 17px;
-  padding: var(--space-2) 0 var(--space-1) var(--space-3);
+  margin: 2px var(--space-2) 2px 14px;
+  padding: var(--space-1) 0 0 var(--space-2);
   border-left: 1px solid var(--border-subtle);
 }
 
 .tool-section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1-5);
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -246,7 +246,7 @@
   gap: var(--space-2);
   min-width: 0;
   /* Constant height: revealing a copy action never nudges the evidence below. */
-  min-height: 22px;
+  min-height: 18px;
 }
 
 .tool-section-actions {
@@ -277,7 +277,7 @@
   margin: 0;
   max-height: 280px;
   overflow: auto;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1-5) var(--space-2);
   border-radius: var(--radius-md);
   background-color: var(--surface-soft);
   color: var(--text-primary);
@@ -302,6 +302,20 @@
   background: transparent;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
+}
+
+.tool-path-section {
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.tool-path-section .tool-section-head {
+  flex-shrink: 0;
+}
+
+.tool-path-section .tool-read-path {
+  min-width: 0;
 }
 
 /* Quiet copy action; muted until hover/focus so it reads as metadata. */
@@ -423,8 +437,8 @@
 .tool-terminal-output {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-2-5) var(--space-3);
+  gap: var(--space-1);
+  padding: var(--space-1-5) var(--space-2);
   min-width: 0;
 }
 
@@ -502,9 +516,9 @@
 .tool-params {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1-5);
+  gap: var(--space-1);
   margin: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1-5) var(--space-2);
   border-radius: var(--radius-md);
   background-color: var(--surface-soft);
 }
@@ -648,6 +662,16 @@
   min-width: 0;
 }
 
+.tool-disclosure-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+}
+
+.tool-disclosure-footer > details[open] {
+  flex-basis: 100%;
+}
+
 .tool-debug-summary {
   display: inline-flex;
   align-items: center;
@@ -659,7 +683,7 @@
   color: var(--text-muted);
   /* A text-only summary is a tiny hit area inside an evidence card; give it a
      real target without adding visual weight. */
-  min-height: 28px;
+  min-height: 22px;
   padding: 0 var(--space-2) 0 var(--space-1);
   border-radius: var(--radius-xs);
 }
@@ -706,10 +730,6 @@
     min-width: var(--touch-min-target);
     justify-content: center;
     padding: 0 var(--space-2);
-  }
-
-  .tool-section-head {
-    min-height: var(--touch-min-target);
   }
 
   .tool-debug-summary {

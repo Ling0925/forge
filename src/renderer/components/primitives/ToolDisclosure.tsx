@@ -881,7 +881,7 @@ export function ToolDisclosure({
               {readPath &&
                 (result?.kind !== "object" ||
                   result.record.path !== readPath) && (
-                  <div className="tool-section">
+                  <div className="tool-section tool-path-section">
                     <SectionHead title="文件路径" />
                     <pre className="tool-section-content tool-read-path">
                       {readPath}
@@ -979,29 +979,31 @@ export function ToolDisclosure({
                   )}
                 </div>
               )}
-              {showParameters && (
-                <details className="tool-details">
-                  <summary className="tool-debug-summary">
-                    <CaretRight size={11} weight="bold" aria-hidden="true" />
-                    调用参数
-                  </summary>
-                  <ParameterFields parameters={parsedParams} />
-                </details>
-              )}
             </>
           )}
 
-          {/* Raw protocol fields stay collapsed by default, out of the main read. */}
-          <details className="tool-debug">
-            <summary className="tool-debug-summary">
-              <CaretRight size={11} weight="bold" aria-hidden="true" />
-              调试信息
-            </summary>
-            <div className="tool-section">
-              <span className="tool-section-title">原生名称</span>
-              <pre className="tool-section-content">{toolName}</pre>
-            </div>
-          </details>
+          <div className="tool-disclosure-footer">
+            {showParameters && !isConsole && (
+              <details className="tool-details">
+                <summary className="tool-debug-summary">
+                  <CaretRight size={11} weight="bold" aria-hidden="true" />
+                  调用参数
+                </summary>
+                <ParameterFields parameters={parsedParams} />
+              </details>
+            )}
+            {/* Raw protocol fields stay collapsed by default, out of the main read. */}
+            <details className="tool-debug">
+              <summary className="tool-debug-summary">
+                <CaretRight size={11} weight="bold" aria-hidden="true" />
+                调试信息
+              </summary>
+              <div className="tool-section">
+                <span className="tool-section-title">原生名称</span>
+                <pre className="tool-section-content">{toolName}</pre>
+              </div>
+            </details>
+          </div>
         </div>
       )}
     </section>
