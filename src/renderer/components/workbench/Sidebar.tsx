@@ -10,6 +10,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useState } from "react";
+import { isPrimarySession } from "../../../shared/sessions";
 import type { SessionSummary } from "../../shared-types";
 import { useWorkbench } from "../../state/workbench-context";
 import { IconButton } from "../primitives/IconButton";
@@ -38,7 +39,8 @@ export function Sidebar() {
   >({});
   const needle = query.trim().toLowerCase();
   const searching = needle.length > 0;
-  const filtered = state.sessions.filter(
+  const sessions = state.sessions.filter(isPrimarySession);
+  const filtered = sessions.filter(
     (session) =>
       (showArchived || !session.archived) &&
       `${session.title} ${session.workspace}`.toLowerCase().includes(needle),
@@ -59,7 +61,7 @@ export function Sidebar() {
   })();
   const activeWorkspace =
     state.activeSnapshot?.workspace ??
-    state.sessions[0]?.workspace ??
+    sessions[0]?.workspace ??
     "未配置工作区";
   const toggleFolder = (workspace: string) =>
     setCollapsedFolders((previous) => ({
@@ -141,9 +143,9 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-sessions-list">
-        {state.isSessionsLoading && state.sessions.length === 0 ? (
+        {state.isSessionsLoading && sessions.length === 0 ? (
           <p className="wb-muted sidebar-empty">正在加载会话...</p>
-        ) : state.sessions.length === 0 ? (
+        ) : sessions.length === 0 ? (
           <p className="wb-muted sidebar-empty">暂无历史任务</p>
         ) : groups.length === 0 ? (
           <p className="wb-muted sidebar-empty">没有匹配的任务</p>

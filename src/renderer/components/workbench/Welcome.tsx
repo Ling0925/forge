@@ -1,8 +1,9 @@
+import { isPrimarySession } from "../../../shared/sessions";
 import { useWorkbench } from "../../state/workbench-context";
 
 export function Welcome() {
   const { state } = useWorkbench();
-  const sessions = state.sessions.filter((session) => !session.archived);
+  const sessions = state.sessions.filter((session) => isPrimarySession(session) && !session.archived);
   const workspaces = new Set(sessions.map((session) => session.workspace));
   const loading = state.isSessionsLoading;
 

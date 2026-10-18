@@ -1,5 +1,6 @@
 import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { isPrimarySession } from "../../../shared/sessions";
 import {
   afterModalsClosed,
   findOpenModalDialog,
@@ -58,7 +59,7 @@ export function CommandPalette() {
           },
         ]
       : []),
-    ...state.sessions.map((session) => ({
+    ...state.sessions.filter(isPrimarySession).map((session) => ({
       id: session.id,
       label: `打开会话 · ${session.title}${session.archived ? "（已归档）" : ""}`,
       run: () => void selectSession(session.id),
