@@ -179,6 +179,9 @@ export function launchDesktop(): void {
     if (activeWindow === window) activeWindow = undefined;
   });
   contents.setWindowOpenHandler(() => ({ action: "deny" }));
+  contents.on("before-input-event", (event, input) => {
+    if (input.key === "F7") event.preventDefault();
+  });
   contents.on("will-navigate", (event) => event.preventDefault());
   contents.on("will-frame-navigate", (event) => event.preventDefault());
   contents.on("will-redirect", (event) => event.preventDefault());

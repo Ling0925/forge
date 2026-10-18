@@ -61,6 +61,10 @@ export function useGlobalModalShortcuts(handlers: {
         latest.current.onSettings(true);
       }
       if (event.key === "Escape") latest.current.onEscape();
+      // Prevent accidental Caret Browsing mode triggered by F7
+      if (event.key === "F7") {
+        event.preventDefault();
+      }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
