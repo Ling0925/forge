@@ -1,22 +1,21 @@
-import { ChatText, Gear, Info, SidebarSimple } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { useGlobalModalShortcuts } from "../../state/modal-shortcuts";
 import { WorkbenchProvider, useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
 import { ErrorState } from "../primitives/ErrorState";
-import { IconButton } from "../primitives/IconButton";
-import { CommandPalette } from "./CommandPalette";
 import { Composer } from "./Composer";
 import { Inspector } from "./Inspector";
-import { SessionActions } from "./SessionActions";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
 import { Transcript } from "./Transcript";
 import { Welcome } from "./Welcome";
+import { WorkbenchHeader } from "./WorkbenchHeader";
 import "./workbench.css";
 import "./app.css";
+import "./workbench-header.css";
 import "./new-session.css";
 import "../../styles/motion.css";
+
 function Workbench() {
   const {
     state,
@@ -29,33 +28,25 @@ function Workbench() {
     loadSessions,
     refreshActiveSession,
   } = useWorkbench();
-  // Global new/settings shortcuts never stack over an open native dialog
-  // (settings, new task, palette, or a local MCP / restore / rename panel).
   useGlobalModalShortcuts({
-    onNewSession: (open) => { if (!state.isSettingsOpen) openNewSession(open); },
+    onNewSession: (open) => {
+      if (!state.isSettingsOpen) openNewSession(open);
+    },
     onSettings: openSettings,
     onEscape: () => setMobileSidebar(false),
   });
   const isNew = state.isNewSessionOpen || !state.activeSessionId;
   const pending = Object.values(state.activeRuns).filter(
-    (r) => r.pendingApproval,
+    (run) => run.pendingApproval,
   ).length;
   const backgroundPending = Object.values(state.activeRuns).filter(
-    (r) => r.pendingApproval && r.sessionId !== state.activeSessionId,
+    (run) => run.pendingApproval && run.sessionId !== state.activeSessionId,
   ).length;
-  // Wide-screen inspector is on-demand (closed by default for a clean reading
-  // surface) via the `.inspector-collapsed` shell class; the Inspector itself
-  // stays mounted so tab/scroll/field state survives every toggle.
   const [inspectorCollapsed, setInspectorCollapsed] = useState(true);
   const [focusToken, setFocusToken] = useState(0);
   const previousBackgroundPending = useRef(0);
-  // Stable anchor for focus restoration when the inspector's inner close
-  // button (which lives inside the pane being hidden) is used.
   const detailsToggleRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
-    // Current-session approvals are already surfaced inline in the Transcript.
-    // Only auto-expand the inspector when a background task requires approval,
-    // avoiding unnecessary layout disruption for active reading.
     if (backgroundPending > 0 && previousBackgroundPending.current === 0) {
       setInspectorCollapsed(false);
     }
@@ -66,180 +57,78 @@ function Workbench() {
     setMobileTab("inspector");
     setFocusToken((token) => token + 1);
   };
+  const closeInspector = () => {
+    setInspectorCollapsed(true);
+    setMobileTab("task");
+  };
   return (
     <>
-    <div hidden={state.isSettingsOpen} inert={state.isSettingsOpen}
-      style={state.isSettingsOpen ? { display: "none" } : undefined}
-      className={`workbench wb-app mobile-${state.mobileTab}${inspectorCollapsed ? " inspector-collapsed" : ""}${state.isMobileSidebarOpen ? " sidebar-open" : ""}`}
-    >
-      <nav className="wb-mobile-nav" aria-label="工作台导航">
-        <button
-          type="button"
-          className={`wb-mobile-nav-btn wb-mobile-drawer-btn${state.isMobileSidebarOpen ? " is-active" : ""}`}
-          onClick={() => setMobileSidebar(!state.isMobileSidebarOpen)}
-          aria-label="打开会话列表"
-          aria-pressed={state.isMobileSidebarOpen}
-          aria-expanded={state.isMobileSidebarOpen}
-          title="会话列表"
-        >
-          <SidebarSimple size={17} weight="regular" />
-          <span className="wb-mobile-nav-label">会话</span>
-        </button>
-
-        <div className="wb-mobile-segmented-control" role="tablist" aria-label="视图模式">
-          <button
-            type="button"
-            role="tab"
-            className={`wb-mobile-segment${state.mobileTab === "task" && !state.isMobileSidebarOpen ? " is-active" : ""}`}
-            onClick={() => {
-              setMobileSidebar(false);
-              setMobileTab("task");
-            }}
-            aria-selected={state.mobileTab === "task" && !state.isMobileSidebarOpen}
-            title="主任务"
-          >
-            <ChatText size={15} weight="regular" />
-            <span>任务</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            className={`wb-mobile-segment${state.mobileTab === "inspector" ? " is-active" : ""}`}
-            onClick={() => {
-              setMobileSidebar(false);
-              revealInspector();
-            }}
-            aria-selected={state.mobileTab === "inspector"}
-            title="执行详情"
-          >
-            <Info size={15} weight="regular" />
-            <span>详情</span>
-            {pending > 0 && (
-              <span className="wb-mobile-pending-badge" aria-label={`待批准 ${pending} 项`}>
-                {pending}
-              </span>
-            )}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          className="wb-mobile-nav-btn wb-mobile-settings-btn"
-          onClick={() => {
-            setMobileSidebar(false);
-            openSettings(true);
-          }}
-          aria-label="设置"
-          title="设置"
-        >
-          <Gear size={17} weight="regular" />
-        </button>
-      </nav>
       <div
-        className={`wb-sidebar-backdrop${state.isMobileSidebarOpen ? " is-open" : ""}`}
-        onClick={() => setMobileSidebar(false)}
-        aria-hidden="true"
-      />
-      <Sidebar />
-      <main className={`workbench-main${isNew ? " wb-new-session" : ""}`}>
-        <header className="workbench-task-header">
-          {/* Start / Center / End header zones: global search stays anchored
-              on the left, the conversation title owns a protected center
-              column that never truncates before its minimum visible width,
-              and session-scoped actions sit on the right. */}
-          <div className="wb-header-start">
-            <CommandPalette />
-          </div>
-          <div className="wb-header-title">
-            <h1
-              title={isNew ? "新会话" : state.activeSnapshot?.title}
-              aria-label={
-                isNew
-                  ? "新会话"
-                  : (state.activeSnapshot?.title ?? "Forge 工作台")
-              }
-            >
-              {isNew
-                ? "新会话"
-                : (state.activeSnapshot?.title ?? "Forge 工作台")}
-            </h1>
-          </div>
-          <div className="wb-header-end wb-header-actions">
-            {pending > 0 && (
-              <button
-                type="button"
-                className="wb-approval-pill"
-                onClick={revealInspector}
-                aria-label={`待批准 ${pending} 项，打开执行详情`}
-                title={`待批准 ${pending} 项`}
-              >
-                待批准 {pending}
-              </button>
-            )}
-            <button
-              type="button"
-              ref={detailsToggleRef}
-              className={`wb-icon-btn wb-details-toggle${inspectorCollapsed ? "" : " is-active"}`}
-              aria-expanded={!inspectorCollapsed}
-              aria-label={inspectorCollapsed ? "展开详情" : "收起详情"}
-              title="执行详情"
-              onClick={() => {
-                if (inspectorCollapsed) revealInspector();
-                else setInspectorCollapsed(true);
+        hidden={state.isSettingsOpen}
+        inert={state.isSettingsOpen}
+        style={state.isSettingsOpen ? { display: "none" } : undefined}
+        className={`workbench wb-app mobile-${state.mobileTab}${inspectorCollapsed ? " inspector-collapsed" : ""}${state.isMobileSidebarOpen ? " sidebar-open" : ""}`}
+      >
+        <button
+          type="button"
+          tabIndex={-1}
+          className={`wb-sidebar-backdrop${state.isMobileSidebarOpen ? " is-open" : ""}`}
+          onClick={() => setMobileSidebar(false)}
+          aria-hidden="true"
+        />
+        <Sidebar />
+        <div className="workbench-content">
+          <WorkbenchHeader
+            isNew={isNew}
+            pending={pending}
+            inspector={{
+              collapsed: inspectorCollapsed,
+              toggleRef: detailsToggleRef,
+              reveal: revealInspector,
+              close: closeInspector,
+            }}
+          />
+          <div className="workbench-panes">
+            <main className={`workbench-main${isNew ? " wb-new-session" : ""}`}>
+              {state.alertError && (
+                <ErrorState
+                  title="操作未完成"
+                  error={state.alertError}
+                  actions={
+                    <>
+                      <Button
+                        onClick={() => {
+                          clearAlert();
+                          void loadSettings();
+                          void loadSessions();
+                          void refreshActiveSession();
+                        }}
+                      >
+                        刷新 / 重试
+                      </Button>
+                      <Button onClick={clearAlert}>关闭提示</Button>
+                    </>
+                  }
+                />
+              )}
+              {isNew ? <Welcome /> : <Transcript />}
+              <Composer isNew={isNew} />
+            </main>
+            <Inspector
+              focusToken={focusToken}
+              onRequestCollapse={() => {
+                closeInspector();
+                detailsToggleRef.current?.focus();
               }}
-            >
-              <Info size={16} weight="regular" />
-            </button>
-            {!isNew && <SessionActions key={state.activeSessionId ?? "none"} />}
-            <IconButton
-              icon={<Gear size={16} weight="regular" />}
-              size="sm"
-              label="设置"
-              onClick={() => openSettings(true)}
             />
           </div>
-        </header>
-        {state.alertError && (
-          <ErrorState
-            title="操作未完成"
-            error={state.alertError}
-            actions={
-              <>
-                <Button
-                  onClick={() => {
-                    clearAlert();
-                    void loadSettings();
-                    void loadSessions();
-                    void refreshActiveSession();
-                  }}
-                >
-                  刷新 / 重试
-                </Button>
-                <Button onClick={clearAlert}>关闭提示</Button>
-              </>
-            }
-          />
-        )}
-        {!isNew && <Transcript />}
-        {isNew && <Welcome />}
-        <Composer isNew={isNew} />
-      </main>
-      <Inspector
-        focusToken={focusToken}
-        onRequestCollapse={() => {
-          // Explicit inner close only: the focused button is inside the pane
-          // being hidden, so hand focus back to the stable header toggle.
-          // Background approval auto-open still never changes focus (typing
-          // safety); the header toggle click is already focused naturally.
-          setInspectorCollapsed(true);
-          detailsToggleRef.current?.focus();
-        }}
-      />
-    </div>
-    <Settings />
+        </div>
+      </div>
+      <Settings />
     </>
   );
 }
+
 export function App() {
   return (
     <WorkbenchProvider>

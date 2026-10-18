@@ -26,13 +26,12 @@
   --run-hover: #49463f;
   --run-active: #24221e;
   --shadow-composer: 0 2px 8px rgb(35 30 20 / 4%);
-  --rail-width: 232px;
+  --rail-width: 264px;
   --header-height: 44px;
   --control-height: 28px;
   --control-height-sm: 24px;
   --control-height-lg: 32px;
   --reading-measure: 760px;
-  --welcome-measure: 420px;
   --welcome-title-size: 22px;
   --radius-composer: 18px;
   --composer-inset: 12px 32px 16px;
@@ -139,63 +138,9 @@
   margin-top: var(--space-2);
   font-size: var(--text-sm);
 }
-.welcome-overview {
-  max-width: var(--welcome-measure);
-  margin-top: var(--space-6);
-  padding: var(--space-4) 0 0;
-  border-radius: 0;
-  background: transparent;
-  /* A flat two-column summary divided by one hairline, not a nested card
-     sitting inside the empty canvas (DESIGN.md §8). */
-  border: 0;
-  border-top: 1px solid var(--border-subtle);
-}
-.welcome-overview-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.welcome-overview h3 {
-  margin: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.welcome-overview-heading > span,
-.welcome-overview > p {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-.welcome-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
-  margin: var(--space-3) 0 var(--space-1);
-}
-.welcome-metrics > div {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-.welcome-metrics dt {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-.welcome-metrics dd {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-}
 .wb-app .wb-new-session .composer-fresh {
   width: min(var(--reading-measure), calc(100% - 2 * var(--space-8)));
-  margin: auto auto var(--space-4);
+  margin: 0 auto var(--space-8);
   padding: 0;
   overflow: visible;
   max-height: none;
@@ -323,9 +268,6 @@
     width: calc(100% - 2 * var(--space-4));
   }
   .wb-app .wb-new-session-intro {
-    margin-top: var(--space-6);
-  }
-  .welcome-overview {
     margin-top: var(--space-6);
   }
   .wb-app .composer-dropdown-trigger,

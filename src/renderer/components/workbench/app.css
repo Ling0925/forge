@@ -13,93 +13,6 @@
   min-width: 0;
   min-height: 0;
 }
-.wb-app .workbench-task-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--space-5);
-  height: var(--header-height);
-  min-height: var(--header-height);
-  max-height: var(--header-height);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--canvas-bg);
-  z-index: 10;
-}
-/* Start (search) / Center (title) / End (approvals, actions, settings). The
-   title column keeps a minimum visible width so the End actions cannot squeeze
-   it to nothing; beyond that it truncates with a smooth ellipsis (see .wb-app
-   h1). The session action group collapses first when width runs out. */
-.wb-header-start {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-.wb-header-end {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-/* Header-only heading rule. This selector used to be `.wb-app h1`, which also
-   matched every Markdown `#` heading in the transcript and forced it to 15px,
-   single-line and ellipsised — smaller than the 16px body text. It is scoped to
-   the task-header title, which is the only h1 it was written for. */
-.wb-app .wb-header-title h1 {
-  font-size: var(--text-md);
-  font-weight: 600;
-  line-height: var(--leading-md);
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.wb-app .workbench-task-header > .btn {
-  flex-shrink: 0;
-}
-.wb-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.wb-header-actions > * {
-  flex-shrink: 0;
-}
-/* One control size for the whole header cluster. The details toggle, session
-   actions and settings used to be 30/30/36px wide next to each other; they now
-   share a 32px box so the group reads as one aligned row. */
-.wb-app .wb-header-actions .wb-icon-btn,
-.wb-app .wb-header-actions .wb-overflow > summary,
-.wb-app .wb-header-actions .btn-icon {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  min-height: 32px;
-  border-radius: var(--radius-md);
-}
-/* The compact navigation bar already owns the settings entry, and the task
-   header keeps its session-scoped actions; a second gear directly below the
-   first one is pure duplication, so the header copy is retired below 1000px. */
-@media (max-width: 1000px) {
-  .wb-app .wb-header-actions > .btn-icon {
-    display: none;
-  }
-}
-/* Width-constrained header (<= 900px): session actions collapse first and the
-   conversation title keeps a 160px minimum visible width per the spec. */
-@media (max-width: 900px) {
-  .wb-app .wb-session-actions {
-    display: none;
-  }
-  .wb-app .wb-header-title h1 {
-    min-width: 160px;
-  }
-}
-/* Single authoritative `.wb-icon-btn` owner lives further below; the earlier
-   duplicate (30px + --radius-sm + border) conflicted with it and is removed. */
 .wb-approval-pill {
   display: inline-flex;
   align-items: center;
@@ -477,9 +390,6 @@
   cursor: pointer;
   overflow-wrap: anywhere;
 }
-.wb-mobile-nav {
-  display: none;
-}
 .wb-sidebar-backdrop {
   display: none;
 }
@@ -563,120 +473,6 @@
   .wb-app {
     flex-direction: column;
     flex-wrap: nowrap;
-  }
-  /* Compact phone/tablet navigation. Every control here is a primary
-     destination, so each one keeps a real 44px touch target; the bar itself
-     is sized by those targets instead of clipping them. */
-  .wb-mobile-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding: 6px var(--space-3);
-    width: 100%;
-    min-height: var(--mobile-nav-height);
-    flex-shrink: 0;
-    border-bottom: 1px solid var(--border-subtle);
-    background-color: var(--sidebar-bg);
-    box-sizing: border-box;
-  }
-
-  .wb-mobile-nav-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-width: var(--touch-min-target);
-    height: var(--touch-min-target);
-    padding: 0 10px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--surface-elevated);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--text-xs);
-    font-weight: 500;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: all var(--transition-fast);
-  }
-  .wb-mobile-nav-btn:hover {
-    background-color: var(--surface-hover);
-    color: var(--text-primary);
-    border-color: var(--border-control);
-  }
-  .wb-mobile-nav-btn.is-active {
-    background-color: var(--surface-selected);
-    color: var(--text-primary);
-    font-weight: 600;
-    border-color: var(--accent-sage);
-  }
-
-  .wb-mobile-settings-btn {
-    width: var(--touch-min-target);
-    padding: 0;
-    justify-content: center;
-  }
-
-  .wb-mobile-segmented-control {
-    display: inline-flex;
-    align-items: center;
-    background-color: var(--surface-soft);
-    padding: 2px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-subtle);
-    max-width: 260px;
-    flex: 1;
-    justify-content: center;
-    min-width: 0;
-  }
-
-  .wb-mobile-segment {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    flex: 1;
-    min-width: 0;
-    height: calc(var(--touch-min-target) - 4px);
-    padding: 0 8px;
-    border: none;
-    border-radius: calc(var(--radius-md) - 2px);
-    background: transparent;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--text-xs);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    white-space: nowrap;
-  }
-  .wb-mobile-segment:hover {
-    color: var(--text-primary);
-  }
-  .wb-mobile-segment.is-active {
-    background-color: var(--surface-elevated);
-    color: var(--text-primary);
-    font-weight: 600;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .wb-mobile-pending-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    border-radius: var(--radius-full);
-    /* Warning text sits on a warning-tinted surface with a strong warning ink:
-       white-on-orange fails 4.5:1 in the dark theme, so the badge follows the
-       same pair as the approval pill's hover state. */
-    background-color: var(--warning);
-    color: var(--warning-bg);
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
   }
   /* The stacked shell is a column flex box: the nav keeps its intrinsic
      height (it is sized by 44px targets, not by a magic number) and the single
@@ -919,11 +715,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .wb-app .workbench-task-header {
-    /* Grid Start/Center/End zones; compact paddings and gaps only. */
-    gap: var(--space-2);
-    padding: 0 var(--space-3);
-  }
   .wb-app .workbench-composer {
     padding: var(--space-2) var(--space-3);
     max-height: 60dvh;
@@ -1458,9 +1249,6 @@
   }
 }
 
-/* `.wb-header-title` is a grid item (min 0 + ellipsis via h1); the former
-   flex `flex: 1` duplicate and the second `.wb-header-actions` gap:8px
-   redeclaration were reconciled into the single header block above. */
 .wb-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -1661,8 +1449,7 @@
   border: none;
 }
 @media (max-width: 1000px) {
-  .wb-inspector-close,
-  .wb-details-toggle {
+  .wb-inspector-close {
     display: none;
   }
 }

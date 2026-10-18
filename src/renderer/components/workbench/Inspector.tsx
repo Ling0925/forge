@@ -37,7 +37,7 @@ export function Inspector({
   readonly focusToken?: number | undefined;
 }) {
   const [section, setSection] = useState("inspector-runtime");
-  const { state, answerApproval, selectSession, refreshActiveSession } =
+  const { state, answerApproval, selectSession, refreshActiveSession, setMobileTab } =
     useWorkbench();
   const paneRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -131,7 +131,10 @@ export function Inspector({
                     </span>
                     <Button
                       size="sm"
-                      onClick={() => scrollToInlineApproval(request.id)}
+                      onClick={() => {
+                        setMobileTab("task");
+                        requestAnimationFrame(() => scrollToInlineApproval(request.id));
+                      }}
                     >
                       定位到消息流
                     </Button>

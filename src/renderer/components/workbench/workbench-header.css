@@ -1,0 +1,119 @@
+.workbench-content,
+.workbench-panes {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.workbench-content {
+  flex-direction: column;
+}
+.wb-app .workbench-task-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-inline: var(--space-6);
+  height: var(--header-height);
+  min-height: var(--header-height);
+  flex-shrink: 0;
+  background: var(--canvas-bg);
+  z-index: 10;
+}
+.wb-header-start,
+.wb-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.wb-header-title {
+  min-width: 0;
+}
+.wb-app .wb-header-title h1 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: var(--leading-md);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-app .wb-header-actions .wb-icon-btn,
+.wb-app .wb-header-actions .btn-icon {
+  width: var(--control-height-lg);
+  min-width: var(--control-height-lg);
+  height: var(--control-height-lg);
+  min-height: var(--control-height-lg);
+  border-radius: var(--radius-md);
+}
+.wb-app .wb-drawer-toggle,
+.wb-app .sidebar-mobile-close,
+.wb-return-icon,
+.wb-header-pending {
+  display: none;
+}
+.wb-details-toggle {
+  position: relative;
+}
+.wb-sidebar-backdrop {
+  padding: 0;
+  border: 0;
+}
+.wb-app .workbench-main.wb-new-session {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.wb-app .sidebar-footer {
+  justify-content: flex-end;
+}
+@media (max-width: 1000px) {
+  .wb-app .workbench-content > .workbench-task-header {
+    min-height: calc(var(--touch-min-target) + var(--space-3));
+    height: calc(var(--touch-min-target) + var(--space-3));
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+  .wb-header-start,
+  .wb-header-actions {
+    gap: 0;
+  }
+  .wb-app .wb-drawer-toggle,
+  .wb-app .sidebar-mobile-close {
+    display: inline-flex;
+  }
+  .wb-app .workbench-task-header .wb-icon-btn,
+  .wb-app .workbench-task-header .btn-icon,
+  .wb-app .workbench-task-header .command-palette-trigger {
+    width: var(--touch-min-target);
+    min-width: var(--touch-min-target);
+    height: var(--touch-min-target);
+    min-height: var(--touch-min-target);
+    padding: 0;
+  }
+  .workbench-task-header .command-palette-trigger-label,
+  .workbench-task-header .wb-approval-pill,
+  .wb-app .workbench-inspector .wb-inspector-close,
+  .mobile-inspector .wb-details-icon {
+    display: none;
+  }
+  .mobile-inspector .wb-return-icon {
+    display: block;
+  }
+  .wb-header-pending {
+    display: inline-flex;
+    position: absolute;
+    top: var(--space-1);
+    right: 0;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--space-4);
+    height: var(--space-4);
+    padding-inline: var(--space-1);
+    border-radius: var(--radius-full);
+    background: var(--warning);
+    color: var(--warning-bg);
+    font-size: var(--text-2xs);
+    line-height: 1;
+  }
+}

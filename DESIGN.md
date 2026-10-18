@@ -91,7 +91,7 @@ Forge 展现的是沉稳、专注、温暖且精密的高级工作台氛围，�
 ## 4 布局尺度与滚动归属 (Layout & Scroll Contracts)
 
 - **空间度量**：基于 4px 网格（4/8/12/16/20/24/32/40/48px）。
-  - 应用顶部 Bar：高度 `56px - 64px`，简明标题、Cmd+K 搜索入口、检查器抽屉开关。
+  - 应用顶部 Bar：桌面高度 `44px`，窄屏 `56px`，简明标题、Cmd+K 搜索入口、检查器抽屉开关。
   - 左侧边栏：宽度 `256px`（可在 248–264px），浅暖灰独立色块。
   - 中央主内容区：左右内边距 `32px - 48px`（宽屏）/ `20px`（窄屏）。
   - 右侧检查面板：宽度 `360px`，可一键收拢，展开时不挤压主阅读流。
@@ -105,7 +105,7 @@ Forge 展现的是沉稳、专注、温暖且精密的高级工作台氛围，�
   - 会话列表拥有独占纵向滚动条。
   - 对话记录流（Transcript）是主任务的唯一滚动主体，消息内不得有嵌套纵向滚动。
   - 检查面板是其自身的唯一纵向滚动容器。
-  - 窄屏（≤768px）通过顶部导航在任务/检查间切换，抽屉式侧栏独立管理焦点，禁止背景穿透滚动。
+  - 窄屏（≤1000px）通过共享标题栏详情按钮在任务/检查间切换，抽屉式侧栏独立管理焦点，禁止背景穿透滚动。
 
 ## 5 核心原语重构规范 (Redesigned Primitives)
 
@@ -187,10 +187,11 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
 - Ink: light primary `#292824`, secondary `#68665f`; dark primary `#eeede8`,
   secondary `#aaa79f`. Terracotta accent `#a54f35` / `#dc9477`, used sparingly.
 - Desktop rail: 264px. Main reading/home measure: 880px. Home overview: 560px.
-  Compact revision: rail 232px, header 44px, reading measure 760px, overview
-  420px. Greeting: 22px / 1.4, weight 500. Main gutter: 32px, mobile: 16px.
+  Compact revision: rail 264px (232px when the inspector shares a constrained
+  desktop), header 44px desktop / 56px narrow, reading measure 760px.
+  Greeting: 22px / 1.4, weight 500. Main gutter: 32px, mobile: 16px.
   Desktop controls: 28px; small controls: 24px. Touch controls retain 44px.
-  Overview is a flat two-column summary, not nested cards. Composer padding
+  Recent tasks use flat full-width rows, not summary cards. Composer padding
   6px vertical / 10px horizontal, radius 12px, initial prompt height 36px;
   prompt height follows content and soft wrapping up to six computed line heights
   plus padding, then scrolls internally. Empty drafts return to 36px; width changes
@@ -219,15 +220,21 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
   Mode/permission menus support arrow navigation, Home/End, Escape, Tab exit,
   pointer dismissal and focus restoration. Focus rings belong to the focused
   control; input focus uses one quiet container border, never nested rings.
-- Home greeting sits near the top; a single quiet overview shows actual unarchived
-  session and workspace counts. Unknown/loading values use an em dash. No invented
-  token totals, heatmaps or activity. The composer sits near the bottom with open
-  space between overview and prompt; short screens scroll the main region.
+- Home groups the greeting, four most recently updated unarchived primary tasks
+  and composer into one reading column. Each task opens its existing session;
+  titles wrap to two lines, with workspace and update date as quiet metadata.
+  Loading and an empty history have distinct text states. The composer follows
+  the list with 24px spacing instead of an automatic viewport-sized gap. The
+  home main region owns vertical scrolling, including on short screens.
 - Reuse existing sidebar, composer, buttons and model/permission menus. Home
-  overview uses a semantic definition list. Composer radius 18px; neutral focus
+  task list uses semantic list items and buttons. Composer radius 18px; neutral focus
   border plus visible keyboard focus ring. Sidebar controls use tonal surfaces.
-- Mobile keeps the existing navigation and drawer. Overview reflows without
-  truncating Chinese labels. All existing theme, modal and approval states remain.
+- One shared header stays above task and inspector panes. Narrow screens use
+  the drawer button, current title, command search, a details/task toggle and
+  settings, with 44px targets; session actions remain reachable. Pending approval
+  counts remain visible on the details control. Settings has one visible entry,
+  in this header. Low-frequency composer controls keep their compact presentation
+  without additional persistent hints. Themes, shortcuts and approval actions remain.
 - Accepted scope: reference-inspired layout, not Claude branding or exact copy;
   API inference and desktop packaging are outside this visual change's validation.
 
@@ -245,7 +252,7 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
    - 会话列表项右侧摘要展开按钮垂直平滑居中，展开时自动归位；会话状态圆点与标题间距对齐。
    - 清除历史重构在 `workbench.css` 与 `app.css` 中残留的重复和冲突覆盖，确立整洁规范的级联规则。
 3. **窄屏端导航、弹窗与紧凑排版适配 (Mobile Ergonomics & CJK Clarity)**：
-   - 窄屏顶部导航 `.wb-mobile-nav` 实现 44px 热区、等宽伸缩与明确的 `aria-pressed="true"` 选中底色，消除移动端操作迷失。
+   - 窄屏复用单条工作台标题栏；详情按钮以选中底色与 `aria-expanded` 表达当前视图，按钮保留 44px 热区，不再另叠分段导航。
    - 原生对话框与设置在 ≤640px 视口下自适应外边距（16px）与内部滚动高度（`calc(100dvh - 160px)`），所有按钮与输入字段完整展现不裁切。
    - CJK 排版保持自然字距；工作区路径、代码块、命令、diff、错误详情与模型标识符全局设置 `user-select: text` 与 `overflow-wrap: anywhere`，保障极客调试体验。
 4. **坚守关键几何修复与无障碍契约 (Preserved Guards & A11y Retained)**：
@@ -295,9 +302,9 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
 6. **节奏**：会话内块间距 12px，人工轮次另加 16px，阶段边界落在 28px 区间，符合 §1.3 的 28–36px 呼吸感。
 7. **状态色对比度修正**：浅色主题 `--success` / `--warning` / `--error` 由 `#10b981` / `#d97706` / `#ef4444` 改为 §2 表中的 `#226d40` / `#975a06` / `#b82420`，对各自浅底实测 5.75 / 5.21 / 5.83:1（原为 2.41 / 3.07 / 3.44:1，均不达标）。深色主题原有取值实测 5.06–8.97:1，保持不变。
 8. **待审批 pill 与角标**：hover 反色不再使用固定白色文字（深色主题下 `#ffffff` on `#fbbf24` 仅 1.67:1），改用 `--warning` / `--warning-bg` 配对；移动端角标同样改用该配对。实测亮暗分别为 5.21:1 与 8.97:1。
-9. **移动端命中区**：≤1000px 顶部导航的会话/任务/详情/设置全部 44px（原 32 / 26 / 32px），分段控件内高 40px。导航高度由 44px 目标自身撑开，主区改用 flex 剩余空间，不再用 `100dvh - 固定值` 硬算（原实现按 48px 假设计算，而导航实际为 59px）。
-10. **去除重复入口**：≤1000px 时隐藏任务头部的设置齿轮，仅保留顶部导航中的设置入口；头部三个控件（详情、会话操作、设置）统一为 32px 方框与 4px 间距。
-11. **侧栏与辅助控件**：品牌徽标改为鼠尾草软底；新建任务按钮 32px 高并占满侧栏宽度；搜索框与归档切换 32px（粗指针 44px）；会话标题 13px/450、激活态 500；首次使用概览改为单条细线上方的平铺两列（不再卡片套卡片），指标值 20px/600。
+9. **移动端命中区**：≤1000px 共享顶部栏保留 44px 命中区，栏高 56px，任务与详情使用下方 flex 剩余空间；不再叠加分段导航与任务标题两行。
+10. **去除重复入口**：设置统一位于共享顶部栏，移除侧栏底部设置入口；桌面头部控件为 32px 方框，窄屏为 44px。详情与任务互切仍能访问会话标题、命令和设置。
+11. **侧栏与辅助控件**：品牌徽标改为鼠尾草软底；新建任务按钮 32px 高并占满侧栏宽度；搜索框与归档切换 32px（粗指针 44px）；会话标题 13px/450、激活态 500。首页最近任务显示可操作的历史入口，不再展示会话数与工作区数。
 12. **证据行命中区**：`tool-debug-summary` 与用量触发条补足 28px（粗指针 44px）真实命中高度并带 hover 反馈。
 
 以上为已实现并通过上述测量的状态，仍**不是**完整验收声明：未覆盖真实 provider 端到端运行、读屏与高对比矩阵、200% 缩放的逐屏人工检查。

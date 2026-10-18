@@ -3,7 +3,6 @@ import {
   CaretRight,
   Folder,
   FolderOpen,
-  Gear,
   MagnifyingGlass,
   Plus,
   WarningCircle,
@@ -13,7 +12,6 @@ import { useState } from "react";
 import { isPrimarySession } from "../../../shared/sessions";
 import type { SessionSummary } from "../../shared-types";
 import { useWorkbench } from "../../state/workbench-context";
-import { IconButton } from "../primitives/IconButton";
 import { SessionListItem } from "./SessionListItem";
 
 /** Folder label for a workspace path; the full path stays available as a tooltip. */
@@ -29,7 +27,7 @@ interface SessionGroup {
 }
 
 export function Sidebar() {
-  const { state, openNewSession, openSettings, setMobileSidebar } =
+  const { state, openNewSession, setMobileSidebar } =
     useWorkbench();
 
   const [query, setQuery] = useState("");
@@ -210,13 +208,6 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-footer">
-        <IconButton
-          icon={<Gear size={15} weight="regular" />}
-          size="sm"
-          label="系统设置 (Ctrl+, / Cmd+,)"
-          onClick={() => openSettings(true)}
-        />
-
         <div className="wb-row sidebar-footer-status">
           {!state.settings?.isConfigured && (
             <span className="wb-status-warning" title="尚未配置 API 端点或模型">

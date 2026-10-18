@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("hides children from sidebar, search, palette and counts while retaining task navigation", async () => {
+it("hides children from sidebar, search, palette and recent tasks while retaining task navigation", async () => {
   const bundle = await build({
     stdin: {
       resolveDir: resolve("."), loader: "tsx", contents: `
@@ -25,7 +25,7 @@ it("hides children from sidebar, search, palette and counts while retaining task
       setup(api) {
         api.onLoad({ filter: /workbench-context\.tsx$/ }, () => ({
           loader: "js", contents: `
-            export const useWorkbench=()=>({state:{sessions:window.sessions,activeRuns:{},settings:{isConfigured:true}},
+            export const useWorkbench=()=>({state:{sessions:window.sessions,isSessionsLoading:window.loading,activeRuns:{},settings:{isConfigured:true}},
               openNewSession:()=>{},openSettings:()=>{},setMobileSidebar:()=>{},selectSession:()=>{},refreshActiveSession:()=>{}});
           `,
         }));
@@ -53,7 +53,7 @@ it("hides children from sidebar, search, palette and counts while retaining task
     expect(await sidebar.innerText()).not.toContain("Internal child");
     expect(await sidebar.innerText()).not.toContain("child-only");
     expect(await sidebar.locator(".session-folder-count").allTextContents()).toEqual(["1"]);
-    expect(await page.locator(".welcome-metrics dd").allTextContents()).toEqual(["1", "1"]);
+    expect(await page.locator(".welcome-task-title").allTextContents()).toEqual(["Main session"]);
     expect(await page.locator("#task-navigation").innerText()).toContain("Internal child");
 
     await sidebar.getByTitle("显示归档会话").click();
@@ -75,7 +75,13 @@ it("hides children from sidebar, search, palette and counts while retaining task
       host.render();
     });
     await sidebar.getByText("暂无历史任务").waitFor();
-    expect(await page.locator(".welcome-metrics dd").allTextContents()).toEqual(["0", "0"]);
+    expect(await page.locator(".welcome-task").count()).toBe(0);
+    expect(await page.locator(".welcome-empty").innerText()).toBe("还没有历史任务，从下方开始。");
+    await page.evaluate(() => {
+      Reflect.set(window, "loading", true);
+      Reflect.get(window, "render")();
+    });
+    await page.getByText("正在读取最近任务…", { exact: true }).waitFor();
   } finally {
     await browser.close();
   }

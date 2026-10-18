@@ -3,8 +3,84 @@
   display: none;
 }
 .wb-new-session-intro {
+  flex-shrink: 0;
   width: min(720px, calc(100% - 48px));
   margin: auto auto 24px;
+}
+.welcome-recent {
+  margin-top: var(--space-8);
+}
+.welcome-recent h3 {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.welcome-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.welcome-task-list li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.welcome-task {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: var(--touch-min-target);
+  padding: var(--space-3) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.welcome-task:hover {
+  background: var(--surface-hover);
+}
+.welcome-task:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.welcome-task > svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.welcome-task-content {
+  flex: 1;
+  min-width: 0;
+}
+.welcome-task-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+.welcome-task-meta {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.welcome-task-meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.welcome-task-meta time {
+  flex-shrink: 0;
+}
+.welcome-empty {
+  padding-block: var(--space-3);
 }
 .wb-new-session-intro h2 {
   margin: 0 0 8px;
@@ -90,12 +166,6 @@
     flex-wrap: wrap;
   }
 }
-/* Short viewports: the single reading-flow viewport (`main.wb-new-session`,
-   a direct child of `.wb-app` hosting the Welcome + Composer columns) owns
-   the only vertical scrollbar. The duplicate `overflow-y` that used to live
-   here fought the identical block in styles/workspace-theme.css and produced
-   nested scrolling on the same element chain, so only the geometry-only
-   compact spacing is kept below. */
 @media (max-height: 600px) {
   .wb-new-session-intro {
     margin-top: 24px;
