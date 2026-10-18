@@ -19,6 +19,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { defaultPublicSettings, publicSettingsSchema } from "../../../shared/schemas";
+import { isMobileAppHost } from "../../state/mobile-connection";
 import { buildSettingsUpdate, createSettingsDraft, type SettingsDraft } from "../../state/settings-draft";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
@@ -28,6 +29,7 @@ import { Select } from "../primitives/Select";
 import { ProviderSources } from "./ProviderSources";
 import { McpPanel } from "./McpPanel";
 import { PhonePairing } from "./PhonePairing";
+import { ServerConnection } from "./ServerConnection";
 import "./settings-page.css";
 
 export const permissionLabels = {
@@ -47,6 +49,15 @@ const sections = [
   { id: "pairing", title: "手机连接", description: "在同一局域网公开当前核心，让 Android 扫码配对。", keywords: "手机 Android 扫码 二维码 局域网 LAN 配对 端口 地址", icon: DeviceMobile },
 ] as const;
 
+/** Android shell variant of the same `pairing` section: no LAN controls. */
+const mobilePairingSection = {
+  id: "pairing",
+  title: "服务器连接",
+  description: "查看当前服务器地址，编辑或更换 Android 应用连接的服务器。",
+  keywords: "当前服务器 编辑 更换 扫码 二维码 最近连接 地址 Android",
+  icon: DeviceMobile,
+} as const;
+
 type Section = typeof sections[number]["id"];
 type TextKey = { [K in keyof SettingsDraft]: SettingsDraft[K] extends string ? K : never }[keyof SettingsDraft];
 
@@ -63,6 +74,7 @@ export function Settings() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [listing, setListing] = useState(false);
+  const [mobile] = useState(() => isMobileAppHost());
   const sourceBusy = useRef(false);
   const locked = useRef(false);
   const alive = useRef(true);
@@ -183,10 +195,13 @@ export function Settings() {
     </Field>
   );
 
-  const matching = sections.filter(item =>
+  const catalog = mobile
+    ? sections.map(item => (item.id === "pairing" ? mobilePairingSection : item))
+    : sections;
+  const matching = catalog.filter(item =>
     `${item.title} ${item.keywords} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase())
   );
-  const selected = sections.find(item => item.id === section)!;
+  const selected = catalog.find(item => item.id === section)!;
   const visible = (id: Section) => query.trim() ? matching.some(item => item.id === id) : section === id;
 
   return (
@@ -233,7 +248,7 @@ export function Settings() {
         </div>
 
         <nav aria-label="设置分类" className="settings-nav-menu">
-          {sections.map(item => {
+          {catalog.map(item => {
             const Icon = item.icon;
             const isCurrent = !query && section === item.id;
             return (
@@ -620,17 +635,31 @@ export function Settings() {
           )}
 
           {visible("pairing") && (
-            <section className="settings-section" aria-label="手机连接配置">
-              <div className="settings-card">
-                <div className="settings-card-header">
-                  <h3>Android 局域网配对</h3>
-                  <p>配对独立于底部“保存设置”：这里的操作立即生效，不影响模型或执行配置。</p>
+            mobile ? (
+              <section className="settings-section" aria-label="服务器连接配置">
+                <div className="settings-card">
+                  <div className="settings-card-header">
+                    <h3>当前服务器</h3>
+                    <p>编辑地址、扫码或选择最近连接；确认后连接新的服务器。</p>
+                  </div>
+                  <div className="settings-card-body">
+                    <ServerConnection dirty={dirty} />
+                  </div>
                 </div>
-                <div className="settings-card-body">
-                  <PhonePairing />
+              </section>
+            ) : (
+              <section className="settings-section" aria-label="手机连接配置">
+                <div className="settings-card">
+                  <div className="settings-card-header">
+                    <h3>Android 局域网配对</h3>
+                    <p>配对独立于底部“保存设置”：这里的操作立即生效，不影响模型或执行配置。</p>
+                  </div>
+                  <div className="settings-card-body">
+                    <PhonePairing />
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            )
           )}
         </div>
 

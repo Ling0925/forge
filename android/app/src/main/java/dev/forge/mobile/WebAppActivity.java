@@ -47,7 +47,37 @@ public class WebAppActivity extends AppCompatActivity {
     private TextView errorDetail;
 
     private String currentUrl;
+    private String connectionUrl;
+    private boolean clearHistoryOnLoad;
+    private boolean connectionSettingsOpen;
     private ValueCallback<Uri[]> fileCallback;
+
+    private final ActivityResultLauncher<Intent> connectionSettingsLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                connectionSettingsOpen = false;
+                if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) return;
+                try {
+                    String next = ServerUrl.normalize(result.getData().getStringExtra(EXTRA_URL));
+                    if (next.equals(connectionUrl)) {
+                        if (errorPanel.getVisibility() == View.VISIBLE) reload();
+                        return;
+                    }
+                    // A connection change is explicit. Never carry page history to another server.
+                    connectionUrl = next;
+                    currentUrl = next;
+                    getIntent().putExtra(EXTRA_URL, next);
+                    RecentServers.remember(this, next);
+                    if (fileCallback != null) {
+                        fileCallback.onReceiveValue(null);
+                        fileCallback = null;
+                    }
+                    webView.stopLoading();
+                    clearHistoryOnLoad = true;
+                    loadWorkbench();
+                } catch (ServerUrl.InvalidAddressException e) {
+                    Toast.makeText(this, R.string.error_invalid_address, Toast.LENGTH_LONG).show();
+                }
+            });
 
     private final ActivityResultLauncher<Intent> fileChooserLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -84,19 +114,21 @@ public class WebAppActivity extends AppCompatActivity {
         errorPanel = findViewById(R.id.error_panel);
         errorDetail = findViewById(R.id.error_detail);
 
-        String url;
         try {
-            // Re-validate even though MainActivity already did: this Activity is the only
-            // place that hands a URL to the WebView, so it must not trust its caller.
-            url = ServerUrl.normalize(getIntent().getStringExtra(EXTRA_URL));
+            // Re-validate both the caller and saved state before loading a connection.
+            connectionUrl = ServerUrl.normalize(savedInstanceState == null
+                    ? getIntent().getStringExtra(EXTRA_URL)
+                    : savedInstanceState.getString("connectionUrl", getIntent().getStringExtra(EXTRA_URL)));
         } catch (ServerUrl.InvalidAddressException e) {
             finish();
             return;
         }
-        currentUrl = url;
-        RecentServers.remember(this, url);
+        currentUrl = connectionUrl;
+        clearHistoryOnLoad = savedInstanceState != null && savedInstanceState.getBoolean("clearHistoryOnLoad");
+        connectionSettingsOpen = savedInstanceState != null && savedInstanceState.getBoolean("connectionSettingsOpen");
+        RecentServers.remember(this, connectionUrl);
 
-        findViewById(R.id.change_button).setOnClickListener(v -> finish());
+        findViewById(R.id.change_button).setOnClickListener(v -> openConnectionSettings());
         findViewById(R.id.retry_button).setOnClickListener(v -> reload());
 
         configureWebView();
@@ -108,16 +140,29 @@ public class WebAppActivity extends AppCompatActivity {
                 if (webView.canGoBack()) {
                     webView.goBack();
                 } else {
-                    // Leaves the workbench but keeps it in the recent list for one-tap return.
                     finish();
                 }
             }
         });
     }
 
+    private void openConnectionSettings() {
+        if (connectionSettingsOpen) return;
+        connectionSettingsOpen = true;
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.putExtra(MainActivity.EXTRA_EDIT_CONNECTION, true);
+        intent.putExtra(EXTRA_URL, connectionUrl);
+        connectionSettingsLauncher.launch(intent);
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private void configureWebView() {
         WebSettings settings = webView.getSettings();
+        // UI capability marker only; never used as an authentication mechanism.
+        // API 24+ can prove that a navigation comes from a user gesture in the main frame.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            settings.setUserAgentString(settings.getUserAgentString() + " ForgeMobile/1");
+        }
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         // Some Android System WebView versions gate localStorage behind this flag as well.
@@ -153,22 +198,40 @@ public class WebAppActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return handleNavigation(request.getUrl(), request.isForMainFrame());
+                Uri target = request.getUrl();
+                if (target != null && ConnectionSettingsNavigation.PATH.equals(target.getPath())) {
+                    if ("GET".equals(request.getMethod()) && ConnectionSettingsNavigation.mayOpen(
+                            connectionUrl, view.getUrl(), target.toString(),
+                            request.isForMainFrame(), request.hasGesture())) {
+                        openConnectionSettings();
+                    }
+                    // Reserved local route: never send it to a server or open from a subframe.
+                    return true;
+                }
+                return handleNavigation(target, request.isForMainFrame());
             }
 
             @SuppressWarnings("deprecation")
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                // Legacy path (API < 24). Frame information is unavailable, so treat it as a
-                // top-level navigation to stay on the safe side.
-                return handleNavigation(Uri.parse(url), true);
+                Uri target = Uri.parse(url);
+                if (ConnectionSettingsNavigation.PATH.equals(target.getPath())) {
+                    // Old APIs cannot prove the frame/gesture: block the native action rather
+                    // than expose a weaker entrypoint. Modern System WebView uses the overload above.
+                    return true;
+                }
+                return handleNavigation(target, true);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                if (currentUrl != null && url != null && !url.equals(currentUrl)) {
+                if (url != null && url.equals(view.getUrl())) {
                     currentUrl = url;
+                    if (clearHistoryOnLoad) {
+                        view.clearHistory();
+                        clearHistoryOnLoad = false;
+                    }
                 }
             }
 
@@ -303,6 +366,9 @@ public class WebAppActivity extends AppCompatActivity {
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
+        outState.putString("connectionUrl", connectionUrl);
+        outState.putBoolean("clearHistoryOnLoad", clearHistoryOnLoad);
+        outState.putBoolean("connectionSettingsOpen", connectionSettingsOpen);
         webView.saveState(outState);
     }
 

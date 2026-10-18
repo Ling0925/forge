@@ -82,3 +82,12 @@ val checkServerUrl by tasks.registering(JavaExec::class) {
     classpath = files(serverUrlTestClasses, serverUrlMainClasses)
     mainClass.set("ServerUrlTest")
 }
+
+val checkConnectionSettings by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Checks the gesture-gated, same-origin native connection settings route."
+    dependsOn(compileServerUrlTest)
+
+    classpath = files(serverUrlTestClasses, serverUrlMainClasses)
+    mainClass.set("ConnectionSettingsNavigationTest")
+}

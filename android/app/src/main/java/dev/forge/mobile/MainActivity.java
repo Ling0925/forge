@@ -29,6 +29,9 @@ import java.util.List;
  */
 public class MainActivity extends AppCompatActivity {
 
+    public static final String EXTRA_EDIT_CONNECTION = "dev.forge.mobile.extra.EDIT_CONNECTION";
+
+    private boolean editingConnection;
     private EditText addressInput;
     private LinearLayout recentContainer;
     private TextView recentEmptyHint;
@@ -53,6 +56,20 @@ public class MainActivity extends AppCompatActivity {
         recentContainer = findViewById(R.id.recent_container);
         recentEmptyHint = findViewById(R.id.recent_empty);
         recentSection = findViewById(R.id.recent_section);
+        editingConnection = getIntent().getBooleanExtra(EXTRA_EDIT_CONNECTION, false);
+        if (editingConnection) {
+            ((TextView) findViewById(R.id.connection_title)).setText(R.string.connection_settings_title);
+            ((TextView) findViewById(R.id.connection_subtitle)).setText(R.string.connection_settings_subtitle);
+            ((TextView) findViewById(R.id.connection_description)).setText(R.string.connection_settings_description);
+            ((Button) findViewById(R.id.connect_button)).setText(R.string.save_connection_button);
+            findViewById(R.id.cancel_connection_button).setVisibility(View.VISIBLE);
+            findViewById(R.id.cancel_connection_button).setOnClickListener(v -> finish());
+            if (savedInstanceState == null) {
+                String current = getIntent().getStringExtra(WebAppActivity.EXTRA_URL);
+                addressInput.setText(current);
+                addressInput.setSelection(addressInput.length());
+            }
+        }
 
         findViewById(R.id.scan_button).setOnClickListener(v -> startScan());
         findViewById(R.id.connect_button).setOnClickListener(v -> submitTypedAddress());
@@ -108,12 +125,20 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        RecentServers.remember(this, url);
         addressInput.setText(url);
+        if (editingConnection && fromScan) return;
+        RecentServers.remember(this, url);
         openWorkbench(url);
     }
 
     private void openWorkbench(String url) {
+        if (editingConnection) {
+            Intent result = new Intent();
+            result.putExtra(WebAppActivity.EXTRA_URL, url);
+            setResult(RESULT_OK, result);
+            finish();
+            return;
+        }
         Intent intent = new Intent(this, WebAppActivity.class);
         intent.putExtra(WebAppActivity.EXTRA_URL, url);
         startActivity(intent);
@@ -139,7 +164,14 @@ public class MainActivity extends AppCompatActivity {
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             params.bottomMargin = dp(8);
             row.setLayoutParams(params);
-            row.setOnClickListener(v -> openWorkbench(url));
+            row.setOnClickListener(v -> {
+                if (editingConnection) {
+                    addressInput.setText(url);
+                    addressInput.setSelection(addressInput.length());
+                } else {
+                    openWorkbench(url);
+                }
+            });
             recentContainer.addView(row);
         }
     }

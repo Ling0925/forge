@@ -52,6 +52,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | 检查 | 命令 | 结果 |
 | :--- | :--- | :--- |
 | URI 单元测试 | `./gradlew checkServerUrl` | **26 passed, 0 failed** |
+| 原生连接设置入口 | `./gradlew checkConnectionSettings` | **22 passed, 0 failed**；覆盖同源、手势、主框架与精确路径限制，不代表 WebView 实机事件已验证 |
 | Debug APK 构建 | `./gradlew :app:assembleDebug` | **BUILD SUCCESSFUL**，产出 `app-debug.apk`（约 3.3 MB） |
 | 产物清单 | `aapt2 dump badging` | `package=dev.forge.mobile.debug`，`minSdk 23`，`targetSdk 33`，含 `INTERNET`/`CAMERA` |
 | 合并清单 | `aapt2 dump xmltree … AndroidManifest.xml` | `usesCleartextTraffic=true`；ZXing `CaptureActivity` 合并且 `exported=false` |
