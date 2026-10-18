@@ -151,12 +151,12 @@
 
 .diff-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   padding: 6px 12px;
   background-color: var(--surface-soft);
   border-bottom: 1px solid var(--border-subtle);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-2);
 }
 
@@ -167,17 +167,22 @@
   font-weight: 600;
   color: var(--text-primary);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-2);
+  line-height: var(--leading-xs);
 }
 
 .diff-path > span {
   min-width: 0;
+  white-space: normal;
   overflow-wrap: anywhere;
+  word-break: break-all;
+  line-height: var(--leading-xs);
 }
 
 .diff-path > svg {
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .diff-header-meta {
@@ -185,6 +190,8 @@
   align-items: center;
   gap: var(--space-2);
   flex-shrink: 0;
+  margin-left: auto;
+  line-height: var(--leading-xs);
 }
 
 .diff-header-meta .diff-preview-action {

@@ -76,7 +76,9 @@ function rowsFromPatch(patch: Patch): DiffModel {
     let oldLine = hunk.oldStart;
     let newLine = hunk.newStart;
     for (const item of hunk.lines) {
-      const text = item.text.endsWith("\n") ? item.text.slice(0, -1) : item.text;
+      const text = item.text.endsWith("\n")
+        ? item.text.slice(0, -1)
+        : item.text;
       if (item.op === "delete") {
         lines.push({ id: id++, type: "removed", beforeNumber: oldLine, text });
         oldLine += 1;
@@ -146,7 +148,7 @@ export function DiffViewer({
       aria-label={`差异查看：${path}`}
     >
       <div className="diff-header">
-        <div className="diff-path">
+        <div className="diff-path" title={path}>
           <FileCode size={16} weight="regular" aria-hidden="true" />
           <span>{path}</span>
         </div>

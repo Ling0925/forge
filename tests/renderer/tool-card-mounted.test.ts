@@ -173,6 +173,28 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     expect(await page.locator(".live-tool .tool-read-path").innerText()).toBe(
       "src/renderer/components/primitives/ToolDisclosure.tsx",
     );
+    // On coarse / mobile viewport: verify .is-block multiline row takes full width, and short scalar is 2-column
+    const blockRow = page.locator(".tool-param-row.is-block").first();
+    const scalarRow = page.locator(".tool-param-row:not(.is-block)").first();
+    if ((await blockRow.count()) > 0) {
+      const blockWidth = await blockRow
+        .locator(".tool-param-value")
+        .evaluate((el) => el.getBoundingClientRect().width);
+      const rowWidth = await blockRow.evaluate(
+        (el) => el.getBoundingClientRect().width,
+      );
+      expect(blockWidth).toBeGreaterThan(rowWidth * 0.85);
+    }
+    if ((await scalarRow.count()) > 0) {
+      const keyRect = await scalarRow
+        .locator(".tool-param-key")
+        .evaluate((el) => el.getBoundingClientRect());
+      const valRect = await scalarRow
+        .locator(".tool-param-value")
+        .evaluate((el) => el.getBoundingClientRect());
+      expect(keyRect.right).toBeLessThanOrEqual(valRect.left + 1);
+    }
+
     const verifyEdits = async (surface: Page) => {
       const edited = surface.locator('[data-tool="edit_file"]').first();
       expect(await edited.getAttribute("data-expanded")).toBe("true");
@@ -188,10 +210,14 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
         .locator(".diff-path > span")
         .evaluate((node) => {
           const header = node.closest(".diff-header");
+          const badge = header?.querySelector(".diff-header-meta");
+          if (!header || !badge) return false;
+          const nodeRect = node.getBoundingClientRect();
+          const badgeRect = badge.getBoundingClientRect();
           return (
-            header !== null &&
-            node.getBoundingClientRect().right <=
-              header.getBoundingClientRect().right
+            nodeRect.right <= badgeRect.left + 1 &&
+            badgeRect.top <= nodeRect.top + 4 &&
+            nodeRect.width > 0
           );
         });
       expect(pathFits).toBe(true);
@@ -313,7 +339,51 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
         );
       });
     expect(commandInset).toBeLessThanOrEqual(16);
+
+    // 1. In the open failed command card, verify prompt title and output title share the exact same horizontal left anchor
+    const failedConsoleCard = desktopPage.locator(
+      '.tool-disclosure[data-status="failed"][data-tool="run_command"]',
+    );
+    const terminalPromptLeft = await failedConsoleCard
+      .locator(".tool-terminal-prompt .tool-section-title")
+      .evaluate((node) => node.getBoundingClientRect().left);
+    const terminalOutputLeft = await failedConsoleCard
+      .locator(".tool-terminal-output .tool-section-title")
+      .first()
+      .evaluate((node) => node.getBoundingClientRect().left);
+    expect(
+      Math.abs(terminalPromptLeft - terminalOutputLeft),
+    ).toBeLessThanOrEqual(1);
+
     await verifyEdits(desktopPage);
+
+    // 2. Verify diff header on the completed and rendered edit card:
+    // path fits within header, does not drop below or overlap badge, badge stays at or right of path
+    const diffHeaderGeom = await desktopPage
+      .locator('[data-tool="edit_file"]')
+      .first()
+      .locator(".diff-header")
+      .evaluate((header) => {
+        const pathSpan = header.querySelector(".diff-path > span");
+        const badge = header.querySelector(".diff-header-meta");
+        if (!pathSpan || !badge) {
+          throw new Error("Missing diff path or badge");
+        }
+        const pRect = pathSpan.getBoundingClientRect();
+        const bRect = badge.getBoundingClientRect();
+        return {
+          pathRight: pRect.right,
+          badgeLeft: bRect.left,
+          badgeTop: bRect.top,
+          pathTop: pRect.top,
+        };
+      });
+    expect(diffHeaderGeom.pathRight).toBeLessThanOrEqual(
+      diffHeaderGeom.badgeLeft + 1,
+    );
+    expect(diffHeaderGeom.badgeTop).toBeLessThanOrEqual(
+      diffHeaderGeom.pathTop + 4,
+    );
     if (captureDirectory)
       for (const theme of ["light", "dark"]) {
         await desktopPage.evaluate((theme) => {

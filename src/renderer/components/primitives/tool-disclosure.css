@@ -277,7 +277,7 @@
   margin: 0;
   max-height: 280px;
   overflow: auto;
-  padding: var(--space-1-5) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   background-color: var(--surface-soft);
   color: var(--text-primary);
@@ -370,7 +370,7 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-2);
   padding: 6px var(--space-3);
   background-color: var(--surface-soft);
@@ -379,10 +379,17 @@
 
 .tool-terminal-prompt {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-2);
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.tool-terminal-prompt .tool-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
 }
 
 .tool-terminal-sigil {
@@ -391,11 +398,13 @@
   font-weight: 700;
   color: var(--accent-sage);
   user-select: none;
+  line-height: 1.45;
 }
 
 .tool-terminal-header .tool-section-title {
   font-size: 11px;
   color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .tool-command {
@@ -438,7 +447,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-1-5) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   min-width: 0;
 }
 
@@ -518,15 +527,15 @@
   flex-direction: column;
   gap: var(--space-1);
   margin: 0;
-  padding: var(--space-1-5) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   background-color: var(--surface-soft);
 }
 
 .tool-param-row {
   display: grid;
-  grid-template-columns: minmax(64px, 120px) minmax(0, 1fr);
-  gap: var(--space-2);
+  grid-template-columns: minmax(56px, max-content) minmax(0, 1fr);
+  gap: var(--space-3);
   align-items: baseline;
 }
 
@@ -588,7 +597,7 @@
   margin: 0;
   max-height: 280px;
   overflow: auto;
-  padding: var(--space-1-5) 0;
+  padding: var(--space-1) 0;
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.6;
@@ -600,7 +609,7 @@
   max-height: 280px;
   overflow: auto;
   margin: 0;
-  padding: var(--space-1-5) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background-color: var(--surface-elevated);
   font-family: var(--font-mono);
@@ -665,7 +674,9 @@
 .tool-disclosure-footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--space-2);
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .tool-disclosure-footer > details[open] {
@@ -684,7 +695,7 @@
   /* A text-only summary is a tiny hit area inside an evidence card; give it a
      real target without adding visual weight. */
   min-height: 22px;
-  padding: 0 var(--space-2) 0 var(--space-1);
+  padding: 0 var(--space-2) 0 0;
   border-radius: var(--radius-xs);
 }
 
@@ -711,8 +722,9 @@
   transform: rotate(90deg);
 }
 
+.tool-details .tool-params,
 .tool-debug .tool-section {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1-5);
 }
 
 /* --------------------------------------------------------------------------
@@ -774,7 +786,12 @@
     white-space: nowrap;
   }
 
-  .tool-param-row {
+  .tool-param-row:not(.is-block) {
+    grid-template-columns: minmax(56px, max-content) minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .tool-param-row.is-block {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-1);
   }
@@ -784,6 +801,7 @@
   }
 
   .tool-terminal-header {
+    flex-wrap: wrap;
     align-items: flex-start;
   }
 

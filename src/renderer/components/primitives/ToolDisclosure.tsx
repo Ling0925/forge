@@ -583,10 +583,12 @@ function CommandConsole({
       {command && (
         <div className="tool-terminal-header tool-section">
           <div className="tool-terminal-prompt">
-            <span className="tool-terminal-sigil" aria-hidden="true">
-              $
+            <span className="tool-section-title">
+              <span className="tool-terminal-sigil" aria-hidden="true">
+                $
+              </span>
+              命令
             </span>
-            <span className="tool-section-title">命令</span>
             <pre className="tool-section-content tool-command">{command}</pre>
           </div>
           <div className="tool-terminal-header-meta">
@@ -897,7 +899,7 @@ export function ToolDisclosure({
                 </div>
               )}
               {command && (
-                <div className="tool-section">
+                <div className="tool-section tool-command-section">
                   <SectionHead
                     title="命令"
                     action={<ToolCopyButton text={command} label="复制命令" />}
@@ -906,7 +908,12 @@ export function ToolDisclosure({
                     {command}
                   </pre>
                   {cwd && (
-                    <span className="tool-command-cwd">工作目录 {cwd}</span>
+                    <span
+                      className="tool-command-cwd"
+                      title={`工作目录：${cwd}`}
+                    >
+                      工作目录 {cwd}
+                    </span>
                   )}
                 </div>
               )}

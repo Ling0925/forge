@@ -558,4 +558,20 @@ describe("tool disclosure row", () => {
     expect(html).toContain("changed late");
     expect(html).toContain("已省略");
   });
+
+  it("aligns command and standalone command sections consistently without orphaned buttons", () => {
+    const html = render({
+      toolName: "command_task",
+      command: "npm test",
+      cwd: "/repo",
+      status: "completed",
+      defaultExpanded: true,
+      output: JSON.stringify({ stdout: "PASS", exit_code: 0 }),
+    });
+    expect(html).toContain('class="tool-terminal-header tool-section"');
+    expect(html).toContain('class="tool-terminal-prompt"');
+    expect(html).toContain('class="tool-terminal-header-meta"');
+    expect(html).toContain("复制命令");
+    expect(html).toContain("复制输出");
+  });
 });
