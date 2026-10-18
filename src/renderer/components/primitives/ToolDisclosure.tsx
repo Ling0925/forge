@@ -1,6 +1,9 @@
 import {
   CaretRight,
   Check,
+  CheckCircle,
+  Circle,
+  CircleDashed,
   Copy,
   FilePlus,
   FileText,
@@ -256,7 +259,114 @@ const paramLabels: Readonly<Record<string, string>> = {
   total_chars: "总字符数",
   output_available: "输出可用",
   output_truncated: "原始输出已截断",
+  explanation: "计划说明",
+  steps: "计划步骤",
 };
+
+export interface PlanStepItem {
+  readonly step: string;
+  readonly status: "pending" | "in_progress" | "completed";
+}
+
+export interface PlanItemData {
+  readonly explanation?: string;
+  readonly steps: readonly PlanStepItem[];
+}
+
+function isPlanSteps(data: unknown): data is readonly PlanStepItem[] {
+  if (!Array.isArray(data) || data.length === 0) return false;
+  return data.every(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      typeof item.step === "string" &&
+      (item.status === "pending" ||
+        item.status === "in_progress" ||
+        item.status === "completed"),
+  );
+}
+
+export function extractPlanData(data: unknown): PlanItemData | null {
+  if (!data) return null;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof data !== "object" || data === null) return null;
+  const record = data as Record<string, unknown>;
+  const steps = record.steps;
+  if (!isPlanSteps(steps)) return null;
+  const explanation =
+    typeof record.explanation === "string" ? record.explanation : undefined;
+  return { explanation, steps };
+}
+
+function PlanStepsList({ steps }: { readonly steps: readonly PlanStepItem[] }) {
+  return (
+    <ol className="tool-plan-steps">
+      {steps.map((item, idx) => {
+        const isCompleted = item.status === "completed";
+        const isInProgress = item.status === "in_progress";
+        return (
+          <li
+            key={idx}
+            className={`tool-plan-step tool-plan-step-${item.status}`}
+          >
+            <span className="tool-plan-step-icon" aria-hidden="true">
+              {isCompleted ? (
+                <CheckCircle size={15} weight="fill" className="step-icon-completed" />
+              ) : isInProgress ? (
+                <CircleDashed size={15} weight="bold" className="step-icon-in-progress" />
+              ) : (
+                <Circle size={15} weight="regular" className="step-icon-pending" />
+              )}
+            </span>
+            <span className="tool-plan-step-num">{idx + 1}.</span>
+            <span className="tool-plan-step-text">{item.step}</span>
+            <span className={`tool-plan-step-status status-${item.status}`}>
+              {isCompleted ? "已完成" : isInProgress ? "进行中" : "待处理"}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function PlanView({ plan }: { readonly plan: PlanItemData }) {
+  const completed = plan.steps.filter((s) => s.status === "completed").length;
+  const total = plan.steps.length;
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return (
+    <div className="tool-plan-view">
+      <div className="tool-plan-header">
+        <div className="tool-plan-progress-info">
+          <span className="tool-plan-progress-tag">
+            计划进度 {completed} / {total} 项完成
+          </span>
+          <span className="tool-plan-progress-percent">{percent}%</span>
+        </div>
+        <div className="tool-plan-progress-track">
+          <div
+            className="tool-plan-progress-fill"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        {plan.explanation && (
+          <div className="tool-plan-explanation">
+            <span className="tool-plan-explanation-label">说明：</span>
+            <span>{plan.explanation}</span>
+          </div>
+        )}
+      </div>
+      <PlanStepsList steps={plan.steps} />
+    </div>
+  );
+}
 
 /** Best-effort pretty print for non-scalar argument values. */
 function prettyValue(value: unknown): string {
@@ -316,6 +426,11 @@ function renderValue(value: unknown): RenderedValue {
       return {
         block: false,
         node: <span className="tool-param-empty">空</span>,
+      };
+    if (isPlanSteps(value))
+      return {
+        block: true,
+        node: <PlanStepsList steps={value} />,
       };
     if (value.every((item) => typeof item !== "object" || item === null))
       return {
@@ -706,10 +821,31 @@ export function ToolDisclosure({
       : undefined;
   const readPath =
     toolName === "read_file" ? parameterPath || target : undefined;
+  const consoleModel = isConsole
+    ? decodeCommandConsole(output, toolName)
+    : null;
+  const result =
+    !isConsole && output !== null && output !== undefined && output !== ""
+      ? parseResult(output)
+      : null;
+  const planData =
+    extractPlanData(result?.kind === "object" ? result.record : output) ??
+    extractPlanData(parsedParams);
+  const planSummaryTarget =
+    !target && planData
+      ? (() => {
+          const completed = planData.steps.filter((s) => s.status === "completed").length;
+          const total = planData.steps.length;
+          const inProgress = planData.steps.find((s) => s.status === "in_progress");
+          if (inProgress) return `(${completed}/${total}) ${inProgress.step}`;
+          if (planData.explanation) return `(${completed}/${total}) ${planData.explanation}`;
+          return `${completed}/${total} 步已完成`;
+        })()
+      : undefined;
   const displayTarget = readPath
     ? readPath.split(/[\\/]/).pop() || readPath
-    : target || (isRunCommand ? command : undefined);
-  const showParameters = !writesFiles && !isRunCommand;
+    : target || planSummaryTarget || (isRunCommand ? command : undefined);
+  const showParameters = !writesFiles && !isRunCommand && !planData;
 
   useEffect(() => {
     if (
@@ -751,13 +887,6 @@ export function ToolDisclosure({
   const statusLabel =
     status === "running" ? "执行中" : status === "completed" ? "完成" : "失败";
 
-  const consoleModel = isConsole
-    ? decodeCommandConsole(output, toolName)
-    : null;
-  const result =
-    !isConsole && output !== null && output !== undefined && output !== ""
-      ? parseResult(output)
-      : null;
   const explicitReason =
     result?.kind === "object" && typeof result.record.error === "string"
       ? result.record.error
@@ -954,37 +1083,44 @@ export function ToolDisclosure({
                   </span>
                 </div>
               )}
-              {(hasResult ||
-                (!result && !failureReason && !changes?.length)) && (
-                <div className="tool-section">
-                  <SectionHead
-                    title="结果"
-                    {...(result?.kind === "text" && hasResult
-                      ? {
-                          action: (
-                            <ToolCopyButton
-                              text={result.text}
-                              label="复制结果"
-                            />
-                          ),
-                        }
-                      : {})}
-                  />
-                  {!result ? (
-                    <span className="tool-section-empty">
-                      {isWaiting ? "等待工具返回结果…" : "工具未返回文本"}
-                    </span>
-                  ) : result.kind === "text" ? (
-                    <pre className="tool-section-content">{result.text}</pre>
-                  ) : (
-                    <ValueRows
-                      record={result.record}
-                      {...(reasonShownAsFailure
-                        ? { skip: new Set(["error"]) }
+              {planData ? (
+                <div className="tool-section tool-plan-section">
+                  <SectionHead title="计划进度" />
+                  <PlanView plan={planData} />
+                </div>
+              ) : (
+                (hasResult ||
+                  (!result && !failureReason && !changes?.length)) && (
+                  <div className="tool-section">
+                    <SectionHead
+                      title="结果"
+                      {...(result?.kind === "text" && hasResult
+                        ? {
+                            action: (
+                              <ToolCopyButton
+                                text={result.text}
+                                label="复制结果"
+                              />
+                            ),
+                          }
                         : {})}
                     />
-                  )}
-                </div>
+                    {!result ? (
+                      <span className="tool-section-empty">
+                        {isWaiting ? "等待工具返回结果…" : "工具未返回文本"}
+                      </span>
+                    ) : result.kind === "text" ? (
+                      <pre className="tool-section-content">{result.text}</pre>
+                    ) : (
+                      <ValueRows
+                        record={result.record}
+                        {...(reasonShownAsFailure
+                          ? { skip: new Set(["error"]) }
+                          : {})}
+                      />
+                    )}
+                  </div>
+                )
               )}
             </>
           )}

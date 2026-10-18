@@ -574,4 +574,37 @@ describe("tool disclosure row", () => {
     expect(html).toContain("复制命令");
     expect(html).toContain("复制输出");
   });
+
+  it("renders update_plan with structured progress steps instead of raw JSON", () => {
+    const plan = {
+      explanation: "优化对话区域及 plan 工具展示",
+      steps: [
+        { step: "步骤一：分析代码", status: "completed" },
+        { step: "步骤二：实现结构化渲染", status: "in_progress" },
+        { step: "步骤三：自动化测试", status: "pending" },
+      ],
+    };
+    const html = render({
+      toolName: "update_plan",
+      status: "completed",
+      defaultExpanded: true,
+      parameters: plan,
+      output: JSON.stringify(plan),
+    });
+
+    // 结构化组件已渲染
+    expect(html).toContain('class="tool-plan-view"');
+    expect(html).toContain("计划进度 1 / 3 项完成");
+    expect(html).toContain("33%");
+    expect(html).toContain("优化对话区域及 plan 工具展示");
+    expect(html).toContain("步骤一：分析代码");
+    expect(html).toContain("步骤二：实现结构化渲染");
+    expect(html).toContain("步骤三：自动化测试");
+    expect(html).toContain("已完成");
+    expect(html).toContain("进行中");
+    expect(html).toContain("待处理");
+
+    // 杜绝原始 JSON pre 块
+    expect(html).not.toContain("tool-param-json");
+  });
 });
