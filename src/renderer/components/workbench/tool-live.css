@@ -12,21 +12,21 @@
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
-  padding: 4px var(--space-2);
+  padding: 5px var(--space-2);
   border-radius: var(--radius-card);
   border: 1px dashed var(--border-subtle);
   background-color: var(--surface-soft, rgba(255, 255, 255, 0.02));
   font-size: var(--text-xs);
   line-height: var(--leading-sm);
   color: var(--text-secondary);
-  animation: tool-live-card-appear 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: tool-live-card-appear 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 @keyframes tool-live-card-appear {
   0% {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   100% {
     opacity: 1;
@@ -109,16 +109,16 @@
 
 .tool-live-skeleton {
   flex: 1 1 auto;
-  height: 8px;
+  height: 9px;
   border-radius: var(--radius-sm, 4px);
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.04) 25%,
-    rgba(255, 255, 255, 0.12) 50%,
-    rgba(255, 255, 255, 0.04) 75%
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.04) 100%
   );
   background-size: 200% 100%;
-  animation: tool-live-shimmer 1.5s ease-in-out infinite;
+  animation: tool-live-shimmer 1.4s ease-in-out infinite;
 }
 
 @keyframes tool-live-shimmer {
