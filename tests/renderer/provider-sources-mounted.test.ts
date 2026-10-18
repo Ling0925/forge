@@ -41,15 +41,16 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.addStyleTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.css'))!.text });
     await page.addScriptTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.js'))!.text });
     expect(await page.getByLabel('来源名称').count()).toBe(0);
-    await page.getByRole('region', { name: '源 A的模型' }).getByText('a/two', { exact: true }).waitFor();
+    await expect.poll(() => page.getByLabel('模型（按来源分组）').locator('option').allTextContents()).toContain('a/two');
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual(['a']);
     // A new page/module instance must reuse localStorage without another remote request.
     await page.reload();
     await page.addStyleTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.css'))!.text });
     await page.addScriptTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.js'))!.text });
-    await page.getByRole('region', { name: '源 A的模型' }).getByText('a/two', { exact: true }).waitFor();
+    await expect.poll(() => page.getByLabel('模型（按来源分组）').locator('option').allTextContents()).toContain('a/two');
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual([]);
-    await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).click();
+    await page.getByLabel('管理模型来源').selectOption('a');
+    await page.getByRole('button', { name: '编辑源 A', exact: true }).click();
     await page.getByRole('dialog', { name: '编辑来源 · 源 A' }).waitFor();
     await page.getByRole('button', { name: 'a/two', exact: true }).waitFor();
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual([]);
@@ -92,19 +93,17 @@ it("manages independent sources, fetches selected /models, saves model selection
     expect(saved.source.apiKey).toBe('fixture-b');
     expect(saved.source.source.apiMode).toBe('anthropic');
     expect(await page.getByRole('dialog').count()).toBe(0);
-    expect(await page.locator('.provider-source-row').count()).toBe(2);
+    expect(await page.locator('.provider-overview').count()).toBe(0);
     const b = saved.source.source.id;
-    await page.getByRole('region', { name: '源 B的模型' }).getByText(`${b}/two`, { exact: true }).waitFor();
-    await page.getByLabel('搜索所有来源的模型').fill('/two');
-    expect(await page.locator('.provider-overview-models li').count()).toBe(2);
-    await page.getByLabel('搜索所有来源的模型').fill('源 B');
-    expect(await page.getByRole('region', { name: '源 A的模型' }).locator('li').count()).toBe(0);
-    expect(await page.getByRole('region', { name: '源 B的模型' }).locator('li').count()).toBe(2);
-    await page.getByLabel('搜索所有来源的模型').fill('');
+    const grouped = page.getByLabel('模型（按来源分组）');
+    await expect.poll(() => grouped.locator('option').allTextContents()).toContain(`${b}/two`);
+    expect(await grouped.locator('optgroup').evaluateAll(groups => groups.map(group => group.label))).toEqual(['源 A · 当前', '源 B']);
+    expect(await grouped.locator('optgroup option').count()).toBe(4);
+    expect(await page.locator('.provider-source-list').evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(160);
     await page.evaluate(() => Reflect.set(window, 'failModels', true));
     await page.getByRole('button', { name: '刷新源 A的模型' }).click();
     await page.getByText('目录请求失败。可点击刷新重试。').waitFor();
-    expect(await page.locator('.provider-overview-models li').count()).toBe(4);
+    expect(await grouped.locator('optgroup option').count()).toBe(4);
     await page.evaluate(() => Reflect.set(window, 'failModels', false));
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.locator('.settings-page').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -131,7 +130,12 @@ it("manages independent sources, fetches selected /models, saves model selection
       await page.emulateMedia({ colorScheme: 'light' });
       await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     }
-    await page.getByRole('button', { name: /源 B.*https:\/\/b.test/ }).click();
+    const callsBeforeSelection = await page.evaluate(() => Reflect.get(window, 'calls').length);
+    await grouped.selectOption(JSON.stringify([b, `${b}/two`]));
+    await page.getByRole('dialog', { name: '编辑来源 · 源 B' }).waitFor();
+    expect(await page.getByLabel('默认模型 ID').inputValue()).toBe(`${b}/two`);
+    expect(await page.evaluate(() => Reflect.get(window, 'calls').length)).toBe(callsBeforeSelection);
+    expect(await page.locator('#active').innerText()).toBe('a');
     if (captureDirectory) {
       for (const width of [390, 1440]) {
         for (const theme of ['light', 'dark'] as const) {
@@ -154,12 +158,13 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.getByRole('button', { name: '保存来源', exact: true }).click();
     await page.getByText('来源已保存，可以从 /models 拉取模型。').waitFor();
     expect((await page.evaluate(() => Reflect.get(window, 'calls').at(-1))).source.apiKey).toBeUndefined();
-    await page.getByRole('button', { name: /源 B.*https:\/\/b.test/ }).click();
+    await page.getByRole('button', { name: '编辑源 B', exact: true }).click();
     await page.getByRole('button', { name: '设为当前来源' }).click();
     await expect.poll(() => page.locator('#active').innerText()).toBe(b);
     expect(await page.getByRole('button', { name: '删除来源', exact: true }).isDisabled()).toBe(true);
     await page.getByRole('button', { name: '关闭', exact: true }).click();
-    await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).click();
+    await page.getByLabel('管理模型来源').selectOption('a');
+    await page.getByRole('button', { name: '编辑源 A', exact: true }).click();
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual([b, 'a']);
     expect(await page.getByLabel('默认模型 ID').inputValue()).toBe('a/one');
     expect(await page.getByLabel('来源 API 密钥').inputValue()).toBe('');
@@ -189,15 +194,16 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.setViewportSize({ width: 390, height: 900 });
     expect(await page.locator('.provider-catalog').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await page.getByRole('button', { name: '关闭', exact: true }).click();
-    const outsideModels = page.getByRole('region', { name: '源 A的模型' }).locator('.provider-overview-models');
-    expect(await outsideModels.locator('li').count()).toBe(67);
-    await outsideModels.locator('li').last().scrollIntoViewIfNeeded();
-    expect(await outsideModels.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-    await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).click();
+    expect(await grouped.locator('optgroup[label="源 A"] option').count()).toBe(67);
+    expect(await grouped.evaluate(element => element.getBoundingClientRect().width <= element.parentElement!.clientWidth)).toBe(true);
+    expect(await page.locator('.provider-source-list').evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(180);
+    await page.getByLabel('管理模型来源').selectOption('a');
+    await page.getByRole('button', { name: '编辑源 A', exact: true }).click();
     await page.getByRole('button', { name: '删除来源', exact: true }).click();
     expect(await page.getByText('删除“源 A”及其保存的密钥？此操作不可撤销。').count()).toBe(1);
     await page.getByRole('button', { name: '确认删除来源' }).click();
     await page.getByText('来源已删除。其他来源不受影响。').waitFor();
-    expect(await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).count()).toBe(0);
+    expect(await grouped.locator('optgroup').count()).toBe(1);
+    expect(await page.getByLabel('管理模型来源').locator('option').allTextContents()).toEqual(['源 B · 当前']);
   } finally { await browser.close(); }
 }, 20000);

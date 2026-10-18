@@ -78,7 +78,10 @@ export function ProviderSources({
   const [catalogErrors, setCatalogErrors] = useState<Record<string, string>>(
     {},
   );
-  const [overviewSearch, setOverviewSearch] = useState("");
+  const [overviewSourceId, setOverviewSourceId] = useState("");
+  const overviewSource = sources.find((item) => item.id === overviewSourceId)
+    ?? sources.find((item) => item.id === settings?.activeSourceId)
+    ?? sources[0];
   const requestedCatalogs = useRef(new Set<string>());
   const pendingCatalogs = useRef(new Map<string, Promise<readonly string[]>>());
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -344,107 +347,62 @@ export function ProviderSources({
       </div>
       {sources.length > 0 ? (
         <div className="provider-source-list" aria-label="已保存的来源">
-          <Input
-            aria-label="搜索所有来源的模型"
-            placeholder="搜索模型 ID 或来源名称"
-            value={overviewSearch}
-            onChange={(event) => setOverviewSearch(event.target.value)}
-          />
-          {sources.map((item) => {
-            const key = catalogKey(item);
-            const catalog = catalogs[key];
-            const query = overviewSearch.trim().toLowerCase();
-            const matchesSource = item.label.toLowerCase().includes(query);
-            const displayed = (catalog ?? []).filter(
-              (model) => matchesSource || model.toLowerCase().includes(query),
-            );
-            return (
-              <section
-                key={item.id}
-                className="provider-overview"
-                aria-label={`${item.label}的模型`}
-              >
-                <button
-                  type="button"
-                  className="provider-source-row"
-                  aria-haspopup="dialog"
-                  disabled={busy || hasEdits}
-                  onClick={() => openEditor(item.id)}
-                >
-                  <Plugs size={20} aria-hidden="true" />
-                  <span className="provider-source-info">
-                    <span className="provider-source-title">
-                      <strong>{item.label}</strong>
-                      {settings?.activeSourceId === item.id && (
-                        <span className="provider-current">
-                          <Check size={12} />
-                          当前
-                        </span>
-                      )}
-                    </span>
-                    <span className="provider-source-url">{item.baseUrl}</span>
-                    <span className="provider-source-detail">
-                      {
-                        protocols.find(
-                          (protocol) =>
-                            protocol.value ===
-                            (item.apiMode ?? "chat-completions"),
-                        )?.label
-                      }{" "}
-                      · {item.model || "尚未设置默认模型"}
-                    </span>
-                  </span>
-                  <span className="provider-source-selection">编辑</span>
-                </button>
-                <div className="provider-overview-toolbar">
-                  <span>
-                    {catalog === undefined
-                      ? "模型目录"
-                      : `${displayed.length} / ${catalog.length} 个模型`}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={<ArrowClockwise size={14} />}
-                    aria-label={`刷新${item.label}的模型`}
-                    loading={catalogLoading[key] ?? false}
-                    onClick={() =>
-                      void loadCatalog(item, true).catch(() => undefined)
-                    }
-                  >
-                    刷新模型
-                  </Button>
-                </div>
-                {catalogErrors[key] && (
-                  <p className="provider-feedback provider-error">
-                    {catalogErrors[key]}。可点击刷新重试。
-                  </p>
-                )}
-                {catalog === undefined ? (
-                  <p className="provider-hint">
-                    {catalogLoading[key]
-                      ? "正在加载模型…"
-                      : "目录尚未加载，可刷新重试。"}
-                  </p>
-                ) : displayed.length ? (
-                  <ul className="provider-overview-models">
-                    {displayed.map((model) => (
-                      <li key={model}>
-                        <span>{model}</span>
-                        {item.model === model && <small>默认</small>}
-                      </li>
+          <Field id={`${id}-catalog`} label="模型（按来源分组）">
+            <Select
+              id={`${id}-catalog`}
+              value=""
+              disabled={busy || hasEdits}
+              onChange={(event) => {
+                const [sourceId, model] = JSON.parse(event.target.value) as [string, string];
+                setOverviewSourceId(sourceId);
+                openEditor(sourceId);
+                setDraft((old) => ({ ...old, model }));
+              }}
+            >
+              <option value="" disabled>选择模型以编辑来源默认值</option>
+              {sources.map((item) => {
+                const key = catalogKey(item);
+                const catalog = catalogs[key];
+                const models = [...new Set([...(item.model ? [item.model] : []), ...(catalog ?? [])])];
+                return (
+                  <optgroup key={item.id} label={`${item.label}${settings?.activeSourceId === item.id ? " · 当前" : ""}`}>
+                    {models.map((model) => (
+                      <option key={model} value={JSON.stringify([item.id, model])}>
+                        {model}{item.model === model ? " · 默认" : ""}
+                      </option>
                     ))}
-                  </ul>
-                ) : (
-                  <p className="provider-hint">
-                    {catalog.length
-                      ? "没有匹配的模型。"
-                      : "此来源返回空目录，可编辑来源手动填写模型 ID。"}
-                  </p>
-                )}
-              </section>
-            );
-          })}
+                    {(!catalog || catalog.length === 0) && (
+                      <option disabled>{catalogLoading[key] ? "正在加载模型…" : catalogErrors[key] ? "加载失败，可刷新重试" : "暂无目录，可手动填写模型 ID"}</option>
+                    )}
+                  </optgroup>
+                );
+              })}
+            </Select>
+          </Field>
+          {overviewSource && (
+            <div className="provider-compact-controls">
+              <Select
+                aria-label="管理模型来源"
+                value={overviewSource.id}
+                disabled={busy || hasEdits}
+                options={sources.map((item) => ({ value: item.id, label: `${item.label}${settings?.activeSourceId === item.id ? " · 当前" : ""}` }))}
+                onChange={(event) => setOverviewSourceId(event.target.value)}
+              />
+              <Button size="sm" variant="secondary" icon={<Plugs size={16} />}
+                aria-label={`编辑${overviewSource.label}`} disabled={busy || hasEdits}
+                onClick={() => openEditor(overviewSource.id)}>编辑来源</Button>
+              <Button size="sm" variant="ghost" icon={<ArrowClockwise size={14} />}
+                aria-label={`刷新${overviewSource.label}的模型`}
+                disabled={busy || hasEdits}
+                loading={catalogLoading[catalogKey(overviewSource)] ?? false}
+                onClick={() => void loadCatalog(overviewSource, true).catch(() => undefined)}>刷新模型</Button>
+            </div>
+          )}
+          {overviewSource && catalogErrors[catalogKey(overviewSource)] && (
+            <p className="provider-feedback provider-error">
+              {catalogErrors[catalogKey(overviewSource)]}。可点击刷新重试。
+            </p>
+          )}
         </div>
       ) : (
         <p className="provider-empty">添加第一个来源，连接你使用的模型服务。</p>

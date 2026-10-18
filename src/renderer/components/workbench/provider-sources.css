@@ -51,8 +51,30 @@
 .provider-source-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   min-width: 0;
+}
+
+.provider-source-list .form-select {
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.provider-compact-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.provider-compact-controls > .form-select {
+  flex: 1 1 160px;
+  width: 0;
+}
+
+.provider-compact-controls > .btn {
+  flex-shrink: 0;
 }
 
 /* Card-style container for each provider source */
