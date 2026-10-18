@@ -136,10 +136,9 @@
 }
 
 @media (pointer: coarse), (max-width: 768px) {
-  .wb-app .composer-split .composer-activity-slot {
+  .wb-app .composer-split .composer-activity-slot.is-visible {
     min-height: 44px;
   }
-
 }
 
 .wb-app .composer-split .composer-submit-col .btn,

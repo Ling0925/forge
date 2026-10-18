@@ -304,6 +304,29 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       : undefined;
   const running =
     run?.status === "running" || run?.status === "awaiting_approval";
+  const [activityVisible, setActivityVisible] = useState(Boolean(running));
+  const [activityClosing, setActivityClosing] = useState(false);
+  const lastActiveRun = useRef(run);
+  if (running) {
+    lastActiveRun.current = run;
+  }
+
+  useEffect(() => {
+    if (running) {
+      setActivityVisible(true);
+      setActivityClosing(false);
+    } else if (activityVisible) {
+      setActivityClosing(true);
+      const timer = setTimeout(() => {
+        setActivityVisible(false);
+        setActivityClosing(false);
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [running]);
+
+  const displayRun = running ? run : lastActiveRun.current;
+  const showActivity = activityVisible || running;
   const [changingPermission, setChangingPermission] = useState(false);
   const changePermission = async (next: string) => {
     const selected = permissionSchema.parse(next);
@@ -624,10 +647,14 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         </div>
       )}
       <div className="composer-inner composer-split">
-        <div className="composer-activity-slot">
-          {running && (
+        <div
+          className={`composer-activity-slot${showActivity ? " is-visible" : ""}${
+            running && !activityClosing ? " is-entering" : ""
+          }${activityClosing ? " is-leaving" : ""}`}
+        >
+          {showActivity && (
             <output
-              className={`composer-activity${run?.status === "running" && !run.isCancelling ? " is-executing" : ""}`}
+              className={`composer-activity${displayRun?.status === "running" && !displayRun.isCancelling ? " is-executing" : ""}`}
               aria-live="polite"
               aria-atomic="true"
             >
@@ -637,18 +664,18 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 <span />
               </span>
               <span>
-                {run?.isCancelling
+                {displayRun?.isCancelling
                   ? "正在停止"
-                  : run?.status === "awaiting_approval"
+                  : displayRun?.status === "awaiting_approval"
                     ? "等待审批"
-                    : run?.providerRetry
-                      ? `重试 ${run.providerRetry}/5`
+                    : displayRun?.providerRetry
+                      ? `重试 ${displayRun.providerRetry}/5`
                     : "正在执行"}
               </span>
-              <OutputSpeed run={run} />
+              <OutputSpeed run={displayRun} />
             </output>
           )}
-          {running && (
+          {showActivity && (
             <div className="composer-live-hints" aria-label="快捷键提示">
               <span className="composer-live-hint">Enter 排队</span>
               <span className="composer-live-hint">Alt+Enter 插话</span>

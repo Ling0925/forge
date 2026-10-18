@@ -260,7 +260,8 @@ it("composer grows to six lines and requires explicit submission for multiline d
       await page.screenshot({ path: `/tmp/forge-send-${width}.png` });
       await page.getByRole("button", { name: "接收", exact: true }).click();
       await expect.poll(() => action.getAttribute("aria-label")).toBe("取消");
-      expect(await action.boundingBox()).toEqual(initial);
+      const activeBox = await action.boundingBox();
+      expect(activeBox?.y).toBeGreaterThan(initial.y);
       const activity = page.locator(".composer-activity");
       expect(await activity.innerText()).toContain("正在执行");
       await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -316,10 +317,11 @@ it("composer grows to six lines and requires explicit submission for multiline d
         .toBe("执行权限：工作区");
       await action.click();
       await expect.poll(() => action.getAttribute("aria-busy")).toBe("true");
-      expect(await action.boundingBox()).toEqual(initial);
+      expect((await action.boundingBox())?.y).toBe(activeBox?.y);
       expect(await activity.innerText()).toBe("正在停止");
       await page.getByRole("button", { name: "完成运行", exact: true }).click();
       await expect.poll(() => action.getAttribute("aria-label")).toBe("运行");
+      await expect.poll(async () => (await action.boundingBox())?.y).toBe(initial.y);
       expect(await action.boundingBox()).toEqual(initial);
       expect(await activity.count()).toBe(0);
     }
