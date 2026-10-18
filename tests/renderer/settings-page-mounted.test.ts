@@ -42,7 +42,7 @@ it("settings page saves real fields, retains failed drafts and fits desktop/mobi
     await page.getByText('设置已保存。执行配置用于新的运行；当前运行不会被中断。').waitFor();
     expect(await page.evaluate(() => Reflect.get(window, 'calls')[0])).toEqual({ settings: { theme: 'dark' } });
     await nav('模型连接').click();
-    expect(await page.getByRole('button', { name: '从 /models 拉取' }).isDisabled()).toBe(true);
+    expect(await page.getByRole('button', { name: '从 /models 拉取' }).count()).toBe(0);
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toBe(0);
     await page.getByLabel('默认思考强度').selectOption('high');
     await nav('上下文与记忆').click();
@@ -86,6 +86,7 @@ it("settings page saves real fields, retains failed drafts and fits desktop/mobi
     expect(await page.locator('.settings-page').isVisible()).toBe(false);
     await page.getByRole('button', { name: '重开设置' }).click();
     await nav('模型连接').click();
+    await page.getByRole('button', { name: '添加来源' }).click();
     expect(await page.getByLabel('来源 API 密钥', { exact: true }).inputValue()).toBe('');
   } finally { await browser.close(); }
 }, 30000);

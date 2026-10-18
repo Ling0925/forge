@@ -10,6 +10,7 @@ it("manages independent sources, fetches selected /models, saves model selection
     import {Settings} from './src/renderer/components/workbench/Settings';
     import {TestProvider} from './src/renderer/state/workbench-context';
     import './src/renderer/styles/global.css';
+    import './src/renderer/components/workbench/app.css';
     window.calls=[]; window.reads=[]; window.failModels=false; window.failSave=false; window.extraModels=[];
     window.forge={listModels:async(id)=>{window.reads.push(id);if(window.failModels)throw Error('目录请求失败');return [id+'/one',id+'/two',...window.extraModels]}};
     createRoot(document.getElementById('root')).render(<TestProvider><Settings/></TestProvider>);
@@ -29,7 +30,7 @@ it("manages independent sources, fetches selected /models, saves model selection
           if(op.type==='remove')sources=sources.filter(s=>s.id!==op.id);
           const selected=sources.find(s=>s.id===active);return {...old,providerSources:sources,activeSourceId:active,baseUrl:selected.baseUrl,model:selected.model,hasApiKey:selected.hasApiKey};
         });return true};
-        return <C.Provider value={{state:{settings,isSettingsOpen},updateSettings,openSettings}}><output id="active">{settings.activeSourceId}</output>{children}</C.Provider>
+        return <C.Provider value={{state:{settings,isSettingsOpen},updateSettings,openSettings}}><output id="active" hidden>{settings.activeSourceId}</output>{children}</C.Provider>
       }` }));
   } }] });
   const browser = await chromium.launch({ headless: true });
@@ -38,9 +39,32 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.setContent('<div id="root"></div>');
     await page.addStyleTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.css'))!.text });
     await page.addScriptTag({ content: bundle.outputFiles.find(f => f.path.endsWith('.js'))!.text });
+    expect(await page.getByLabel('来源名称').count()).toBe(0);
+    await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).click();
+    await page.getByRole('dialog', { name: '编辑来源 · 源 A' }).waitFor();
     await page.getByRole('button', { name: '从 /models 拉取' }).click();
     await page.getByRole('button', { name: 'a/two', exact: true }).waitFor();
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual(['a']);
+    await page.getByRole('button', { name: '关闭', exact: true }).click();
+    await page.getByRole('button', { name: '添加来源' }).click();
+    await page.getByRole('dialog', { name: '添加来源', exact: true }).waitFor();
+    expect(await page.getByLabel('来源名称').evaluate(el => el === document.activeElement)).toBe(true);
+    await page.keyboard.press('Shift+Tab');
+    expect(await page.getByRole('button', { name: '关闭面板' }).evaluate(el => el === document.activeElement)).toBe(true);
+    await page.locator('.provider-heading > button').first().evaluate(el => el.focus());
+    expect(await page.getByRole('button', { name: '关闭面板' }).evaluate(el => el === document.activeElement)).toBe(true);
+    await page.keyboard.press('Tab');
+    expect(await page.getByLabel('来源名称').evaluate(el => el === document.activeElement)).toBe(true);
+    await page.getByLabel('来源名称').fill('未保存来源');
+    await page.keyboard.press('Escape');
+    await page.getByText('此来源有未保存的修改，确定放弃并关闭？').waitFor();
+    expect(await page.getByRole('button', { name: '继续编辑' }).evaluate(el => el === document.activeElement)).toBe(true);
+    await page.getByRole('button', { name: '继续编辑' }).click();
+    expect(await page.getByLabel('来源名称').inputValue()).toBe('未保存来源');
+    await page.getByRole('button', { name: '关闭面板' }).click();
+    await page.getByRole('button', { name: '放弃修改并关闭' }).click();
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(await page.getByRole('button', { name: '添加来源' }).evaluate(el => el === document.activeElement)).toBe(true);
     await page.getByRole('button', { name: '添加来源' }).click();
     await page.getByLabel('来源名称').fill('源 B');
     await page.getByLabel('API 地址', { exact: true }).fill('https://b.test/v1');
@@ -59,6 +83,8 @@ it("manages independent sources, fetches selected /models, saves model selection
     const saved = await page.evaluate(() => Reflect.get(window, 'calls').at(-1));
     expect(saved.source.apiKey).toBe('fixture-b');
     expect(saved.source.source.apiMode).toBe('anthropic');
+    expect(await page.getByRole('dialog').count()).toBe(0);
+    expect(await page.locator('.provider-source-row').count()).toBe(2);
     const captureDirectory = process.env.FORGE_QA_DIR;
     if (captureDirectory) {
       await mkdir(captureDirectory, { recursive: true });
@@ -68,7 +94,6 @@ it("manages independent sources, fetches selected /models, saves model selection
           await page.setViewportSize({ width, height: 900 });
           await page.emulateMedia({ colorScheme: theme });
           await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
-          await page.getByLabel('协议', { exact: true }).evaluate(element => element.scrollIntoView({ block: 'center' }));
           expect(await page.locator('.settings-page-scroll').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
           await page.screenshot({ path: resolve(captureDirectory, `provider-${width}-${theme}.png`), animations: 'disabled' });
         }
@@ -78,6 +103,7 @@ it("manages independent sources, fetches selected /models, saves model selection
       await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     }
     const b = saved.source.source.id;
+    await page.getByRole('button', { name: /源 B.*https:\/\/b.test/ }).click();
     await page.getByRole('button', { name: '从 /models 拉取' }).click();
     if (captureDirectory) {
       for (const width of [390, 1440]) {
@@ -85,6 +111,7 @@ it("manages independent sources, fetches selected /models, saves model selection
           await page.setViewportSize({ width, height: 900 });
           await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
           await page.getByLabel('搜索模型').evaluate(element => element.scrollIntoView({ block: 'center' }));
+          expect(await page.getByRole('dialog').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
           await page.screenshot({ path: resolve(captureDirectory, `catalog-${width}-${theme}.png`), animations: 'disabled' });
         }
       }
@@ -100,16 +127,18 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.getByRole('button', { name: '保存来源', exact: true }).click();
     await page.getByText('来源已保存，可以从 /models 拉取模型。').waitFor();
     expect((await page.evaluate(() => Reflect.get(window, 'calls').at(-1))).source.apiKey).toBeUndefined();
+    await page.getByRole('button', { name: /源 B.*https:\/\/b.test/ }).click();
     await page.getByRole('button', { name: '设为当前来源' }).click();
     await expect.poll(() => page.locator('#active').innerText()).toBe(b);
     expect(await page.getByRole('button', { name: '删除来源', exact: true }).isDisabled()).toBe(true);
+    await page.getByRole('button', { name: '关闭', exact: true }).click();
     await page.getByRole('button', { name: /源 A.*https:\/\/a.test/ }).click();
     expect(await page.evaluate(() => Reflect.get(window, 'reads'))).toEqual(['a', b]);
     expect(await page.getByLabel('默认模型 ID').inputValue()).toBe('a/one');
     expect(await page.getByLabel('来源 API 密钥').inputValue()).toBe('');
     await page.getByLabel('协议', { exact: true }).selectOption('responses');
     expect(await page.locator('.model-catalog-option').count()).toBe(0);
-    expect(await page.getByRole('button', { name: '添加来源' }).isDisabled()).toBe(true);
+    expect(await page.locator('.provider-heading > button').first().isDisabled()).toBe(true);
     await page.getByRole('button', { name: '放弃此来源修改' }).click();
     await page.getByRole('button', { name: 'a/two', exact: true }).waitFor();
     await page.getByLabel('API 地址', { exact: true }).fill('https://changed.test/v1');
