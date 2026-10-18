@@ -1,12 +1,13 @@
 import { CaretDown, CaretRight, Check, Copy } from "@phosphor-icons/react";
-import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
 import type {
   ApprovalRequest,
   SessionId,
   SessionSnapshot,
 } from "../../shared-types";
-import { reduceTimeline } from "../../state/timeline";
+import { reduceTimeline, type TimelineItem } from "../../state/timeline";
+import { completedTurnExecutions, type CompletedTurnExecution } from "../../state/turn-execution";
 import { TranscriptScrollState } from "../../state/transcript-scroll";
 import { useWorkbench } from "../../state/workbench-context";
 import { ApprovalPanel } from "../primitives/ApprovalPanel";
@@ -335,6 +336,38 @@ function renderTimelineEntry(
   );
 }
 
+function ExecutionProcess({
+  execution,
+  children,
+}: {
+  readonly execution: CompletedTurnExecution | undefined;
+  readonly children: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (!execution) return <>{children}</>;
+  return (
+    <div className="transcript-execution">
+      <button
+        type="button"
+        className="transcript-execution-summary"
+        aria-expanded={expanded}
+        aria-label={expanded ? "收起本轮执行过程" : "展开本轮执行过程"}
+        onClick={() => setExpanded((value) => !value)}
+        title="本轮总耗时含工具执行与等待；速度 = 本轮输出 token ÷ 总耗时，不含子会话用量"
+      >
+        {expanded ? <CaretDown size={13} aria-hidden="true" /> : <CaretRight size={13} aria-hidden="true" />}
+        <Check size={13} aria-hidden="true" />
+        <span>done</span>
+        <span aria-hidden="true">·</span>
+        <span>总耗时 {execution.duration}</span>
+        <span aria-hidden="true">·</span>
+        <span>{execution.speed}</span>
+      </button>
+      {expanded && <div className="transcript-turn-body">{children}</div>}
+    </div>
+  );
+}
+
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
 }: { readonly snapshot: SessionSnapshot }) {
@@ -349,6 +382,7 @@ export const StoredTranscript = memo(function StoredTranscript({
     (item) => item.kind === "error" && item.historical,
   );
   const turns = partitionTurns(timeline);
+  const executions = completedTurnExecutions(snapshot);
 
   return (
     <>
@@ -368,7 +402,14 @@ export const StoredTranscript = memo(function StoredTranscript({
       {turns.map((turn) => {
         const isCollapsed = Boolean(collapsedTurns[turn.id]);
         const userItem = turn.userEntry?.item;
-        const blocks = groupTurnEntries(turn.items, headers);
+        const execution = executions[turn.turnNumber - 1];
+        const finalEntry = execution
+          ? turn.items.find(({ item }) => item.id === execution.finalMessageId)
+          : undefined;
+        const processItems = finalEntry
+          ? turn.items.filter((entry) => entry !== finalEntry)
+          : turn.items;
+        const blocks = groupTurnEntries(processItems, headers);
         const summaryText = computeTurnSummary(turn.items);
 
         return (
@@ -427,45 +468,48 @@ export const StoredTranscript = memo(function StoredTranscript({
                 </button>
               ) : (
                 <div className="transcript-turn-body">
-                  {blocks.map((block) => {
-                    if (block.kind === "single") {
-                      return renderTimelineEntry(block.entry, snapshot, headers, phases);
-                    }
-                    return (
-                      <div className="tool-call-group" key={block.id}>
-                        {block.entries.map((entry) => {
-                          const { item, index } = entry;
-                          if (item.kind !== "tool") return null;
-                          const argvActivity =
-                            item.call.function.name === "run_command"
-                              ? commandActivity(item.call)
-                              : undefined;
-                          return (
-                            <ToolDisclosure
-                              key={item.id}
-                              toolName={item.call.function.name}
-                              target={toolActivity(item.call).target || undefined}
-                              command={argvActivity?.command || undefined}
-                              cwd={argvActivity?.cwd || undefined}
-                              parameters={item.call.function.arguments.slice(0, 12000)}
-                              output={item.output.slice(0, 24000)}
-                              truncated={
-                                item.output.length > 24000 ||
-                                item.call.function.arguments.length > 12000
-                              }
-                              status={item.status}
-                              {...(item.durationMs === undefined
-                                ? {}
-                                : { durationMs: item.durationMs })}
-                              {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
-                              changes={item.changes}
-                              autoCollapsed={foldedTool(index, phases)}
-                            />
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
+                  <ExecutionProcess execution={finalEntry ? execution : undefined}>
+                    {blocks.map((block) => {
+                      if (block.kind === "single") {
+                        return renderTimelineEntry(block.entry, snapshot, headers, phases);
+                      }
+                      return (
+                        <div className="tool-call-group" key={block.id}>
+                          {block.entries.map((entry) => {
+                            const { item, index } = entry;
+                            if (item.kind !== "tool") return null;
+                            const argvActivity =
+                              item.call.function.name === "run_command"
+                                ? commandActivity(item.call)
+                                : undefined;
+                            return (
+                              <ToolDisclosure
+                                key={item.id}
+                                toolName={item.call.function.name}
+                                target={toolActivity(item.call).target || undefined}
+                                command={argvActivity?.command || undefined}
+                                cwd={argvActivity?.cwd || undefined}
+                                parameters={item.call.function.arguments.slice(0, 12000)}
+                                output={item.output.slice(0, 24000)}
+                                truncated={
+                                  item.output.length > 24000 ||
+                                  item.call.function.arguments.length > 12000
+                                }
+                                status={item.status}
+                                {...(item.durationMs === undefined
+                                  ? {}
+                                  : { durationMs: item.durationMs })}
+                                {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
+                                changes={item.changes}
+                                autoCollapsed={foldedTool(index, phases)}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </ExecutionProcess>
+                  {finalEntry && renderTimelineEntry(finalEntry, snapshot, headers, phases)}
                 </div>
               )
             )}
@@ -626,7 +670,7 @@ export function Transcript() {
           if (
             event.target instanceof Element &&
             event.target.closest(
-              ".tool-disclosure-header, summary, .transcript-turn-toggle, .transcript-turn-collapsed-bar",
+              ".tool-disclosure-header, summary, .transcript-turn-toggle, .transcript-turn-collapsed-bar, .transcript-execution-summary",
             )
           ) {
             navigation.current.inspectDisclosure();

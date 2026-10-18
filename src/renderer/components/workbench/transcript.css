@@ -300,9 +300,43 @@
   color: var(--accent);
 }
 
-/* ==========================================================================
-   Tool call compact grouping
-   ========================================================================== */
+/* Completed execution: one quiet summary, with the final answer kept outside. */
+.transcript-execution {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.transcript-execution-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+
+.transcript-execution-summary:hover {
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.transcript-execution-summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
 .tool-call-group {
   display: flex;
   flex-direction: column;
