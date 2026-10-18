@@ -19,7 +19,7 @@ const web = await createWebHost({
   workspace: argument("--workspace", process.cwd()),
   host,
   port,
-  restrictWorkspace: true,
+  restrictWorkspace: false,
 });
 const vite = await createViteServer({
   configFile: false,

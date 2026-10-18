@@ -2,7 +2,7 @@
 
 Web 与 Electron 复用 `src/renderer` 的全部 React 页面、组件和样式；`src/shared/bridge.ts` 是共用的已校验 RPC 桥接，只有宿主通信与少量能力不同。CLI 和桌面启动入口不变。
 
-Android 扫码连接、桌面内开启的共享局域网核心，以及不依赖 Vite 的 `pnpm build:web` / `pnpm serve:web` 入口见 [Android 局域网客户端](ANDROID.md)。本文的 `dev:web` 保留开发热更新和固定工作区行为；设置中的“手机连接”可以显示当前工作台地址二维码。
+Android 扫码连接、桌面内开启的共享局域网核心，以及不依赖 Vite 的 `pnpm build:web` / `pnpm serve:web` 入口见 [Android 局域网客户端](ANDROID.md)。本文的 `dev:web` 提供开发热更新和多工作区支持；设置中的“手机连接”可以显示当前工作台地址二维码。
 
 ## 启动
 
@@ -12,7 +12,7 @@ pnpm dev:web --host 192.168.8.108 --port 5173 --workspace /home/ling/services/de
 
 请替换成本机实际局域网 IPv4 和项目目录。不传参数时只监听 `127.0.0.1:5173`，工作区为当前目录。必须指定单个 IPv4，不能用 `0.0.0.0`。服务启动后打印访问地址，浏览器直接打开即可，**不需要访问密码或登录**。
 
-运行时使用现有 Harness 默认配置与存储（尊重 `FORGE_HOME`），API 密钥留在 Node 后端，不发送回浏览器。没有配置模型时，在共享设置页配置。Web 会话列表仅显示启动工作区，会话操作也会检查其工作区。目录选择按钮返回固定的服务器工作区，不是浏览器所在机器的目录；桌面文件导出在 Web 中禁用。
+运行时使用现有 Harness 默认配置与存储（尊重 `FORGE_HOME`），API 密钥留在 Node 后端，不发送回浏览器。没有配置模型时，在共享设置页配置。`dev:web` 会话列表显示同一存储中的所有项目，可查看、操作其他工作区的会话。新任务的“服务器工作区”输入框可修改为服务器上的其他项目绝对路径；`--workspace` 只指定默认目录，不限制会话范围，路径不是浏览器所在机器的目录。正式 `serve:web` 仍限制到启动工作区，桌面文件导出在 Web 中禁用。
 
 - renderer 的 React/CSS 由 Vite 热更新，无需编译或重开 Electron。
 - 共享核心、Web 后端与启动脚本修改后，需要结束当前任务并重启此命令；不会在代理改代码时自动重启后端。
@@ -53,14 +53,14 @@ Web 工作台可以把两类 HTML 渲染成真实页面：会话中围栏标记�
 
 - 预览文档由后端单独返回（`POST /api/preview`、`POST /api/preview/file` 取得一次性 URL，`GET /preview/document?id=…` 返回内容），和主页面同源，无需认证 cookie；URL 中的 id 为 24 字节随机值，保留最近 24 个文档、30 分钟、合计 8 MiB。
 - 预览文档只以 `sandbox="allow-scripts"` 嵌入（没有 `allow-same-origin`），所以脚本在预览内运行，但读不到工作台 DOM、cookie 或工作区文件；文档 CSP 为 `default-src 'none'`、`connect-src 'none'`、`form-action 'none'`，图片/字体/媒体只允许 `data:`/`blob:`，无法访问网络。`X-Frame-Options` 仅对这个端点放宽为 `SAMEORIGIN`，工作台其余页面仍是 `DENY`。
-- 文件预览只读取工作区内、非符号链接、非隐藏路径（`.git`、`.env*` 等一律拒绝）、UTF-8、不超过 1 MiB 的 `.html`/`.htm` 文件；这是读取文件的快捷方式，不会写入或执行工作区内容。
+- 按路径读取文件的预览只在单工作区服务中可用，且只读取工作区内、非符号链接、非隐藏路径（`.git`、`.env*` 等一律拒绝）、UTF-8、不超过 1 MiB 的 `.html`/`.htm` 文件。`dev:web` 多工作区模式拒绝此入口，避免将其他项目的相对路径误读为启动项目；代码块 HTML 预览仍可用。
 - 该能力依赖 Web 后端端点，桌面 Electron 宿主没有对应实现，因此共享 renderer 在桌面端不显示预览按钮。修改后端或共享契约后需要重启 `pnpm dev:web`；只改 renderer 时热更新即可。
 
 ## 访问边界
 
 这是可信局域网中的单用户 **无密码 HTTP 开发入口**，不是公网部署方案、多租户服务或 OS 沙箱。任何能访问此地址的人都能使用工作台，包括配置 Provider/MCP 和批准命令；会话、代码等在 HTTP 网络上传输，没有 TLS 加密。不要端口转发到公网，不要在不可信网络使用。
 
-HTTP API 仍校验精确 Host/Origin、JSON POST 和已登记的页面标识；事件 WebSocket 校验 Host/Origin、页面标识和事件游标，不再要求登录 cookie。HMR WebSocket 保留 Vite 自身的 token 校验，无需用户输入。只有 Web dev 的 HTML 放宽 CSP 以支持 HMR，桌面生产 HTML 的 CSP 不变；HTML 预览文档有独立的严格 CSP，并只在无 `allow-same-origin` 的沙箱中嵌入。固定工作区不把命令变成沙箱。
+HTTP API 仍校验精确 Host/Origin、JSON POST 和已登记的页面标识；事件 WebSocket 校验 Host/Origin、页面标识和事件游标，不再要求登录 cookie。HMR WebSocket 保留 Vite 自身的 token 校验，无需用户输入。只有 Web dev 的 HTML 放宽 CSP 以支持 HMR，桌面生产 HTML 的 CSP 不变；HTML 预览文档有独立的严格 CSP，并只在无 `allow-same-origin` 的沙箱中嵌入。解除 dev 服务的单工作区限制不改变每次运行的工具权限与审批，命令也不是 OS 沙箱。
 
 ## 聚焦检查
 
@@ -74,4 +74,4 @@ pnpm exec vitest run tests/web-host.test.ts tests/web-bridge.test.ts tests/web-s
 node scripts/check-web-dev.mjs http://192.168.8.108:5174
 ```
 
-此脚本使用本机 `/usr/bin/google-chrome-stable`，验证免登录进入、共享界面、HMR socket、桥接会话 CRUD 和刷新握手，不调用外部模型；会在临时存储中创建一个 fixture 会话。结束后停止临时服务并删除临时 `FORGE_HOME`。单元测试另用 fixture provider 验证真实 Harness 运行与事件传输，不代表真实 Provider 或所有工具均已端到端验收。
+此脚本使用本机 `/usr/bin/google-chrome-stable`，验证免登录进入、共享界面、HMR socket、可编辑的服务器路径、跨工作区会话创建/修改/列表和刷新恢复，不调用外部模型；会在临时存储中创建两个 fixture 会话，并自动清理另建的临时项目目录。结束后停止临时服务并删除临时 `FORGE_HOME`。单元测试另用 fixture provider 验证真实 Harness 运行与事件传输，不代表真实 Provider 或所有工具均已端到端验收。

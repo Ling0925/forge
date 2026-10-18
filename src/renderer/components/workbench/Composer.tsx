@@ -145,11 +145,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         old[draftId] ? old : { ...old, [draftId]: true },
       );
   }, [draftId, prompt]);
+  const workspaceRestricted = hostCapabilities.web && window.forge.restrictWorkspace !== false;
   const defaultWorkspace =
     state.activeSnapshot?.workspace ?? state.sessions[0]?.workspace ?? "";
   useEffect(() => {
     if (!isNew) return;
-    if (hostCapabilities.web) {
+    if (hostCapabilities.web && (workspaceRestricted || !defaultWorkspace)) {
       let cancelled = false;
       void window.forge
         .chooseWorkspace()
@@ -162,7 +163,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       };
     }
     if (defaultWorkspace) setWorkspace(defaultWorkspace);
-  }, [isNew, defaultWorkspace]);
+  }, [isNew, defaultWorkspace, workspaceRestricted]);
   useEffect(() => {
     if (isNew && !state.isSettingsOpen) promptRef.current?.focus();
   }, [isNew, state.isSettingsOpen]);
@@ -645,16 +646,18 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 id="workspace-path"
                 label={hostCapabilities.web ? "服务器工作区" : "工作区"}
                 helper={
-                  hostCapabilities.web
+                  workspaceRestricted
                     ? "此 Web 服务固定使用这个项目。"
-                    : "默认沿用当前项目，也可以输入其他绝对路径。"
+                    : hostCapabilities.web
+                      ? "输入服务器上的项目绝对路径，不是浏览器所在机器的目录。"
+                      : "默认沿用当前项目，也可以输入其他绝对路径。"
                 }
               >
                 <div className="composer-workspace-row">
                   <Input
                     id="workspace-path"
                     value={workspace}
-                    readOnly={hostCapabilities.web}
+                    readOnly={workspaceRestricted}
                     onChange={(event) => setWorkspace(event.target.value)}
                   />
                   {!hostCapabilities.web && (

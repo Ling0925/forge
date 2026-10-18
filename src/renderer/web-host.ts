@@ -12,6 +12,7 @@ import { applySessionDelta, sessionDeltaSchema } from "../shared/session-delta";
 
 const handshakeSchema = z.object({
   workspace: z.string(),
+  restrictWorkspace: z.boolean().default(true),
   cursor: z.number().int().nonnegative(),
   clientId: z.string().uuid(),
   recovery: z.array(runEventSchema).default([]),
@@ -246,6 +247,7 @@ export async function installWebHost(): Promise<void> {
     Object.defineProperty(window, "forge", {
       value: Object.freeze({
         ...bridge,
+        restrictWorkspace: handshake.restrictWorkspace,
         chooseWorkspace: async () => handshake.workspace,
         openExternal: async (value: string) => {
           window.open(
