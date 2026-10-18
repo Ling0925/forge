@@ -44,7 +44,6 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
     workspace: directory,
     host: "127.0.0.1",
     port,
-    token: "fixture-passphrase",
   });
   const vite = await createViteServer({
     configFile: false,
@@ -122,18 +121,6 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
       events.push(event);
       if (event.event.type === "text_delta")
         latencies.push(Date.now() - Date.parse(event.event.timestamp));
-    });
-    await page.goto(web.origin);
-    await page.evaluate(async () => {
-      const response = await fetch("/api/connect", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer fixture-passphrase",
-        },
-        body: "{}",
-      });
-      if (!response.ok) throw new Error("Login failed");
     });
     await page.goto(`${web.origin}/probe`);
     await page.waitForFunction(

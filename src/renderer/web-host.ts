@@ -74,9 +74,7 @@ export async function installWebHost(): Promise<void> {
       signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) {
-      if (response.status === 401)
-        fail("Web 登录已过期，请刷新页面重新登录；任务继续在后台运行。");
-      else if (response.status === 410)
+      if (response.status === 410)
         fail("Web 连接已过期，请刷新页面重新连接；任务继续在后台运行。");
       throw new Error(
         `Web request failed (${response.status}); inspect state before retrying.`,
@@ -248,7 +246,7 @@ export async function installWebHost(): Promise<void> {
           throw new Error("Web 开发版暂不支持桌面文件导出。");
         },
         // Preview documents are served by this host; the page only learns the
-        // URL. `post` already carries the session cookie and page id.
+        // URL. `post` already carries the page connection id.
         previewHtml: async (html: string) =>
           htmlPreviewResponseSchema.parse(await post("/api/preview", { html })),
         previewFile: async (path: string) =>
@@ -258,7 +256,7 @@ export async function installWebHost(): Promise<void> {
       }),
     });
   } catch (error) {
-    fail("Web 初始化失败，请刷新页面重新登录。");
+    fail("Web 初始化失败，请刷新页面重新连接。");
     throw error;
   }
 }

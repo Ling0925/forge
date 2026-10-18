@@ -49,8 +49,7 @@ await new Promise<void>((done, reject) => {
 });
 console.log(`Forge Web Dev: ${web.origin}`);
 console.log(`Workspace: ${web.workspace}`);
-console.log(`Access passphrase: ${web.token}`);
-console.log("Trusted LAN only (HTTP). Multiple pages reconnect independently; runs survive reload/disconnect. Renderer HMR enabled; restart for backend changes.");
+console.log("No access password. Trusted LAN only (HTTP); anyone who can reach this address can use the workbench. Multiple pages reconnect independently; runs survive reload/disconnect. Renderer HMR enabled; restart for backend changes.");
 let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => {
   if (stopping) return;

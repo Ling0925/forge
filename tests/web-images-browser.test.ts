@@ -35,7 +35,7 @@ it("sends selected and pasted images through the real Web bridge, preserves draf
   await service.updateSettings({ settings: { baseUrl: "http://localhost:1234/v1", model: "vision-fixture" } });
   const a = await service.createSession({ workspace: directory, title: "A" });
   const b = await service.createSession({ workspace: directory, title: "B" });
-  const web = await createWebHost({ service, workspace: directory, host: "127.0.0.1", port: address.port, token: "image-fixture-passphrase" });
+  const web = await createWebHost({ service, workspace: directory, host: "127.0.0.1", port: address.port });
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import {createRoot} from 'react-dom/client';
@@ -80,8 +80,7 @@ it("sends selected and pasted images through the real Web bridge, preserves draf
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(web.origin);
-    await page.getByLabel("访问口令").fill("image-fixture-passphrase");
-    await page.getByRole("button", { name: "连接工作台" }).click();
+    expect(await page.getByLabel("访问口令").count()).toBe(0);
     await page.getByRole("button", { name: "打开 A", exact: true }).click();
     const prompt = page.locator("textarea.composer-textarea");
     const picker = page.locator('input[type="file"]');
