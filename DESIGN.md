@@ -321,4 +321,11 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
 
 进入模型连接页时自动加载各来源目录，在来源下直接展示完整模型 ID，提供跨来源搜索、数量、默认模型标记和独立刷新。长目录使用限高滚动列表，所有结果均可浏览；不推测价格、上下文或能力。外部目录与编辑弹窗共用缓存，失败按来源显示并保留上次结果，不自动重试；地址或协议变更后不复用旧目录。保存、启用、删除保持独立动作；未保存编辑阻止来源切换，删除需就地确认，密钥不回填。
 
+### 12.1 视觉精修与信息密度规则 (Visual Hierarchy & Density)
 
+1. **结构与卡片收敛**：各来源条目由散落底线收敛为与设置页一致的卡片容器（`.provider-overview`，`--radius-card`、`--border-subtle`、`--surface-elevated` 与 `--shadow-sm`），消除松散感与无序间距。
+2. **头部层级分明**：来源头部按钮（`.provider-source-row`）采用 `--surface-soft` 区分于内容区，左右布局；名称使用 `--text-sm` / 600，当前标记使用统一绿底胶囊（`--success`、`--success-bg`、`--success-border`），URL 使用等宽字体，协议/默认模型显示在下一行；编辑入口提供轻微边框按钮形态与清晰悬停响应。
+3. **信息工具栏内嵌**：目录工具栏（`.provider-overview-toolbar`）贴紧卡片内部分割线，以紧凑字号显示筛选后模型计数，右侧刷新按钮采用轻量小号操作，避免占用纵向过大空白。
+4. **模型目录高密度与排版**：模型列表（`.provider-overview-models`）采用单行列表（32px 项高），模型 ID 采用 `--font-mono` 搭配 `overflow-wrap: anywhere` 与 `word-break: break-all`，确保完整可读且窄屏无溢出；默认标记采用微型紧凑徽章（`--text-2xs`），减少视觉噪点。
+5. **弹窗布局与选择器**：编辑弹窗（`.provider-editor`）内部表单采用标准 16px 间距，模型选择器工具栏与外部保持一致设计系统，选项采用 34px 项高、清晰已选（`--surface-selected` + 绿勾）反馈与键盘焦点环。
+6. **响应式与主题原生复用**：全部颜色、字号与圆角严格绑定现有 tokens（亮/暗主题无额外覆盖），移动端（≤600px）安全折行并保障触摸目标高度（≥44px），水平方向不产生任何横向溢出。
