@@ -49,8 +49,11 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        NativeTheme.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        int surface = getColor(R.color.surface);
+        SystemBars.apply(this, surface, surface);
 
         addressInput = findViewById(R.id.address_input);
         recentContainer = findViewById(R.id.recent_container);

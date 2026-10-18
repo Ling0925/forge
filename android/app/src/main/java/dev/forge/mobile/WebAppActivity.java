@@ -51,6 +51,7 @@ public class WebAppActivity extends AppCompatActivity {
     private boolean clearHistoryOnLoad;
     private boolean connectionSettingsOpen;
     private ValueCallback<Uri[]> fileCallback;
+    private PageSystemBars pageSystemBars;
 
     private final ActivityResultLauncher<Intent> connectionSettingsLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -107,12 +108,18 @@ public class WebAppActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Keep this Activity on the OS configuration so WebView's system-theme media query
+        // stays truthful. Cached appearance is used only for native backgrounds, not uiMode.
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_web);
 
         webView = findViewById(R.id.webview);
         errorPanel = findViewById(R.id.error_panel);
         errorDetail = findViewById(R.id.error_detail);
+        int surface = NativeTheme.resources(this).getColor(R.color.surface, getTheme());
+        webView.setBackgroundColor(surface);
+        SystemBars.apply(this, surface, surface);
+        pageSystemBars = new PageSystemBars(this, webView, errorPanel);
 
         try {
             // Re-validate both the caller and saved state before loading a connection.
@@ -227,6 +234,7 @@ public class WebAppActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 if (url != null && url.equals(view.getUrl())) {
+                    pageSystemBars.refresh();
                     currentUrl = url;
                     if (clearHistoryOnLoad) {
                         view.clearHistory();
@@ -356,11 +364,31 @@ public class WebAppActivity extends AppCompatActivity {
 
     private void showError(String detail) {
         errorDetail.setText(detail);
+        android.content.res.Resources colors = NativeTheme.resources(this);
+        int surface = colors.getColor(R.color.surface, getTheme());
+        errorPanel.setBackgroundColor(surface);
+        errorDetail.setTextColor(colors.getColor(R.color.ink_muted, getTheme()));
+        ((TextView) findViewById(R.id.error_title)).setTextColor(colors.getColor(R.color.ink, getTheme()));
         errorPanel.setVisibility(View.VISIBLE);
+        pageSystemBars.refresh();
+        SystemBars.apply(this, surface, surface);
     }
 
     private void hideError() {
         errorPanel.setVisibility(View.GONE);
+        pageSystemBars.restorePageColors();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pageSystemBars != null) pageSystemBars.start();
+    }
+
+    @Override
+    protected void onPause() {
+        if (pageSystemBars != null) pageSystemBars.stop();
+        super.onPause();
     }
 
     @Override
@@ -374,6 +402,7 @@ public class WebAppActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (pageSystemBars != null) pageSystemBars.stop();
         if (fileCallback != null) {
             fileCallback.onReceiveValue(null);
             fileCallback = null;

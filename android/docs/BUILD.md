@@ -53,7 +53,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | :--- | :--- | :--- |
 | URI 单元测试 | `./gradlew checkServerUrl` | **26 passed, 0 failed** |
 | 原生连接设置入口 | `./gradlew checkConnectionSettings` | **22 passed, 0 failed**；覆盖同源、手势、主框架与精确路径限制，不代表 WebView 实机事件已验证 |
-| Debug APK 构建 | `./gradlew :app:assembleDebug` | **BUILD SUCCESSFUL**，产出 `app-debug.apk`（约 3.3 MB） |
+| 系统栏颜色／图标对比度 | `./gradlew checkSystemBarColors` | **19 passed, 0 failed**；仅纯 JVM 算法检查 |
+| 页面主题采样 | `pnpm exec vitest run tests/renderer/android-system-bars.test.ts`（仓库根目录） | Chromium fixture 验证真实主题 token、顶部／底部背景、运行时浅深切换及透明背景回退；非 Android 系统栏实机验证 |
+| Debug APK 构建 | `./gradlew :app:assembleDebug` | **BUILD SUCCESSFUL**，产出 `app-debug.apk`（约 3.5 MB） |
 | 产物清单 | `aapt2 dump badging` | `package=dev.forge.mobile.debug`，`minSdk 23`，`targetSdk 33`，含 `INTERNET`/`CAMERA` |
 | 合并清单 | `aapt2 dump xmltree … AndroidManifest.xml` | `usesCleartextTraffic=true`；ZXing `CaptureActivity` 合并且 `exported=false` |
 

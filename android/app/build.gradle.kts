@@ -91,3 +91,12 @@ val checkConnectionSettings by tasks.registering(JavaExec::class) {
     classpath = files(serverUrlTestClasses, serverUrlMainClasses)
     mainClass.set("ConnectionSettingsNavigationTest")
 }
+
+val checkSystemBarColors by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Checks opaque system bar colors and icon contrast."
+    dependsOn(compileServerUrlTest)
+
+    classpath = files(serverUrlTestClasses, serverUrlMainClasses)
+    mainClass.set("SystemBarColorsTest")
+}

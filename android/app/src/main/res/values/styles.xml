@@ -9,6 +9,7 @@
         <item name="android:textColorSecondary">@color/ink_muted</item>
         <item name="android:statusBarColor">@color/surface</item>
         <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">@bool/system_bar_dark_icons</item>
     </style>
 
     <!-- Style names deliberately avoid dots: a dotted name implies an implicit parent style. -->
