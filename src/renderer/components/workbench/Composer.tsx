@@ -179,7 +179,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     "";
   const setModel = (value: string) =>
     setModelsByDraft((old) => ({ ...old, [draftId]: value }));
-  const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
+  const [catalogs, setCatalogs] = useState<Record<string, readonly string[]>>({});
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
   const modelSource = modelCatalogKey({
@@ -187,41 +187,27 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     baseUrl: providerSource?.baseUrl ?? state.settings?.baseUrl ?? "",
     apiMode: providerSource?.apiMode ?? state.settings?.apiMode,
   }, state.settings?.environmentOverride ?? false);
-  const currentModelSource = useRef(modelSource);
-  currentModelSource.current = modelSource;
+  const sourceProfiles = state.settings?.providerSources ?? [];
+  const catalogSources = sourceProfiles.length
+    ? sourceProfiles.map((source) => ({ id: source.id, label: source.label, key: modelCatalogKey(source) }))
+    : [{ id: undefined, label: "当前来源", key: modelSource }];
+  const catalogSignature = JSON.stringify(catalogSources);
   useEffect(() => {
-    setAvailableModels(modelCatalogCache.read(modelSource) ?? []);
-    setModelError("");
     void listModels();
-  }, [modelSource]);
-  const allKnownModels = useMemo(() => {
-    const list = !isNew && state.activeSnapshot?.providerSourceId ? [model, providerSource?.model, ...availableModels] : [
-      model,
-      state.settings?.model,
-      ...(state.settings?.providerSources?.map((s) => s.model) ?? []),
-      ...Object.keys(state.settings?.modelContextWindows ?? {}),
-      "cbcn/deepseek-v4.1-flash",
-      ...availableModels,
-    ];
-    return Array.from(
-      new Set(
-        list
-          .filter(
-            (m): m is string => typeof m === "string" && m.trim().length > 0,
-          )
-          .map((m) => m.trim()),
-      ),
-    );
-  }, [
-    model,
-    state.settings?.model,
-    state.settings?.providerSources,
-    state.settings?.modelContextWindows,
-    availableModels,
-    isNew,
-    state.activeSnapshot?.providerSourceId,
-    providerSource?.model,
-  ]);
+  }, [catalogSignature]);
+  const allKnownModels = [...new Set([model, state.settings?.model ?? "", ...(catalogs[modelSource] ?? modelCatalogCache.read(modelSource) ?? [])].filter(Boolean))];
+  const modelGroups = sourceProfiles.length ? [
+    ...sourceProfiles.map((source) => ({
+      sourceId: source.id,
+      label: source.label,
+      models: [...new Set([
+        ...(source.id === providerSourceId ? [model] : []),
+        source.model,
+        ...(catalogs[modelCatalogKey(source)] ?? modelCatalogCache.read(modelCatalogKey(source)) ?? []),
+      ].filter(Boolean))],
+    })),
+    ...(!providerSource && providerSourceId ? [{ sourceId: providerSourceId, label: `${providerSourceId}（不可用）`, models: [model] }] : []),
+  ] : undefined;
   const [savingEffort, setSavingEffort] = useState(false);
   const effortSaving = useRef(false);
   const changeEffort = async (value: string) => {
@@ -605,29 +591,17 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     }
   };
   const listModels = async (refresh = false) => {
-    if (listing) return;
-    const cached = modelCatalogCache.read(modelSource);
-    if (cached && !refresh) {
-      setAvailableModels(cached);
-      setModelError("");
-      return;
-    }
     setListing(true);
     setModelError("");
-    try {
-      const models = await modelCatalogCache.load(
-        modelSource,
-        () => window.forge.listModels(providerSourceId),
-        refresh,
-      );
-      if (alive.current && currentModelSource.current === modelSource)
-        setAvailableModels(models);
-    } catch (err) {
-      if (alive.current)
-        setModelError(err instanceof Error ? err.message : "模型列表读取失败");
-    } finally {
-      if (alive.current) setListing(false);
-    }
+    const results = await Promise.allSettled(catalogSources.map(async (source) => {
+      const models = await modelCatalogCache.load(source.key, () => window.forge.listModels(source.id), refresh);
+      if (alive.current) setCatalogs((old) => ({ ...old, [source.key]: models }));
+    }));
+    if (!alive.current) return;
+    const errors = results.flatMap((result, index) => result.status === "rejected"
+      ? [`${catalogSources[index]?.label}: ${result.reason instanceof Error ? result.reason.message : "模型列表读取失败"}`] : []);
+    setModelError(errors.join("；"));
+    setListing(false);
   };
   const queuedSummary = (() => {
     const first = pendingInputs[0];
@@ -1137,7 +1111,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               value={model}
               models={allKnownModels}
               hideSearch={true}
-              onSelect={setModel}
+              onSelect={(model, sourceId) => {
+                if (busy || submission) return;
+                if (sourceId) setSourcesByDraft((old) => ({ ...old, [draftId]: sourceId }));
+                setModel(model);
+              }}
               onOpen={() => void listModels()}
               onRefresh={() => void listModels(true)}
               loading={listing}
@@ -1147,28 +1125,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 disabled: savingEffort || busy || !!submission,
                 onChange: (value) => void changeEffort(value),
               }}
-              sourceControl={
-                providerSourceId ? (
-                  <ComposerDropdown
-                    ariaLabel="会话模型来源"
-                    value={providerSourceId}
-                    disabled={busy || !!submission}
-                    options={[
-                      ...(!providerSource ? [{ value: providerSourceId, label: `${providerSourceId}（不可用）` }] : []),
-                      ...(state.settings?.providerSources?.map((source) => ({
-                        value: source.id,
-                        label: source.label,
-                        sub: "后续运行使用此来源",
-                      })) ?? []),
-                    ]}
-                    onChange={(value) => {
-                      setSourcesByDraft((old) => ({ ...old, [draftId]: value }));
-                      const selected = state.settings?.providerSources?.find((source) => source.id === value);
-                      if (selected) setModel(selected.model);
-                    }}
-                  />
-                ) : undefined
-              }
+              groups={modelGroups}
+              sourceId={providerSourceId}
+              disabled={busy || !!submission}
             />
           </div>
         </div>

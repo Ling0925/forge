@@ -28,7 +28,7 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     window.forge={getSettings:async()=>({...defaultPublicSettings,isConfigured:true,baseUrl:'https://b.invalid/v1',model:'b-model',activeSourceId:'b',
       providerSources:[{id:'a',label:'Source A',baseUrl:'https://a.invalid/v1',model:'a-model',hasApiKey:false},{id:'b',label:'Source B',baseUrl:'https://b.invalid/v1',model:'b-model',hasApiKey:false}]}),
       listSessions:async()=>Object.values(snapshots),getSession:async id=>structuredClone(snapshots[id]),
-      listModels:async source=>{fixture.catalogues.push(source);return [source+'-model'];},
+      listModels:async source=>{fixture.catalogues.push(source);return [source+'-model', 'shared-model'];},
       onEvent:listener=>{listeners.add(listener);return()=>listeners.delete(listener);},
       startRun:async input=>{fixture.starts.push(input);const runId='33333333-3333-4333-8333-'+String(++counter).padStart(12,'0');
         const snapshot=snapshots[input.sessionId];snapshot.messages.push({role:'user',content:input.prompt});snapshot.status='running';
@@ -66,7 +66,9 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     const effortSlider = page.getByRole("slider", { name: "思考等级", exact: true });
     await effortSlider.waitFor();
     expect(await effortSlider.isVisible()).toBe(true);
-    await expect.poll(() => page.getByRole("button", { name: "会话模型来源", exact: true }).innerText()).toBe("Source A");
+    expect(await page.locator('.composer-model-source-area').count()).toBe(0);
+    expect(await page.getByRole('group', { name: 'Source A', exact: true }).getByRole('button', { pressed: true }).innerText()).toContain('a-model');
+    expect(await page.getByRole('group', { name: 'Source B', exact: true }).getByRole('button', { pressed: true }).count()).toBe(0);
     await page.keyboard.press("Escape");
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").catalogues.includes("a"))).toBe(true);
     await input.fill("initial"); await input.press("Enter");
@@ -147,8 +149,10 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     expect(alertRect.y + alertRect.height).toBeLessThanOrEqual(inputRect3.y);
     expect(await input.inputValue()).toBe("retain on cancellation");
     await modelSummary.click();
-    await page.getByRole("button", { name: "会话模型来源", exact: true }).click();
-    await page.getByRole("menuitemradio", { name: /^Source B/ }).click();
+    await page.getByRole('group', { name: 'Source B', exact: true }).getByRole('button', { name: 'shared-model shared-model', exact: true }).click();
+    await modelSummary.click();
+    expect(await page.getByRole('group', { name: 'Source B', exact: true }).getByRole('button', { pressed: true }).innerText()).toContain('shared-model');
+    expect(await page.getByRole('group', { name: 'Source A', exact: true }).getByRole('button', { pressed: true }).count()).toBe(0);
     await page.keyboard.press("Escape");
     await input.fill("explicit source change"); await page.getByRole("button", { name: "运行", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.at(-1).providerSourceId)).toBe("b");

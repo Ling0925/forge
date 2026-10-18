@@ -1,6 +1,6 @@
 import { CaretDown, Cpu } from "@phosphor-icons/react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ModelCatalog } from "./ModelCatalog";
+import { useEffect, useRef, useState } from "react";
+import { ModelCatalog, type ModelCatalogGroup } from "./ModelCatalog";
 
 const efforts = [
   ["default", "自动"],
@@ -15,7 +15,7 @@ const efforts = [
 export function ModelPicker(props: {
   readonly value: string;
   readonly models: readonly string[];
-  readonly onSelect: (model: string) => void;
+  readonly onSelect: (model: string, sourceId?: string) => void;
   readonly onRefresh: () => void;
   readonly onOpen?: () => void;
   readonly loading: boolean;
@@ -26,7 +26,9 @@ export function ModelPicker(props: {
     onChange: (value: string) => void;
   };
   readonly hideSearch?: boolean;
-  readonly sourceControl?: ReactNode;
+  readonly groups?: readonly ModelCatalogGroup[] | undefined;
+  readonly sourceId?: string | undefined;
+  readonly disabled?: boolean;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
@@ -196,14 +198,6 @@ export function ModelPicker(props: {
               </div>
             </fieldset>
           )}
-          {props.sourceControl && (
-            <div className="composer-model-source-area">
-              <div className="composer-model-source-label">模型来源</div>
-              <div className="composer-model-source-control">
-                {props.sourceControl}
-              </div>
-            </div>
-          )}
           <ModelCatalog
             value={props.value}
             models={props.models}
@@ -212,8 +206,11 @@ export function ModelPicker(props: {
             error={props.error}
             inputId="run-model"
             {...(props.hideSearch !== undefined ? { hideSearch: props.hideSearch } : {})}
-            onSelect={(model) => {
-              props.onSelect(model);
+            groups={props.groups}
+            sourceId={props.sourceId}
+            disabled={props.disabled}
+            onSelect={(model, sourceId) => {
+              props.onSelect(model, sourceId);
               if (props.reasoning && !props.hideSearch) return;
               close();
               ref.current?.querySelector("summary")?.focus();
