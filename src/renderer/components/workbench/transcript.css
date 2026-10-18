@@ -340,7 +340,7 @@
 .tool-call-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   width: 100%;
   margin: 1px 0;
 }

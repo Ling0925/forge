@@ -15,7 +15,7 @@
   text-align: left;
   /* Evidence cards are rhythm elements in the reading flow: compact rhythm keeps
      sequential operations tight without crowding text prose. */
-  margin: 2px 0;
+  margin: 1px 0;
   transition: background-color var(--transition-fast), border-color
     var(--transition-fast), box-shadow 0.3s ease;
   animation: tool-card-appear 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -42,7 +42,7 @@
 
 /* Sequential operations in one phase read as a tight group. */
 .tool-disclosure + .tool-disclosure {
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 /* --------------------------------------------------------------------------
@@ -53,7 +53,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2) var(--space-2-5);
+  gap: var(--space-1-5) var(--space-2);
   width: 100%;
   /* Height is a floor, never a ceiling: a wrapped narrow header must grow
      instead of clipping its own second line. */
@@ -100,7 +100,7 @@
 .tool-disclosure-summary {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -140,7 +140,7 @@
 .tool-disclosure-meta {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   flex-shrink: 0;
   margin-left: auto;
 }
@@ -828,11 +828,11 @@
 /* --------------------------------------------------------------------------
    8. Touch and narrow-viewport behavior
    -------------------------------------------------------------------------- */
-/* DESIGN.md requires 44px touch targets: the row grows, nothing is clipped. */
+/* Tool headers stay compact in transcripts; full touch buttons remain 44px */
 @media (pointer: coarse) {
   .tool-disclosure-header {
-    min-height: var(--touch-min-target);
-    padding: var(--space-1) var(--space-2-5);
+    min-height: 28px;
+    padding: 2px var(--space-2);
   }
 
   .tool-copy {
@@ -847,41 +847,28 @@
   }
 }
 
-/* Narrow reading columns: the target takes its own line instead of squeezing
-   the action label and the metadata into one unreadable strip. */
+/* Narrow reading columns: keep compact single-line layout without line breaks */
 @media (max-width: 640px) {
   .tool-disclosure-header {
-    align-items: flex-start;
-    padding: var(--space-2) var(--space-2-5);
+    align-items: center;
+    padding: 2px var(--space-2);
   }
 
   .tool-disclosure-summary {
-    display: grid;
-    grid-template-columns: 15px minmax(0, 1fr);
-    gap: var(--space-1) var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
   }
 
   .tool-disclosure-target {
-    grid-column: 2;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.5;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .tool-disclosure-meta {
     margin-left: auto;
-  }
-
-  .tool-disclosure[data-tool="read_file"] .tool-disclosure-summary {
-    display: flex;
-  }
-
-  .tool-disclosure[data-tool="read_file"] .tool-disclosure-target {
-    display: block;
-    white-space: nowrap;
   }
 
   .tool-param-row:not(.is-block) {

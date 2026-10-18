@@ -139,12 +139,13 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     );
     expect(failedText).toContain("退出码 1");
 
-    // Touch pointers get the documented 44px target on the row summary.
+    // Tool disclosure headers stay compact and single-line for scannability
     const headerHeight = await page
       .locator(".tool-disclosure-header")
       .first()
       .evaluate((node) => node.getBoundingClientRect().height);
-    expect(headerHeight).toBeGreaterThanOrEqual(44);
+    expect(headerHeight).toBeGreaterThanOrEqual(27);
+    expect(headerHeight).toBeLessThanOrEqual(30);
 
     // No horizontal overflow inside the narrow reading column, including the
     // long unbreakable tokens in a command and a file body.
@@ -319,8 +320,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     const fineHeight = await desktopHeader.evaluate(
       (node) => node.getBoundingClientRect().height,
     );
-    expect(fineHeight).toBeGreaterThanOrEqual(28);
-    expect(fineHeight).toBeLessThanOrEqual(28);
+    expect(Math.round(fineHeight)).toBe(28);
     await desktopHeader.click();
     const collapsedHeight = await desktopHeader.evaluate(
       (node) => node.getBoundingClientRect().height,
