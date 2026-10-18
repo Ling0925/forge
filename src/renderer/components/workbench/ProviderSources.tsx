@@ -19,6 +19,7 @@ import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
+import { Select } from "../primitives/Select";
 import "./provider-sources.css";
 
 type Draft = {
@@ -26,7 +27,7 @@ type Draft = {
   label: string;
   baseUrl: string;
   model: string;
-  apiMode: "chat-completions" | "responses";
+  apiMode: "chat-completions" | "responses" | "anthropic";
   key: string;
   removeKey: boolean;
 };
@@ -384,7 +385,7 @@ export function ProviderSources({ onBusy }: { onBusy: (busy: boolean) => void })
                           </span>
                         )}
                         <span className="provider-protocol-badge">
-                          {item.apiMode === "responses" ? "Responses" : "Chat Completions"}
+                          {item.apiMode === "anthropic" ? "Anthropic Messages" : item.apiMode === "responses" ? "Responses" : "Chat Completions"}
                         </span>
                       </div>
                       <small className="provider-source-url">{item.baseUrl}</small>
@@ -547,7 +548,7 @@ export function ProviderSources({ onBusy }: { onBusy: (busy: boolean) => void })
           })}
 
           {!sources.length && (
-            <div className="settings-empty">尚无模型来源。添加 OpenAI 或兼容网关、本地服务。</div>
+            <div className="settings-empty">尚无模型来源。添加 OpenAI、Anthropic 或兼容网关、本地服务。</div>
           )}
         </div>
       </div>
@@ -586,7 +587,7 @@ export function ProviderSources({ onBusy }: { onBusy: (busy: boolean) => void })
             <Field
               id="source-url"
               label="API 地址"
-              helper="填写基础地址，例如 https://api.openai.com/v1。模型目录请求为该地址 + /models，不要填写 /chat/completions。"
+              helper="填写基础地址：OpenAI 如 https://api.openai.com/v1；Anthropic 如 https://api.anthropic.com。不要填写 /chat/completions 或 /messages。"
             >
               <Input
                 id="source-url"
@@ -596,21 +597,20 @@ export function ProviderSources({ onBusy }: { onBusy: (busy: boolean) => void })
               />
             </Field>
             <Field id="source-protocol" label="协议">
-              <Input
+              <Select
                 id="source-protocol"
-                readOnly
-                value={
-                  draft.apiMode === "responses"
-                    ? "OpenAI Responses（保留旧配置）"
-                    : "OpenAI Chat Completions"
-                }
+                value={draft.apiMode}
+                onChange={event => {
+                  const apiMode = event.target.value;
+                  if (apiMode === "chat-completions" || apiMode === "responses" || apiMode === "anthropic") change({ apiMode });
+                }}
+                options={[
+                  { value: "chat-completions", label: "OpenAI Chat Completions" },
+                  { value: "responses", label: "OpenAI Responses" },
+                  { value: "anthropic", label: "Anthropic Messages" },
+                ]}
               />
             </Field>
-            {draft.apiMode === "responses" && (
-              <Button size="sm" onClick={() => change({ apiMode: "chat-completions" })}>
-                改用 OpenAI Chat Completions
-              </Button>
-            )}
             <Field
               id="source-key"
               label="来源 API 密钥"

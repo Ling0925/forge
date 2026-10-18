@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { mkdir } from "node:fs/promises";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
@@ -44,12 +45,31 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.getByLabel('来源名称').fill('源 B');
     await page.getByLabel('API 地址', { exact: true }).fill('https://b.test/v1');
     await page.getByLabel('来源 API 密钥').fill('fixture-b');
-    expect(await page.getByLabel('协议', { exact: true }).inputValue()).toBe('OpenAI Chat Completions');
+    expect(await page.getByLabel('协议', { exact: true }).inputValue()).toBe('chat-completions');
+    await page.getByLabel('协议', { exact: true }).selectOption('anthropic');
     await page.getByRole('button', { name: '保存来源', exact: true }).click();
     await page.getByText('来源已保存，可以从 /models 拉取模型。').waitFor();
     expect(await page.locator('#active').innerText()).toBe('a');
     const saved = await page.evaluate(() => Reflect.get(window, 'calls').at(-1));
     expect(saved.source.apiKey).toBe('fixture-b');
+    expect(saved.source.source.apiMode).toBe('anthropic');
+    const captureDirectory = process.env.FORGE_QA_DIR;
+    if (captureDirectory) {
+      await mkdir(captureDirectory, { recursive: true });
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      for (const width of [390, 1440]) {
+        for (const theme of ['light', 'dark'] as const) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.emulateMedia({ colorScheme: theme });
+          await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+          await page.getByLabel('协议', { exact: true }).evaluate(element => element.scrollIntoView({ block: 'center' }));
+          await page.screenshot({ path: resolve(captureDirectory, `provider-${width}-${theme}.png`), animations: 'disabled' });
+        }
+      }
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.emulateMedia({ colorScheme: 'light' });
+      await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    }
     const b = saved.source.source.id;
     await page.getByRole('button', { name: '从 /models 拉取' }).click();
     await page.locator('.model-catalog-option').filter({ hasText: b+'/two' }).click();

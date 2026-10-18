@@ -287,7 +287,7 @@ export function Settings() {
               {visible("connection") && (
                 <section className="settings-section" aria-label="推理设置">
                   <div className="settings-card">
-                    <div className="settings-card-header"><h3>通用推理偏好</h3><p>适用于支持该参数的 OpenAI 兼容模型，通过底部保存设置。</p></div>
+                    <div className="settings-card-header"><h3>通用推理偏好</h3><p>适用于支持思考参数的模型，各协议使用对应参数，通过底部保存设置。</p></div>
                     <div className="settings-card-body">{select("reasoningEffort", "默认思考强度", ["default", "none", "minimal", "low", "medium", "high", "xhigh"].map(value => ({ value, label: value === "default" ? "模型默认" : value })))}</div>
                   </div>
                 </section>

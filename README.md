@@ -238,7 +238,7 @@ forge mcp enable <name>                            # 显式启用该服务
 | **💻 命令行参考** | **[docs/CLI.md](docs/CLI.md)** | 完整命令、参数标志、输入流及环境变量定义 |
 | **Web 开发** | **[docs/WEB_DEV.md](docs/WEB_DEV.md)** | 启动、热更新、宿主差异与聚焦验证 |
 | **🏛️ 架构与设计** | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**<br>**[DESIGN.md](DESIGN.md)** | 核心运行时架构分解、桌面端视觉语素与交互规范 |
-| **🌐 模型与协议** | **[docs/PROVIDERS.md](docs/PROVIDERS.md)** | Chat Completions 与 Responses 协议支持、断点续传语义 |
+| **🌐 模型与协议** | **[docs/PROVIDERS.md](docs/PROVIDERS.md)** | OpenAI / Anthropic SDK、三种协议与续传语义 |
 | **🧩 扩展与集成** | **[docs/CONTEXT.md](docs/CONTEXT.md)**<br>**[docs/MCP.md](docs/MCP.md)**<br>**[docs/BROWSER_TOOLS.md](docs/BROWSER_TOOLS.md)** | 项目指令 (AGENTS.md) 与技能包发现、stdio MCP 服务、Playwright 浏览器工具 |
 | **📦 发布与交付** | **[docs/DELIVERY.md](docs/DELIVERY.md)** | Linux 打包产物结构、发布流水线、安装核验与回滚步骤 |
 | **⚖️ 设计溯源** | **[docs/AUTHORSHIP.md](docs/AUTHORSHIP.md)**<br>**[docs/REFERENCE_DESIGN.md](docs/REFERENCE_DESIGN.md)** | 原创性界定、参考调研来源与版权边界声明 |
