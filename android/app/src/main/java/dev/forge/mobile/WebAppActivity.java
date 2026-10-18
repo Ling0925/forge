@@ -16,6 +16,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -43,6 +44,7 @@ public class WebAppActivity extends AppCompatActivity {
     public static final String EXTRA_URL = "dev.forge.mobile.extra.URL";
 
     private WebView webView;
+    private ProgressBar loadingProgress;
     private View errorPanel;
     private TextView errorDetail;
 
@@ -114,12 +116,16 @@ public class WebAppActivity extends AppCompatActivity {
         setContentView(R.layout.activity_web);
 
         webView = findViewById(R.id.webview);
+        loadingProgress = findViewById(R.id.loading_progress);
         errorPanel = findViewById(R.id.error_panel);
         errorDetail = findViewById(R.id.error_detail);
         int surface = NativeTheme.resources(this).getColor(R.color.surface, getTheme());
         webView.setBackgroundColor(surface);
-        SystemBars.apply(this, surface, surface);
+        SystemBars.apply(this, surface, surface, false);
         pageSystemBars = new PageSystemBars(this, webView, errorPanel);
+        webView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+            if (pageSystemBars != null) pageSystemBars.scheduleQuickSample(40);
+        });
 
         try {
             // Re-validate both the caller and saved state before loading a connection.
@@ -231,8 +237,18 @@ public class WebAppActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                setLoadingProgress(15);
+                if (pageSystemBars != null) {
+                    pageSystemBars.scheduleQuickSample(0);
+                }
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                setLoadingProgress(100);
                 if (url != null && url.equals(view.getUrl())) {
                     pageSystemBars.refresh();
                     currentUrl = url;
@@ -250,12 +266,22 @@ public class WebAppActivity extends AppCompatActivity {
                     android.webkit.WebResourceError error) {
                 super.onReceivedError(view, request, error);
                 if (request.isForMainFrame()) {
+                    setLoadingProgress(100);
                     showError(getString(R.string.error_load_failed, request.getUrl().toString()));
                 }
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView view, int newProgress) {
+                super.onProgressChanged(view, newProgress);
+                setLoadingProgress(newProgress);
+                if (pageSystemBars != null && newProgress >= 25) {
+                    pageSystemBars.scheduleQuickSample(0);
+                }
+            }
+
             @Override
             public boolean onShowFileChooser(
                     WebView view,
@@ -362,7 +388,39 @@ public class WebAppActivity extends AppCompatActivity {
         }
     }
 
+    private void setLoadingProgress(int progress) {
+        if (loadingProgress == null) return;
+        if (progress < 100) {
+            loadingProgress.animate().cancel();
+            if (loadingProgress.getVisibility() != View.VISIBLE) {
+                loadingProgress.setAlpha(1.0f);
+                loadingProgress.setVisibility(View.VISIBLE);
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                loadingProgress.setProgress(progress, true);
+            } else {
+                loadingProgress.setProgress(progress);
+            }
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                loadingProgress.setProgress(100, true);
+            } else {
+                loadingProgress.setProgress(100);
+            }
+            loadingProgress.animate()
+                    .alpha(0.0f)
+                    .setDuration(220)
+                    .withEndAction(() -> {
+                        loadingProgress.setVisibility(View.GONE);
+                        loadingProgress.setProgress(0);
+                    })
+                    .start();
+        }
+    }
+
     private void showError(String detail) {
+        setLoadingProgress(100);
+        if (loadingProgress != null) loadingProgress.setVisibility(View.GONE);
         errorDetail.setText(detail);
         android.content.res.Resources colors = NativeTheme.resources(this);
         int surface = colors.getColor(R.color.surface, getTheme());
@@ -371,7 +429,7 @@ public class WebAppActivity extends AppCompatActivity {
         ((TextView) findViewById(R.id.error_title)).setTextColor(colors.getColor(R.color.ink, getTheme()));
         errorPanel.setVisibility(View.VISIBLE);
         pageSystemBars.refresh();
-        SystemBars.apply(this, surface, surface);
+        SystemBars.apply(this, surface, surface, true);
     }
 
     private void hideError() {

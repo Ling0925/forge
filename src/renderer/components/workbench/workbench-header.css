@@ -19,6 +19,12 @@
   flex-shrink: 0;
   background: var(--canvas-bg);
   z-index: 10;
+  transition: background-color var(--transition-normal);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-app .workbench-task-header {
+    transition: none;
+  }
 }
 .wb-header-start,
 .wb-header-actions {

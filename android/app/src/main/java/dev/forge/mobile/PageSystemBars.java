@@ -62,8 +62,19 @@ public final class PageSystemBars {
         if (active) handler.post(sample);
     }
 
+    /** Triggers an immediate or debounced sample to react smoothly to scrolling and theme flips. */
+    public void scheduleQuickSample(long delayMs) {
+        if (!active) return;
+        handler.removeCallbacks(sample);
+        if (delayMs <= 0) {
+            handler.post(sample);
+        } else {
+            handler.postDelayed(sample, delayMs);
+        }
+    }
+
     public void restorePageColors() {
-        SystemBars.apply(activity, topColor, bottomColor);
+        SystemBars.apply(activity, topColor, bottomColor, true);
         refresh();
     }
 
@@ -89,7 +100,7 @@ public final class PageSystemBars {
                             if (top != topColor || bottom != bottomColor) {
                                 topColor = top;
                                 bottomColor = bottom;
-                                SystemBars.apply(activity, top, bottom);
+                                SystemBars.apply(activity, top, bottom, true);
                             }
                             NativeTheme.remember(activity, theme.getBoolean("dark"));
                         }
