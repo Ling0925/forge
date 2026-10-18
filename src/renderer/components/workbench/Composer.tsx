@@ -145,7 +145,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         old[draftId] ? old : { ...old, [draftId]: true },
       );
   }, [draftId, prompt]);
-  const workspaceRestricted = hostCapabilities.web && window.forge.restrictWorkspace !== false;
+  const workspaceRestricted = hostCapabilities.web && window.forge?.restrictWorkspace !== false;
   const defaultWorkspace =
     state.activeSnapshot?.workspace ?? state.sessions[0]?.workspace ?? "";
   useEffect(() => {

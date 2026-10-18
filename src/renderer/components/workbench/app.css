@@ -12,6 +12,8 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  position: relative;
 }
 .wb-approval-pill {
   display: inline-flex;
@@ -276,6 +278,10 @@
   flex-shrink: 0;
   padding: var(--composer-inset);
   border-top: none;
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: var(--canvas-bg);
 }
 .composer-inner {
   display: flex;
@@ -478,7 +484,13 @@
      height (it is sized by 44px targets, not by a magic number) and the single
      visible pane takes the remainder. A hardcoded `100dvh - nav` height used
      to drift by a few pixels whenever the bar's own metrics changed. */
-  .wb-app .workbench-main,
+  .wb-app .workbench-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+  }
   .wb-app .workbench-inspector {
     flex: 1 1 auto;
     min-height: 0;
@@ -729,6 +741,7 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 .transcript-region .workbench-conversation-scroll {
   scroll-behavior: auto;
