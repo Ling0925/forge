@@ -62,7 +62,8 @@ const catalogKey = (source: {
 
 export function ProviderSources({
   onBusy,
-}: { onBusy: (busy: boolean) => void }) {
+  active = true,
+}: { onBusy: (busy: boolean) => void; active?: boolean }) {
   const { state, updateSettings } = useWorkbench();
   const settings = state.settings;
   const sources = useMemo(
@@ -81,6 +82,15 @@ export function ProviderSources({
   const [catalogs, setCatalogs] = useState<Record<string, readonly string[]>>(
     {},
   );
+  const [catalogLoading, setCatalogLoading] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [catalogErrors, setCatalogErrors] = useState<Record<string, string>>(
+    {},
+  );
+  const [overviewSearch, setOverviewSearch] = useState("");
+  const requestedCatalogs = useRef(new Set<string>());
+  const pendingCatalogs = useRef(new Map<string, Promise<readonly string[]>>());
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(50);
@@ -170,6 +180,50 @@ export function ProviderSources({
     };
   }, []);
 
+  const loadCatalog = useCallback(
+    (profile: Parameters<typeof catalogKey>[0]) => {
+      const key = catalogKey(profile);
+      const pending = pendingCatalogs.current.get(key);
+      if (pending) return pending;
+      requestedCatalogs.current.add(key);
+      setCatalogLoading((old) => ({ ...old, [key]: true }));
+      setCatalogErrors((old) => ({ ...old, [key]: "" }));
+      const request = Promise.resolve()
+        .then(() => window.forge.listModels(profile.id))
+        .then((result) => {
+          const unique = [...new Set(result)];
+          if (alive.current) setCatalogs((old) => ({ ...old, [key]: unique }));
+          return unique;
+        })
+        .catch((failure: unknown) => {
+          if (alive.current)
+            setCatalogErrors((old) => ({
+              ...old,
+              [key]:
+                failure instanceof Error ? failure.message : "模型目录加载失败",
+            }));
+          throw failure;
+        })
+        .finally(() => {
+          pendingCatalogs.current.delete(key);
+          if (alive.current)
+            setCatalogLoading((old) => ({ ...old, [key]: false }));
+        });
+      pendingCatalogs.current.set(key, request);
+      return request;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!active || !state.isSettingsOpen) return;
+    for (const profile of sources) {
+      if (!requestedCatalogs.current.has(catalogKey(profile))) {
+        void loadCatalog(profile).catch(() => undefined);
+      }
+    }
+  }, [active, state.isSettingsOpen, sources, loadCatalog]);
+
   const change = (patch: Partial<Draft>) => {
     setDraft((old) => ({ ...old, ...patch }));
     setError("");
@@ -235,10 +289,8 @@ export function ProviderSources({
     operation(async () => {
       if (!source || dirty) throw Error("请先保存此来源，再拉取模型。");
       setLoadingModels(true);
-      const result = await window.forge.listModels(source.id);
+      const unique = await loadCatalog(source);
       if (!alive.current) return;
-      const unique = [...new Set(result)];
-      setCatalogs((old) => ({ ...old, [catalogKey(source)]: unique }));
       setVisibleCount(50);
       setMessage(
         unique.length
@@ -296,40 +348,107 @@ export function ProviderSources({
       </div>
       {sources.length > 0 ? (
         <div className="provider-source-list" aria-label="已保存的来源">
-          {sources.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="provider-source-row"
-              aria-haspopup="dialog"
-              disabled={busy || hasEdits}
-              onClick={() => openEditor(item.id)}
-            >
-              <Plugs size={20} aria-hidden="true" />
-              <span className="provider-source-info">
-                <span className="provider-source-title">
-                  <strong>{item.label}</strong>
-                  {settings?.activeSourceId === item.id && (
-                    <span className="provider-current">
-                      <Check size={12} />
-                      当前
+          <Input
+            aria-label="搜索所有来源的模型"
+            placeholder="搜索模型 ID 或来源名称"
+            value={overviewSearch}
+            onChange={(event) => setOverviewSearch(event.target.value)}
+          />
+          {sources.map((item) => {
+            const key = catalogKey(item);
+            const catalog = catalogs[key];
+            const query = overviewSearch.trim().toLowerCase();
+            const matchesSource = item.label.toLowerCase().includes(query);
+            const displayed = (catalog ?? []).filter(
+              (model) => matchesSource || model.toLowerCase().includes(query),
+            );
+            return (
+              <section
+                key={item.id}
+                className="provider-overview"
+                aria-label={`${item.label}的模型`}
+              >
+                <button
+                  type="button"
+                  className="provider-source-row"
+                  aria-haspopup="dialog"
+                  disabled={busy || hasEdits}
+                  onClick={() => openEditor(item.id)}
+                >
+                  <Plugs size={20} aria-hidden="true" />
+                  <span className="provider-source-info">
+                    <span className="provider-source-title">
+                      <strong>{item.label}</strong>
+                      {settings?.activeSourceId === item.id && (
+                        <span className="provider-current">
+                          <Check size={12} />
+                          当前
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                <span className="provider-source-url">{item.baseUrl}</span>
-                <span className="provider-source-detail">
-                  {
-                    protocols.find(
-                      (protocol) =>
-                        protocol.value === (item.apiMode ?? "chat-completions"),
-                    )?.label
-                  }{" "}
-                  · {item.model || "尚未设置默认模型"}
-                </span>
-              </span>
-              <span className="provider-source-selection">编辑</span>
-            </button>
-          ))}
+                    <span className="provider-source-url">{item.baseUrl}</span>
+                    <span className="provider-source-detail">
+                      {
+                        protocols.find(
+                          (protocol) =>
+                            protocol.value ===
+                            (item.apiMode ?? "chat-completions"),
+                        )?.label
+                      }{" "}
+                      · {item.model || "尚未设置默认模型"}
+                    </span>
+                  </span>
+                  <span className="provider-source-selection">编辑</span>
+                </button>
+                <div className="provider-overview-toolbar">
+                  <span>
+                    {catalog === undefined
+                      ? "模型目录"
+                      : `${displayed.length} / ${catalog.length} 个模型`}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<ArrowClockwise size={14} />}
+                    aria-label={`刷新${item.label}的模型`}
+                    loading={catalogLoading[key] ?? false}
+                    onClick={() =>
+                      void loadCatalog(item).catch(() => undefined)
+                    }
+                  >
+                    刷新模型
+                  </Button>
+                </div>
+                {catalogErrors[key] && (
+                  <p className="provider-feedback provider-error">
+                    {catalogErrors[key]}。可点击刷新重试。
+                  </p>
+                )}
+                {catalog === undefined ? (
+                  <p className="provider-hint">
+                    {catalogLoading[key]
+                      ? "正在加载模型…"
+                      : "目录尚未加载，可刷新重试。"}
+                  </p>
+                ) : displayed.length ? (
+                  <ul className="provider-overview-models">
+                    {displayed.map((model) => (
+                      <li key={model}>
+                        <span>{model}</span>
+                        {item.model === model && <small>默认</small>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="provider-hint">
+                    {catalog.length
+                      ? "没有匹配的模型。"
+                      : "此来源返回空目录，可编辑来源手动填写模型 ID。"}
+                  </p>
+                )}
+              </section>
+            );
+          })}
         </div>
       ) : (
         <p className="provider-empty">添加第一个来源，连接你使用的模型服务。</p>

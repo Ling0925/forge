@@ -280,7 +280,7 @@ export function Settings() {
           )}
 
           <div hidden={!visible("connection")}>
-            <ProviderSources onBusy={value => { sourceBusy.current = value; setListing(value); }} />
+            <ProviderSources active={visible("connection")} onBusy={value => { sourceBusy.current = value; setListing(value); }} />
           </div>
           <form id="settings-page-form" noValidate onSubmit={e => { e.preventDefault(); void save(); }}>
             <fieldset disabled={busy || listing || !state.settings} className="settings-page-fields">
