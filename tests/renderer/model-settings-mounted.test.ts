@@ -139,6 +139,7 @@ it("model search requires selection and settings retain drafts and save once", a
     await page.getByRole("button", { name: "打开设置" }).click();
     expect(await page.getByLabel("最大轮次", { exact: true }).inputValue()).toBe("12");
     await page.getByRole("button", { name: "模型连接", exact: true }).click();
+    await page.getByRole("button", { name: "添加来源" }).click();
     expect(await page.getByLabel("来源名称", { exact: true }).count()).toBe(1);
   } finally {
     await browser.close();

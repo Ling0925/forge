@@ -98,6 +98,12 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.getByText('目录请求失败。可点击刷新重试。').waitFor();
     expect(await page.locator('.provider-overview-models li').count()).toBe(4);
     await page.evaluate(() => Reflect.set(window, 'failModels', false));
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.locator('.settings-page').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.locator('.settings-page').evaluate(el => el.clientWidth <= 390)).toBe(true);
+    expect(await page.locator('.settings-navigation').evaluate(el => el.clientWidth <= 390)).toBe(true);
+    expect(await page.locator('.settings-save-bar').evaluate(el => el.clientWidth <= 390)).toBe(true);
+    expect(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth)).toBe(true);
     const captureDirectory = process.env.FORGE_QA_DIR;
     if (captureDirectory) {
       await mkdir(captureDirectory, { recursive: true });
