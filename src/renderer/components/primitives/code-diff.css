@@ -161,12 +161,23 @@
 }
 
 .diff-path {
+  min-width: 0;
+  flex: 1 1 auto;
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.diff-path > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.diff-path > svg {
+  flex-shrink: 0;
 }
 
 .diff-header-meta {
@@ -237,6 +248,12 @@
 .diff-more:hover {
   background-color: var(--surface-soft);
   color: var(--text-primary);
+}
+
+@media (pointer: coarse) {
+  .diff-more {
+    min-height: var(--touch-min-target);
+  }
 }
 
 .diff-more:focus-visible {

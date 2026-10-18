@@ -12,6 +12,21 @@ const render = (props: ToolDisclosureProps) =>
   renderToStaticMarkup(createElement(ToolDisclosure, props));
 
 describe("tool disclosure row", () => {
+  it.each(["src/renderer/a.ts", "C:\\workspace\\a.ts"])(
+    "shows only the read filename in the header and the full path in details (%s)",
+    (path) => {
+      const html = render({
+        toolName: "read_file",
+        status: "completed",
+        parameters: { path },
+        defaultExpanded: true,
+      });
+      expect(html).toMatch(/class="tool-disclosure-target"[^>]*>a.ts<\/span>/);
+      expect(html).toContain(
+        `class="tool-section-content tool-read-path">${path}</pre>`,
+      );
+    },
+  );
   it("opens failures and shows the supplied error once without an empty result", () => {
     for (const output of [
       undefined,

@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
-import { chromium } from "playwright";
+import { type Page, chromium } from "playwright";
 import { expect, it } from "vitest";
 
 /**
@@ -18,6 +18,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
         import {useState} from 'react';
         import {createRoot} from 'react-dom/client';
         import {ToolDisclosure} from './src/renderer/components/primitives/ToolDisclosure';
+        import {createDiffPatch} from './src/shared/diff';
         import './src/renderer/styles/global.css';
         import './src/renderer/styles/workspace-theme.css';
         import './src/renderer/components/primitives/tool-disclosure.css';
@@ -26,6 +27,14 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
           const [autoCollapsed, setAutoCollapsed] = useState(false);
           window.updateTool = (status, history = false) => { setStatus(status); setAutoCollapsed(history); };
           return <ToolDisclosure className="live-tool" toolName="read_file" target="src/renderer/components/primitives/ToolDisclosure.tsx" status={status} autoCollapsed={autoCollapsed} output={status === 'failed' ? 'Access denied' : 'content'} />;
+        }
+        const editPath = 'src/renderer/components/workbench/settings/provider-connections/model-source-settings.ts';
+        const before = Array.from({length: 30}, (_, i) => 'old value ' + i).join('\\n');
+        const after = Array.from({length: 30}, (_, i) => 'new value ' + i).join('\\n');
+        function EditTool() {
+          const [done, setDone] = useState(false);
+          window.finishEdit = () => setDone(true);
+          return <ToolDisclosure toolName="edit_file" target={editPath} status={done ? 'completed' : 'running'} changes={done ? [{path: editPath, kind: 'modified', patch: createDiffPatch(before, after)}] : []} />;
         }
         createRoot(document.getElementById('root')).render(
           <div className="wb-app">
@@ -64,6 +73,9 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
               defaultExpanded={true}
             />
             <LiveTool />
+            <EditTool />
+            <ToolDisclosure toolName="write_file" target="src/new.ts" status="completed" changes={[{path:'src/new.ts', kind:'created', patch:createDiffPatch('', 'export const value = 1;')}]} />
+            <ToolDisclosure toolName="edit_file" target="src/locked.ts" status="failed" error="Permission denied" />
           </div>
         );
       `,
@@ -116,7 +128,9 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     expect(commandText).toContain("1.4s");
 
     // A failure names itself and shows stderr as its own stream.
-    const failedCard = page.locator('.tool-disclosure[data-status="failed"]');
+    const failedCard = page.locator(
+      '.tool-disclosure[data-status="failed"][data-tool="run_command"]',
+    );
     expect(await failedCard.count()).toBe(1);
     const failedText = await failedCard.innerText();
     expect(failedText).toContain("失败");
@@ -153,6 +167,89 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       .locator(".tool-details");
     expect(await params.getAttribute("open")).toBeNull();
     await params.locator("summary").click();
+    expect(
+      await page.locator(".live-tool .tool-disclosure-target").innerText(),
+    ).toBe("ToolDisclosure.tsx");
+    expect(await page.locator(".live-tool .tool-read-path").innerText()).toBe(
+      "src/renderer/components/primitives/ToolDisclosure.tsx",
+    );
+    const verifyEdits = async (surface: Page) => {
+      const edited = surface.locator('[data-tool="edit_file"]').first();
+      expect(await edited.getAttribute("data-expanded")).toBe("true");
+      await surface.evaluate(() => Reflect.get(window, "finishEdit")());
+      await edited.locator(".diff-viewer").waitFor();
+      expect(await edited.getAttribute("data-expanded")).toBe("true");
+      expect(await edited.locator(".tool-diff-added").innerText()).toBe("+30");
+      expect(await edited.locator(".tool-diff-removed").innerText()).toBe(
+        "-30",
+      );
+      expect(await edited.locator(".diff-line").count()).toBe(10);
+      const pathFits = await edited
+        .locator(".diff-path > span")
+        .evaluate((node) => {
+          const header = node.closest(".diff-header");
+          return (
+            header !== null &&
+            node.getBoundingClientRect().right <=
+              header.getBoundingClientRect().right
+          );
+        });
+      expect(pathFits).toBe(true);
+      if (
+        await surface.evaluate(() => matchMedia("(pointer: coarse)").matches)
+      ) {
+        expect(
+          await edited
+            .locator(".diff-more")
+            .evaluate((node) => node.getBoundingClientRect().height),
+        ).toBeGreaterThanOrEqual(44);
+      }
+      await edited
+        .getByRole("button", { name: "展开全部差异", exact: false })
+        .click();
+      expect(await edited.locator(".diff-line").count()).toBe(60);
+      expect(await edited.locator(".diff-scroll").innerText()).toContain(
+        "new value 29",
+      );
+      expect(
+        await edited
+          .locator(".diff-scroll")
+          .evaluate((node) => node.getBoundingClientRect().height),
+      ).toBeLessThanOrEqual(480);
+      if (captureDirectory)
+        await edited.screenshot({
+          path: resolve(
+            captureDirectory,
+            `edit-expanded-${surface.viewportSize()?.width}.png`,
+          ),
+          animations: "disabled",
+        });
+      const sizes = await edited.evaluate((node) => ({
+        width: node.clientWidth,
+        scroll: node.scrollWidth,
+      }));
+      expect(sizes.scroll).toBeLessThanOrEqual(sizes.width + 1);
+      await edited.getByRole("button", { name: "收起差异" }).click();
+      expect(await edited.locator(".diff-line").count()).toBe(10);
+      await edited.locator(".tool-disclosure-header").click();
+      expect(await edited.locator(".diff-viewer").count()).toBe(0);
+      await edited.locator(".tool-disclosure-header").click();
+      expect(await edited.locator(".diff-viewer").count()).toBe(1);
+      const written = surface.locator('[data-tool="write_file"]');
+      expect(await written.getAttribute("data-expanded")).toBe("true");
+      expect(await written.locator(".diff-line-added").innerText()).toContain(
+        "export const value = 1;",
+      );
+      const failedEdit = surface.locator(
+        '[data-tool="edit_file"][data-status="failed"]',
+      );
+      expect(await failedEdit.getAttribute("data-expanded")).toBe("true");
+      expect(
+        (await failedEdit.innerText()).match(/Permission denied/g),
+      ).toHaveLength(1);
+      expect(await failedEdit.locator(".diff-viewer").count()).toBe(0);
+    };
+    await verifyEdits(page);
     expect(await params.innerText()).toContain("src/a.ts");
     await params.locator("summary").click();
     const targetHeight = await page
@@ -169,6 +266,13 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
           fullPage: true,
           animations: "disabled",
         });
+        await page
+          .locator('[data-tool="edit_file"]')
+          .first()
+          .screenshot({
+            path: resolve(captureDirectory, `edit-390-${theme}.png`),
+            animations: "disabled",
+          });
       }
     expect(errors).toEqual([]);
     await context.close();
@@ -190,14 +294,16 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       (node) => node.getBoundingClientRect().height,
     );
     expect(fineHeight).toBeGreaterThanOrEqual(28);
-    expect(fineHeight).toBeLessThan(40);
+    expect(fineHeight).toBeLessThanOrEqual(28);
     await desktopHeader.click();
     const collapsedHeight = await desktopHeader.evaluate(
       (node) => node.getBoundingClientRect().height,
     );
     expect(Math.abs(collapsedHeight - fineHeight)).toBeLessThan(2);
     const commandInset = await desktopPage
-      .locator('.tool-disclosure[data-status="failed"] .tool-terminal-prompt')
+      .locator(
+        '.tool-disclosure[data-status="failed"][data-tool="run_command"] .tool-terminal-prompt',
+      )
       .evaluate((node) => {
         const parent = node.parentElement;
         if (!parent) throw new Error("Missing console header");
@@ -207,6 +313,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
         );
       });
     expect(commandInset).toBeLessThanOrEqual(16);
+    await verifyEdits(desktopPage);
     if (captureDirectory)
       for (const theme of ["light", "dark"]) {
         await desktopPage.evaluate((theme) => {
@@ -217,6 +324,13 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
           fullPage: true,
           animations: "disabled",
         });
+        await desktopPage
+          .locator('[data-tool="edit_file"]')
+          .first()
+          .screenshot({
+            path: resolve(captureDirectory, `edit-1280-${theme}.png`),
+            animations: "disabled",
+          });
       }
     const live = desktopPage.locator(".live-tool");
     const updateTool = async (status: string, history = false) => {

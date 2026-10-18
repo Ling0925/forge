@@ -694,7 +694,19 @@ export function ToolDisclosure({
   const manuallyToggled = useRef(false);
   const detailsId = useId();
   const label = friendlyLabel(toolName);
-  const displayTarget = target || (isRunCommand ? command : undefined);
+  const parsedParams = parseParams(parameters);
+  const parameterPath =
+    typeof parsedParams === "object" &&
+    parsedParams !== null &&
+    "path" in parsedParams &&
+    typeof parsedParams.path === "string"
+      ? parsedParams.path
+      : undefined;
+  const readPath =
+    toolName === "read_file" ? parameterPath || target : undefined;
+  const displayTarget = readPath
+    ? readPath.split(/[\\/]/).pop() || readPath
+    : target || (isRunCommand ? command : undefined);
   const showParameters = !writesFiles && !isRunCommand;
 
   useEffect(() => {
@@ -718,8 +730,6 @@ export function ToolDisclosure({
       foldedPhase.current = false;
     }
   }, [autoCollapsed]);
-
-  const parsedParams = parseParams(parameters);
 
   // Total added/removed lines across this tool's file changes, for the header.
   // Counts come from the recorded patch (full originals); an unknown count is
@@ -784,6 +794,7 @@ export function ToolDisclosure({
       className={`tool-disclosure ${className}`.trim()}
       aria-label={`工具调用：${toolName}`}
       data-status={status}
+      data-tool={toolName}
       data-expanded={expanded ? "true" : "false"}
     >
       <button
@@ -802,7 +813,10 @@ export function ToolDisclosure({
           </span>
           <span className="tool-disclosure-label">{label}</span>
           {displayTarget && (
-            <span className="tool-disclosure-target" title={displayTarget}>
+            <span
+              className="tool-disclosure-target"
+              title={readPath || displayTarget}
+            >
               {displayTarget}
             </span>
           )}
@@ -864,6 +878,16 @@ export function ToolDisclosure({
             />
           ) : (
             <>
+              {readPath &&
+                (result?.kind !== "object" ||
+                  result.record.path !== readPath) && (
+                  <div className="tool-section">
+                    <SectionHead title="文件路径" />
+                    <pre className="tool-section-content tool-read-path">
+                      {readPath}
+                    </pre>
+                  </div>
+                )}
               {failureReason && (
                 <div className="tool-section">
                   <SectionHead title="失败原因" />
