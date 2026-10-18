@@ -672,6 +672,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                       ? `重试 ${displayRun.providerRetry}/5`
                     : "正在执行"}
               </span>
+              {!isNew && state.activeSnapshot?.id === state.activeSessionId && (
+                <OutputSpeed run={displayRun} events={state.activeSnapshot.events} />
+              )}
             </output>
           )}
           {showActivity && (
@@ -999,9 +1002,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             />
           </div>
           <div className="composer-toolbar-end">
-            {!isNew && state.activeSnapshot?.id === state.activeSessionId && (
-              <OutputSpeed run={run} events={state.activeSnapshot.events} />
-            )}
             <ModelPicker
               value={model}
               models={allKnownModels}

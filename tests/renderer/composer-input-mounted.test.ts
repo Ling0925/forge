@@ -95,7 +95,7 @@ it("composer grows to six lines and requires explicit submission for multiline d
     await page.addScriptTag({ content: js });
     const input = page.locator("textarea.composer-textarea");
     const calls = () => page.locator("#calls").innerText();
-    await expect.poll(() => page.locator(".composer-output-speed").innerText()).toBe("平均 20 tok/s");
+    expect(await page.locator(".composer-output-speed").count()).toBe(0);
     await input.fill("hello");
     expect((await input.boundingBox())?.height).toBe(36);
     await input.press("Enter");
@@ -197,10 +197,6 @@ it("composer grows to six lines and requires explicit submission for multiline d
     await page.getByRole("button", { name: "延迟发送", exact: true }).click();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      const speedBounds = await page.locator(".composer-output-speed").boundingBox();
-      expect(speedBounds?.x).toBeGreaterThanOrEqual(0);
-      expect(speedBounds!.x + speedBounds!.width).toBeLessThanOrEqual(width);
-      expect(await page.locator(".composer-output-speed").innerText()).toBe("平均 20 tok/s");
       await trigger.click();
       const panel = page.locator(".composer-model-panel");
       await panel.waitFor();
@@ -272,6 +268,13 @@ it("composer grows to six lines and requires explicit submission for multiline d
       expect(activeBox?.y).toBeGreaterThan(initial.y);
       const activity = page.locator(".composer-activity");
       expect(await activity.innerText()).toContain("正在执行");
+      const speed = activity.locator(".composer-output-speed");
+      await expect.poll(() => speed.innerText()).toBe("平均 20 tok/s");
+      expect(await speed.evaluate(node => node.previousElementSibling?.textContent?.trim())).toBe("正在执行");
+      expect(await page.locator(".composer-toolbar .composer-output-speed").count()).toBe(0);
+      const speedBounds = await speed.boundingBox();
+      expect(speedBounds?.x).toBeGreaterThanOrEqual(0);
+      expect(speedBounds!.x + speedBounds!.width).toBeLessThanOrEqual(width);
       await page.emulateMedia({ reducedMotion: "no-preference" });
       const bar = activity.locator(".composer-activity-bars > span").first();
       const frames = await bar.evaluate((node) => {
@@ -299,7 +302,8 @@ it("composer grows to six lines and requires explicit submission for multiline d
         await bar.evaluate((node) => getComputedStyle(node).animationName),
       ).toBe("none");
       await page.getByRole("button", { name: "等待批准", exact: true }).click();
-      expect(await activity.innerText()).toBe("等待审批");
+      expect(await activity.innerText()).toContain("等待审批");
+      expect(await speed.innerText()).toBe("平均 20 tok/s");
       await page.emulateMedia({ reducedMotion: "no-preference" });
       expect(
         await bar.evaluate((node) => getComputedStyle(node).animationName),
@@ -326,7 +330,8 @@ it("composer grows to six lines and requires explicit submission for multiline d
       await action.click();
       await expect.poll(() => action.getAttribute("aria-busy")).toBe("true");
       expect((await action.boundingBox())?.y).toBe(activeBox?.y);
-      expect(await activity.innerText()).toBe("正在停止");
+      expect(await activity.innerText()).toContain("正在停止");
+      expect(await speed.innerText()).toBe("平均 20 tok/s");
       await page.getByRole("button", { name: "完成运行", exact: true }).click();
       await expect.poll(() => action.getAttribute("aria-label")).toBe("运行");
       await expect.poll(async () => (await action.boundingBox())?.y).toBe(initial.y);
