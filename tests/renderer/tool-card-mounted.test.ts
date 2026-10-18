@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 import { chromium } from "playwright";
@@ -14,10 +15,18 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       resolveDir: resolve("."),
       loader: "tsx",
       contents: `
+        import {useState} from 'react';
         import {createRoot} from 'react-dom/client';
         import {ToolDisclosure} from './src/renderer/components/primitives/ToolDisclosure';
         import './src/renderer/styles/global.css';
+        import './src/renderer/styles/workspace-theme.css';
         import './src/renderer/components/primitives/tool-disclosure.css';
+        function LiveTool() {
+          const [status, setStatus] = useState('running');
+          const [autoCollapsed, setAutoCollapsed] = useState(false);
+          window.updateTool = (status, history = false) => { setStatus(status); setAutoCollapsed(history); };
+          return <ToolDisclosure className="live-tool" toolName="read_file" target="src/renderer/components/primitives/ToolDisclosure.tsx" status={status} autoCollapsed={autoCollapsed} output={status === 'failed' ? 'Access denied' : 'content'} />;
+        }
         createRoot(document.getElementById('root')).render(
           <div className="wb-app">
             <ToolDisclosure
@@ -54,6 +63,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
               output={JSON.stringify({path: 'src/a.ts', content: '1: const a = 1;\\n2: export { a };'})}
               defaultExpanded={true}
             />
+            <LiveTool />
           </div>
         );
       `,
@@ -71,6 +81,9 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     file.path.endsWith(".css"),
   )?.text;
   if (!js || !css) throw new Error("Missing bundle");
+  const surfaceCss = `${css}\nhtml,body,#root {height:auto;overflow:visible;background:var(--canvas-bg)} .wb-app {max-width:760px;margin:24px auto;padding:16px;}`;
+  const captureDirectory = process.env.FORGE_QA_DIR;
+  if (captureDirectory) await mkdir(captureDirectory, { recursive: true });
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -84,7 +97,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setContent('<div id="root"></div>');
-    await page.addStyleTag({ content: css });
+    await page.addStyleTag({ content: surfaceCss });
     await page.addScriptTag({ content: js });
     await page.waitForSelector(".tool-disclosure");
 
@@ -134,6 +147,29 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       () => document.activeElement?.className,
     );
     expect(focused).toContain("tool-disclosure-header");
+    const params = page
+      .locator('.tool-disclosure[aria-label="工具调用：read_file"]')
+      .first()
+      .locator(".tool-details");
+    expect(await params.getAttribute("open")).toBeNull();
+    await params.locator("summary").click();
+    expect(await params.innerText()).toContain("src/a.ts");
+    await params.locator("summary").click();
+    const targetHeight = await page
+      .locator(".live-tool .tool-disclosure-target")
+      .evaluate((node) => node.getBoundingClientRect().height);
+    expect(targetHeight).toBeLessThanOrEqual(34);
+    if (captureDirectory)
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate((theme) => {
+          document.documentElement.dataset.theme = theme;
+        }, theme);
+        await page.screenshot({
+          path: resolve(captureDirectory, `tools-390-${theme}.png`),
+          fullPage: true,
+          animations: "disabled",
+        });
+      }
     expect(errors).toEqual([]);
     await context.close();
 
@@ -144,7 +180,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     });
     const desktopPage = await desktop.newPage();
     await desktopPage.setContent('<div id="root"></div>');
-    await desktopPage.addStyleTag({ content: css });
+    await desktopPage.addStyleTag({ content: surfaceCss });
     await desktopPage.addScriptTag({ content: js });
     await desktopPage.waitForSelector(".tool-disclosure");
     const desktopHeader = desktopPage
@@ -160,6 +196,68 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       (node) => node.getBoundingClientRect().height,
     );
     expect(Math.abs(collapsedHeight - fineHeight)).toBeLessThan(2);
+    const commandInset = await desktopPage
+      .locator('.tool-disclosure[data-status="failed"] .tool-terminal-prompt')
+      .evaluate((node) => {
+        const parent = node.parentElement;
+        if (!parent) throw new Error("Missing console header");
+        return (
+          node.getBoundingClientRect().left -
+          parent.getBoundingClientRect().left
+        );
+      });
+    expect(commandInset).toBeLessThanOrEqual(16);
+    if (captureDirectory)
+      for (const theme of ["light", "dark"]) {
+        await desktopPage.evaluate((theme) => {
+          document.documentElement.dataset.theme = theme;
+        }, theme);
+        await desktopPage.screenshot({
+          path: resolve(captureDirectory, `tools-1280-${theme}.png`),
+          fullPage: true,
+          animations: "disabled",
+        });
+      }
+    const live = desktopPage.locator(".live-tool");
+    const updateTool = async (status: string, history = false) => {
+      await desktopPage.evaluate(
+        ({ status, history }) => {
+          const update = Reflect.get(window, "updateTool");
+          update(status, history);
+        },
+        { status, history },
+      );
+      await desktopPage.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          ),
+      );
+      await desktopPage.waitForFunction(
+        ({ status, history }) => {
+          const live = document.querySelector(".live-tool");
+          return (
+            live?.getAttribute("data-status") === status &&
+            (history ||
+              live.getAttribute("data-expanded") ===
+                (status === "completed" ? "false" : "true"))
+          );
+        },
+        { status, history },
+      );
+    };
+    expect(await live.getAttribute("data-expanded")).toBe("true");
+    await updateTool("completed");
+    expect(await live.getAttribute("data-expanded")).toBe("false");
+    await updateTool("failed");
+    expect(await live.innerText()).toContain("Access denied");
+    await updateTool("completed");
+    await live.locator(".tool-disclosure-header").click();
+    await updateTool("completed", true);
+    expect(await live.getAttribute("data-expanded")).toBe("true");
+    await live.locator(".tool-disclosure-header").click();
+    await updateTool("running", true);
+    expect(await live.getAttribute("data-expanded")).toBe("false");
     await desktop.close();
   } finally {
     await browser.close();

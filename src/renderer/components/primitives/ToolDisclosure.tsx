@@ -680,9 +680,6 @@ export function ToolDisclosure({
   autoCollapsed = false,
   className = "",
 }: ToolDisclosureProps) {
-  // Only running tasks ("等待中") and file edits ("编辑文件") open by default.
-  // All other tools (including completed commands, file reads, searches, etc.)
-  // default to collapsed quiet rows.
   const writesFiles = toolName === "edit_file" || toolName === "write_file";
   // A plain command's arguments are its command line (shown in the console); a
   // background task's arguments are the only record of the requested action.
@@ -690,12 +687,25 @@ export function ToolDisclosure({
   const isConsole = isRunCommand || toolName === "command_task";
   const isWaiting = status === "running";
   const initialExpanded =
-    defaultExpanded !== undefined ? defaultExpanded : isWaiting || writesFiles;
+    defaultExpanded !== undefined
+      ? defaultExpanded
+      : isWaiting || writesFiles || status === "failed";
   const [expanded, setExpanded] = useState(initialExpanded);
+  const manuallyToggled = useRef(false);
   const detailsId = useId();
   const label = friendlyLabel(toolName);
   const displayTarget = target || (isRunCommand ? command : undefined);
   const showParameters = !writesFiles && !isRunCommand;
+
+  useEffect(() => {
+    if (
+      defaultExpanded !== undefined ||
+      manuallyToggled.current ||
+      autoCollapsed
+    )
+      return;
+    setExpanded(status !== "completed" || writesFiles);
+  }, [status, writesFiles, defaultExpanded, autoCollapsed]);
 
   // Phases fold once when they pass into history. Remember which phase already
   // folded so a manual reopen is respected until the item enters a new phase.
@@ -703,7 +713,7 @@ export function ToolDisclosure({
   useEffect(() => {
     if (autoCollapsed && !foldedPhase.current) {
       foldedPhase.current = true;
-      setExpanded(false);
+      if (!manuallyToggled.current) setExpanded(false);
     } else if (!autoCollapsed) {
       foldedPhase.current = false;
     }
@@ -747,13 +757,22 @@ export function ToolDisclosure({
   const textFailure = status === "failed" && result?.kind === "text";
   const failureReason =
     status === "failed"
-      ? (explicitReason ??
+      ? (error ??
+        explicitReason ??
         (result?.kind === "text" ? result.text : null) ??
         (result ? null : "失败，但未记录具体原因。"))
       : null;
   // Only drop the `error` row when that exact text is already rendered above.
   const reasonShownAsFailure =
-    failureReason !== null && explicitReason !== null;
+    failureReason !== null && explicitReason === failureReason;
+  const hasResult =
+    result !== null &&
+    !(textFailure && result.kind === "text" && result.text === failureReason) &&
+    !(
+      result.kind === "object" &&
+      reasonShownAsFailure &&
+      Object.keys(result.record).length === 1
+    );
   const clock = timestamp ? formatClock(timestamp) : null;
   const stamp = timestamp ? formatStamp(timestamp) : undefined;
   const resolvedExit = consoleModel
@@ -770,7 +789,10 @@ export function ToolDisclosure({
       <button
         type="button"
         className="tool-disclosure-header"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          manuallyToggled.current = true;
+          setExpanded((value) => !value);
+        }}
         aria-expanded={expanded}
         aria-controls={detailsId}
       >
@@ -842,6 +864,14 @@ export function ToolDisclosure({
             />
           ) : (
             <>
+              {failureReason && (
+                <div className="tool-section">
+                  <SectionHead title="失败原因" />
+                  <pre className="tool-section-content tool-section-error">
+                    {failureReason}
+                  </pre>
+                </div>
+              )}
               {command && (
                 <div className="tool-section">
                   <SectionHead
@@ -875,23 +905,7 @@ export function ToolDisclosure({
                   </div>
                 </div>
               )}
-              {/* A file edit shows only the diff: its raw before/after argument
-                  rows ("原内容"/"新内容") would just duplicate the comparison. */}
-              {showParameters && (
-                <div className="tool-section">
-                  <SectionHead title="调用参数" />
-                  <ParameterFields parameters={parsedParams} />
-                </div>
-              )}
-              {failureReason && (
-                <div className="tool-section">
-                  <SectionHead title="失败原因" />
-                  <pre className="tool-section-content tool-section-error">
-                    {failureReason}
-                  </pre>
-                </div>
-              )}
-              {error && (
+              {error && error !== failureReason && (
                 <div className="tool-section">
                   <SectionHead title="执行错误" />
                   <pre className="tool-section-content tool-section-error">
@@ -909,32 +923,47 @@ export function ToolDisclosure({
                   </span>
                 </div>
               )}
-              <div className="tool-section">
-                <SectionHead
-                  title="结果"
-                  {...(result?.kind === "text" && !textFailure
-                    ? {
-                        action: (
-                          <ToolCopyButton text={result.text} label="复制结果" />
-                        ),
-                      }
-                    : {})}
-                />
-                {!result ? (
-                  <span className="tool-section-empty">工具未返回文本</span>
-                ) : result.kind === "text" ? (
-                  textFailure ? null : (
-                    <pre className="tool-section-content">{result.text}</pre>
-                  )
-                ) : (
-                  <ValueRows
-                    record={result.record}
-                    {...(reasonShownAsFailure
-                      ? { skip: new Set(["error"]) }
+              {(hasResult ||
+                (!result && !failureReason && !changes?.length)) && (
+                <div className="tool-section">
+                  <SectionHead
+                    title="结果"
+                    {...(result?.kind === "text" && hasResult
+                      ? {
+                          action: (
+                            <ToolCopyButton
+                              text={result.text}
+                              label="复制结果"
+                            />
+                          ),
+                        }
                       : {})}
                   />
-                )}
-              </div>
+                  {!result ? (
+                    <span className="tool-section-empty">
+                      {isWaiting ? "等待工具返回结果…" : "工具未返回文本"}
+                    </span>
+                  ) : result.kind === "text" ? (
+                    <pre className="tool-section-content">{result.text}</pre>
+                  ) : (
+                    <ValueRows
+                      record={result.record}
+                      {...(reasonShownAsFailure
+                        ? { skip: new Set(["error"]) }
+                        : {})}
+                    />
+                  )}
+                </div>
+              )}
+              {showParameters && (
+                <details className="tool-details">
+                  <summary className="tool-debug-summary">
+                    <CaretRight size={11} weight="bold" aria-hidden="true" />
+                    调用参数
+                  </summary>
+                  <ParameterFields parameters={parsedParams} />
+                </details>
+              )}
             </>
           )}
 

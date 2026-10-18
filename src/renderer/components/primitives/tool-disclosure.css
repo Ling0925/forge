@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  border: 1px solid transparent;
+  min-width: 0;
   border-radius: var(--radius-card);
   background: transparent;
   text-align: left;
@@ -29,10 +29,10 @@
    1. Header: the resting single-line summary
    -------------------------------------------------------------------------- */
 .tool-disclosure-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: var(--space-2) var(--space-2-5);
   width: 100%;
   /* Height is a floor, never a ceiling: a wrapped narrow header must grow
@@ -41,7 +41,7 @@
   padding: 4px var(--space-2-5);
   border: 1px solid transparent;
   border-radius: var(--radius-card);
-  background-color: var(--surface-soft);
+  background-color: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
@@ -61,18 +61,8 @@
   outline-offset: -1px;
 }
 
-/* Resting-to-expanded transition: the row becomes one bordered card, so the
-   header and the body read as a single object instead of two stacked strips. */
-.tool-disclosure[data-expanded="true"] {
-  border-color: var(--border-subtle);
-  background-color: var(--surface-elevated);
-}
-
 .tool-disclosure[data-expanded="true"] .tool-disclosure-header {
-  border-bottom: 1px solid var(--border-subtle);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  background-color: var(--surface-hover);
+  background-color: var(--surface-soft);
 }
 
 /* A failed action must be findable while scrolling: the row tints and carries
@@ -236,10 +226,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-3) var(--space-2-5);
-  background-color: var(--surface-elevated);
-  border-bottom-left-radius: var(--radius-card);
-  border-bottom-right-radius: var(--radius-card);
+  min-width: 0;
+  margin: var(--space-1) var(--space-2-5) var(--space-1) 17px;
+  padding: var(--space-2) 0 var(--space-1) var(--space-3);
+  border-left: 1px solid var(--border-subtle);
 }
 
 .tool-section {
@@ -349,14 +339,14 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background-color: var(--canvas-bg);
+  background-color: var(--surface-soft);
   overflow: hidden;
   min-width: 0;
 }
 
 .tool-terminal-header {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -577,10 +567,7 @@
   margin: 0;
   max-height: 280px;
   overflow: auto;
-  padding: var(--space-1-5) var(--space-2);
-  border-radius: var(--radius-sm);
-  background-color: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
+  padding: var(--space-1-5) 0;
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.6;
@@ -649,9 +636,9 @@
 /* --------------------------------------------------------------------------
    7. Debug & internal details
    -------------------------------------------------------------------------- */
-.tool-debug {
-  border-top: 1px dashed var(--border-subtle);
-  padding-top: var(--space-2);
+.tool-debug,
+.tool-details {
+  min-width: 0;
 }
 
 .tool-debug-summary {
@@ -688,7 +675,8 @@
   transition: transform var(--transition-fast);
 }
 
-.tool-debug[open] > .tool-debug-summary > svg {
+.tool-debug[open] > .tool-debug-summary > svg,
+.tool-details[open] > .tool-debug-summary > svg {
   transform: rotate(90deg);
 }
 
@@ -731,12 +719,19 @@
   }
 
   .tool-disclosure-summary {
-    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: 15px minmax(0, 1fr);
+    gap: var(--space-1) var(--space-2);
   }
 
   .tool-disclosure-target {
+    grid-column: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
     white-space: normal;
     overflow-wrap: anywhere;
+    line-height: 1.5;
   }
 
   .tool-disclosure-meta {

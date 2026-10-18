@@ -12,6 +12,39 @@ const render = (props: ToolDisclosureProps) =>
   renderToStaticMarkup(createElement(ToolDisclosure, props));
 
 describe("tool disclosure row", () => {
+  it("opens failures and shows the supplied error once without an empty result", () => {
+    for (const output of [
+      undefined,
+      "Access denied",
+      JSON.stringify({ error: "Access denied" }),
+    ]) {
+      const html = render({
+        toolName: "read_file",
+        status: "failed",
+        error: "Access denied",
+        ...(output === undefined ? {} : { output }),
+      });
+      expect(html).toContain('aria-expanded="true"');
+      expect(html.match(/Access denied/g)).toHaveLength(1);
+      expect(html).not.toContain("未记录具体原因");
+      expect(html).not.toContain('title">结果');
+    }
+  });
+
+  it("places results before collapsed arguments", () => {
+    const html = render({
+      toolName: "read_file",
+      status: "completed",
+      defaultExpanded: true,
+      parameters: { path: "src/a.ts" },
+      output: "file contents",
+    });
+    expect(html.indexOf("file contents")).toBeLessThan(
+      html.indexOf("调用参数"),
+    );
+    expect(html).toContain('<details class="tool-details">');
+  });
+
   it("names the action and its target on the collapsed line, not just a symbol", () => {
     const html = render({
       toolName: "read_file",
@@ -167,7 +200,9 @@ describe("tool disclosure row", () => {
       toolName: "read_file",
       target: "src/a.ts",
       status: "failed",
-      output: JSON.stringify({ error: "Workspace path rejected: outside root" }),
+      output: JSON.stringify({
+        error: "Workspace path rejected: outside root",
+      }),
       defaultExpanded: true,
     });
     expect(html).toContain("失败原因");
@@ -312,7 +347,11 @@ describe("tool disclosure row", () => {
       target: "src/a.ts",
       status: "completed",
       changes: [
-        { path: "src/a.ts", kind: "modified", patch: createDiffPatch(before, after) },
+        {
+          path: "src/a.ts",
+          kind: "modified",
+          patch: createDiffPatch(before, after),
+        },
       ],
     });
     // 3 added (new one, new two, extra), 2 removed (old one, old two).
@@ -345,24 +384,40 @@ describe("tool disclosure row", () => {
   it.each([
     [undefined, "缺少完整内容"],
     ["budget", "内容超出计算预算"],
-  ] as const)("explains why a patch is unavailable (%s)", (reason, expected) => {
-    const html = renderToStaticMarkup(createElement(DiffViewer, {
-      change: {
-        path: "a.ts", kind: "modified",
-        patch: {
-          version: 1, status: "unavailable", ...(reason ? { reason } : {}),
-          omittedLines: 0, omittedHunks: 0, hunks: [],
-        },
-      },
-    }));
-    expect(html).toContain(expected);
-    expect(html).not.toContain("无文本改动");
-  });
+  ] as const)(
+    "explains why a patch is unavailable (%s)",
+    (reason, expected) => {
+      const html = renderToStaticMarkup(
+        createElement(DiffViewer, {
+          change: {
+            path: "a.ts",
+            kind: "modified",
+            patch: {
+              version: 1,
+              status: "unavailable",
+              ...(reason ? { reason } : {}),
+              omittedLines: 0,
+              omittedHunks: 0,
+              hunks: [],
+            },
+          },
+        }),
+      );
+      expect(html).toContain(expected);
+      expect(html).not.toContain("无文本改动");
+    },
+  );
 
   it("does not label a fully omitted patch as unchanged", () => {
-    const html = renderToStaticMarkup(createElement(DiffViewer, {
-      change: { path: "a.ts", kind: "created", patch: createDiffPatch("", "x".repeat(9000)) },
-    }));
+    const html = renderToStaticMarkup(
+      createElement(DiffViewer, {
+        change: {
+          path: "a.ts",
+          kind: "created",
+          patch: createDiffPatch("", "x".repeat(9000)),
+        },
+      }),
+    );
     expect(html).toContain("差异内容已截断");
     expect(html).not.toContain("无文本改动");
   });
@@ -424,7 +479,10 @@ describe("tool disclosure row", () => {
         {
           path: "src/a.ts",
           kind: "modified",
-          patch: createDiffPatch("keep\nconst old = 1;", "keep\nconst next = 2;"),
+          patch: createDiffPatch(
+            "keep\nconst old = 1;",
+            "keep\nconst next = 2;",
+          ),
         },
       ],
     });
@@ -472,7 +530,11 @@ describe("tool disclosure row", () => {
       .replace("line 70", "changed late");
     const html = renderToStaticMarkup(
       createElement(DiffViewer, {
-        change: { path: "src/a.ts", kind: "modified", patch: createDiffPatch(before, after) },
+        change: {
+          path: "src/a.ts",
+          kind: "modified",
+          patch: createDiffPatch(before, after),
+        },
         isSuggested: false,
         previewLines: 0,
       }),
