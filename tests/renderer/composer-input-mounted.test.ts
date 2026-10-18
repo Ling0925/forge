@@ -63,7 +63,10 @@ it("composer grows to six lines and requires explicit submission for multiline d
             cancelRun:()=>setRuns({[id]:{accepted:true,status:'running',isCancelling:true}}),
             finishRun:()=>setRuns({[id]:{accepted:true,status:'completed'}}),
             switchSession:()=>setId(v=>v==='a'?'b':'a'),selectSession:()=>{},
-            state:{activeSessionId:id,activeSnapshot:{model:'provider/model',workspace:'/tmp'},sessions:[],
+            state:{activeSessionId:id,activeSnapshot:{id,model:'provider/model',workspace:'/tmp',events:[
+                {type:'run_started',timestamp:'2026-01-01T00:00:00Z'},
+                {type:'run_finished',timestamp:'2026-01-01T00:00:10Z',usage:{promptTokens:100,completionTokens:200,totalTokens:300},usageComplete:true}
+              ]},sessions:[],
               settings:{...defaultPublicSettings,model:'provider/model',isConfigured:true,reasoningEffort:effort},activeRuns:runs}}}>{children}</Context.Provider>
         }
       `,
@@ -92,6 +95,7 @@ it("composer grows to six lines and requires explicit submission for multiline d
     await page.addScriptTag({ content: js });
     const input = page.locator("textarea.composer-textarea");
     const calls = () => page.locator("#calls").innerText();
+    await expect.poll(() => page.locator(".composer-output-speed").innerText()).toBe("平均 20 tok/s");
     await input.fill("hello");
     expect((await input.boundingBox())?.height).toBe(36);
     await input.press("Enter");
@@ -193,6 +197,10 @@ it("composer grows to six lines and requires explicit submission for multiline d
     await page.getByRole("button", { name: "延迟发送", exact: true }).click();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
+      const speedBounds = await page.locator(".composer-output-speed").boundingBox();
+      expect(speedBounds?.x).toBeGreaterThanOrEqual(0);
+      expect(speedBounds!.x + speedBounds!.width).toBeLessThanOrEqual(width);
+      expect(await page.locator(".composer-output-speed").innerText()).toBe("平均 20 tok/s");
       await trigger.click();
       const panel = page.locator(".composer-model-panel");
       await panel.waitFor();

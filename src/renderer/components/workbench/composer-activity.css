@@ -57,6 +57,6 @@
   white-space: nowrap;
   min-width: 9ch;
   display: inline-block;
-  font-size: inherit;
-  line-height: inherit;
+  font-size: var(--text-xs);
+  line-height: 20px;
 }

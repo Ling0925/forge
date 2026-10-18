@@ -16,6 +16,10 @@ const add = (a: Totals, b: Totals): Totals => ({
 function emptyState() {
   return {
     display: emptyContextDisplay(),
+    speedTokens: 0,
+    speedDurationMs: 0,
+    speedPartial: false,
+    runStartedAt: undefined as number | undefined,
     latestCache: undefined as number | undefined,
     cacheInput: 0,
     cacheRead: 0,
@@ -32,6 +36,12 @@ type UsageState = ReturnType<typeof emptyState>;
 
 function accumulate(state: UsageState, event: AgentEvent) {
   state.display = advanceContextDisplay(state.display, event);
+  if (event.type === "run_started") {
+    // An unmatched old start is not allowed to leak into a later run.
+    state.runStartedAt = Number.isFinite(Date.parse(event.timestamp)) ? Date.parse(event.timestamp) : undefined;
+    state.pending = emptyTotals();
+    state.pendingReports = 0;
+  }
   if (event.type === "context_usage") {
     const usage = event.usage;
     if (usage.basis !== "projected" && usage.promptTokens !== undefined) {
@@ -62,6 +72,14 @@ function accumulate(state: UsageState, event: AgentEvent) {
         state.cacheReports++;
       }
     }
+    const duration = Date.parse(event.timestamp) - (state.runStartedAt ?? NaN);
+    const output = event.usage?.completionTokens ?? (state.pendingReports ? state.pending.completionTokens : undefined);
+    if (Number.isFinite(duration) && duration > 0 && output !== undefined) {
+      state.speedTokens += output;
+      state.speedDurationMs += duration;
+      state.speedPartial ||= !event.usage || event.usageComplete === false;
+    }
+    state.runStartedAt = undefined;
     state.total = add(state.total, event.usage ?? state.pending);
     state.reports += event.usage ? 1 : state.pendingReports;
     state.partial ||= !event.usage || event.usageComplete === false;
@@ -85,6 +103,13 @@ function summarize(state: UsageState) {
       state.cacheInput > 0 ? state.cacheRead / state.cacheInput : undefined,
     cacheRead: state.cacheReports ? state.cacheRead : undefined,
     cachePartial: state.cacheReports < state.requests,
+    speed: {
+      outputTokens: state.speedTokens,
+      durationMs: state.speedDurationMs,
+      partial: state.speedPartial,
+      runStartedAt: state.runStartedAt,
+      pendingTokens: state.pending.completionTokens,
+    },
   };
 }
 
