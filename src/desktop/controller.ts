@@ -161,6 +161,27 @@ export function createWorkerController(
     }
     emit(parsed);
   };
+  // Every attached client (desktop window, Web, Android) shares this one
+  // controller, so a settlement must be broadcast to all subscribers instead of
+  // only replying to the caller. Otherwise the other surfaces keep a stale
+  // approval card. The payload is limited to the approval id and the decision:
+  // no request body, command, tool arguments or credential. Callers mark the
+  // approval `consumed` first, so each approval settles at most one event.
+  const settleApproval = (
+    runId: RunId,
+    approval: Approval,
+    approved: boolean,
+  ): void => {
+    const run = runs.get(runId);
+    if (!run || run.finished) return;
+    event(runId, {
+      type: "approval_resolved",
+      sessionId: run.input.sessionId,
+      timestamp: new Date().toISOString(),
+      approvalId: approval.request.id,
+      approved,
+    });
+  };
   const finish = (runId: RunId, error?: ErrorInfo): void => {
     const run = runs.get(runId);
     if (!run) return;
@@ -431,6 +452,9 @@ export function createWorkerController(
             approval.consumed = true;
             approval.answer = request.permission === "unrestricted";
             approval.resolve?.(approval.answer);
+            // Permission changes settle pending root approvals implicitly, so
+            // every other client must retire the same card.
+            settleApproval(request.runId, approval, approval.answer);
           }
           event(request.runId, { type: "permission_changed", sessionId: run.input.sessionId,
             timestamp: new Date().toISOString(), permission: request.permission });
@@ -464,6 +488,8 @@ export function createWorkerController(
           answer.consumed = true;
           answer.answer = request.approved;
           answer.resolve?.(request.approved);
+          // Retire the card on every surface before acknowledging the decision.
+          settleApproval(request.runId, answer, request.approved);
           respond(request, null);
           break;
         }
@@ -505,9 +531,14 @@ export function createWorkerController(
       const retry = run.recovery.get("provider_retry");
       if (retry) result.push({ runId, event: retry });
       result.push({ runId, event: run.recovery.get("state_changed") ?? { ...base, type: "state_changed", status: "running" } });
-      for (const type of ["reasoning_delta", "text_delta"]) {
+      for (const type of ["reasoning_delta", "text_delta"] as const) {
         const event = run.recovery.get(type);
-        if (event) result.push({ runId, event });
+        if (event && (event.type === "reasoning_delta" || event.type === "text_delta")) {
+          // Recovery retains one extra character to signal UI truncation, but
+          // every network event must still respect the 131072-character schema.
+          for (let offset = 0; offset < event.text.length; offset += 131072)
+            result.push({ runId, event: { ...event, text: event.text.slice(offset, offset + 131072) } });
+        }
       }
       for (const [key, event] of run.recovery)
         if (key.startsWith("tool-preview:")) result.push({ runId, event });

@@ -200,11 +200,11 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
     expect(events.some((event) => event.runId === running.runId && event.event.type === "run_started")).toBe(true);
     expect(events.some((event) => event.event.type === "run_finished")).toBe(false);
     await page.goto(`${web.origin}/workbench`);
-    await page.getByText("New session", { exact: true }).click();
+    await page.locator(".welcome-task").filter({ hasText: "New session" }).first().click();
     await page.getByRole("button", { name: "取消", exact: true }).waitFor();
     await page.getByText("progress 0", { exact: true }).waitFor();
     await page.reload();
-    await page.getByText("New session", { exact: true }).click();
+    await page.locator(".welcome-task").filter({ hasText: "New session" }).first().click();
     await page.getByRole("button", { name: "取消", exact: true }).waitFor();
     await page.getByText("progress 0", { exact: true }).waitFor();
     release();

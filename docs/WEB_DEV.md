@@ -2,6 +2,8 @@
 
 Web 与 Electron 复用 `src/renderer` 的全部 React 页面、组件和样式；`src/shared/bridge.ts` 是共用的已校验 RPC 桥接，只有宿主通信与少量能力不同。CLI 和桌面启动入口不变。
 
+Android 扫码连接、桌面内开启的共享局域网核心，以及不依赖 Vite 的 `pnpm build:web` / `pnpm serve:web` 入口见 [Android 局域网客户端](ANDROID.md)。本文的 `dev:web` 保留开发热更新和固定工作区行为；设置中的“手机连接”可以显示当前工作台地址二维码。
+
 ## 启动
 
 ```sh

@@ -237,6 +237,7 @@ forge mcp enable <name>                            # 显式启用该服务
 | **🚀 进阶工作流** | **[docs/WORKFLOWS.md](docs/WORKFLOWS.md)** | 端到端全流程运行示例、桌面与终端联动实战 |
 | **💻 命令行参考** | **[docs/CLI.md](docs/CLI.md)** | 完整命令、参数标志、输入流及环境变量定义 |
 | **Web 开发** | **[docs/WEB_DEV.md](docs/WEB_DEV.md)** | 启动、热更新、宿主差异与聚焦验证 |
+| **Android / 局域网** | **[docs/ANDROID.md](docs/ANDROID.md)** | 桌面/Web 核心公开、手机扫码连接与 Android 构建 |
 | **🏛️ 架构与设计** | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**<br>**[DESIGN.md](DESIGN.md)** | 核心运行时架构分解、桌面端视觉语素与交互规范 |
 | **🌐 模型与协议** | **[docs/PROVIDERS.md](docs/PROVIDERS.md)** | OpenAI / Anthropic SDK、三种协议与续传语义 |
 | **🧩 扩展与集成** | **[docs/CONTEXT.md](docs/CONTEXT.md)**<br>**[docs/MCP.md](docs/MCP.md)**<br>**[docs/BROWSER_TOOLS.md](docs/BROWSER_TOOLS.md)** | 项目指令 (AGENTS.md) 与技能包发现、stdio MCP 服务、Playwright 浏览器工具 |

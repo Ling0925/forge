@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -10,6 +11,8 @@ import {
   ipcMain,
   shell,
 } from "electron";
+import { z } from "zod";
+import { LAN_CHANNEL, lanRequestSchema, lanStatusSchema } from "../shared/lan";
 import {
   IPC_CHANNELS,
   type RpcRequest,
@@ -41,6 +44,16 @@ export function launchDesktop(): void {
   >();
   const runs = new Map<RunId, { owner: WebContents; sessionId: SessionId }>();
   const gate = createReadyGate();
+  let lanUrl: string | null = null;
+  const lanPending = new Map<string, { resolve: (url: string | null) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  const lanResultSchema = z.object({ control: z.literal("lanResult"), id: z.string().uuid(), url: z.string().nullable(), error: z.string().optional() }).strict();
+  const rejectLan = (): void => {
+    for (const entry of lanPending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(new Error("局域网服务不可用；请检查状态后再操作。"));
+    }
+    lanPending.clear();
+  };
   let stopping = false;
   let quitAllowed = false;
   const shutdown = createShutdownController({
@@ -74,6 +87,8 @@ export function launchDesktop(): void {
     if (failed) return;
     failed = true;
     gate.fail();
+    lanUrl = null;
+    rejectLan();
     for (const entry of pending.values()) {
       clearTimeout(entry.timer);
       entry.resolve(failure(entry.request));
@@ -116,6 +131,18 @@ export function launchDesktop(): void {
   });
   worker.on("message", (raw: unknown) => {
     if (shutdown.accept(raw)) return;
+    const lanResult = lanResultSchema.safeParse(raw);
+    if (lanResult.success) {
+      lanUrl = lanResult.data.url;
+      const entry = lanPending.get(lanResult.data.id);
+      if (entry) {
+        clearTimeout(entry.timer);
+        lanPending.delete(lanResult.data.id);
+        if (lanResult.data.error) entry.reject(new Error(lanResult.data.error));
+        else entry.resolve(lanUrl);
+      }
+      return;
+    }
     const parsed = workerMessageSchema.safeParse(raw);
     if (!parsed.success) {
       fail();
@@ -152,10 +179,14 @@ export function launchDesktop(): void {
       }
       entry.resolve(message.response);
     } else {
+      // LAN and desktop are views of the same controller, including remotely started runs.
       const run = runs.get(message.data.runId);
-      if (!run || run.sessionId !== message.data.event.sessionId) return;
-      if (!run.owner.isDestroyed())
-        run.owner.send(IPC_CHANNELS.event, message.data);
+      if (run && run.sessionId !== message.data.event.sessionId) return;
+      if (!contents.isDestroyed()) {
+        if (message.data.event.type === "run_started")
+          runs.set(message.data.runId, { owner: contents, sessionId: message.data.event.sessionId });
+        contents.send(IPC_CHANNELS.event, message.data);
+      }
       if (message.data.event.type === "run_finished")
         runs.delete(message.data.runId);
     }
@@ -220,6 +251,31 @@ export function launchDesktop(): void {
         fail();
       }
     });
+  ipcMain.handle(LAN_CHANNEL, async (event, raw: unknown) => {
+    if (event.sender !== contents || event.senderFrame !== contents.mainFrame || event.senderFrame.url !== trustedURL)
+      throw new Error("Request denied.");
+    const request = lanRequestSchema.parse(raw);
+    if (stopping || failed) throw new Error("Desktop service unavailable.");
+    if (request.action !== "status") {
+      if (!(await gate.wait()) || stopping || failed) throw new Error("Desktop service unavailable.");
+      await new Promise<string | null>((resolve, reject) => {
+        const id = randomUUID();
+        const timer = setTimeout(() => {
+          lanPending.delete(id);
+          reject(new Error("局域网操作超时；请刷新状态确认，不要自动重试。"));
+        }, 30_000);
+        lanPending.set(id, { resolve, reject, timer });
+        try {
+          worker.postMessage(request.action === "start"
+            ? { control: "startLan", id, host: request.host, port: request.port, workspace: request.workspace }
+            : { control: "stopLan", id });
+        } catch { fail(); }
+      });
+    }
+    const addresses = [...new Set(Object.values(networkInterfaces()).flatMap(entries =>
+      (entries ?? []).filter(entry => entry.family === "IPv4" && !entry.internal).map(entry => entry.address)))];
+    return lanStatusSchema.parse({ url: lanUrl, addresses });
+  });
   ipcMain.handle(
     IPC_CHANNELS.request,
     async (event, raw: unknown): Promise<RpcResponse> => {
@@ -353,7 +409,8 @@ export function launchDesktop(): void {
       if (run.owner === contents && !failed)
         worker.postMessage({ id: randomUUID(), method: "cancelRun", runId });
   };
-  contents.on("render-process-gone", cancelOwned);
+  // A renderer crash must not cancel work that a paired phone can still control.
+  contents.on("render-process-gone", () => { if (!lanUrl) cancelOwned(); });
   let quitting = false;
   const closeGracefully = (): void => {
     if (quitting) return;
@@ -366,8 +423,10 @@ export function launchDesktop(): void {
       entry.resolve(failure(entry.request));
     }
     pending.clear();
+    rejectLan();
     void shutdown.shutdown().then(() => {
       quitAllowed = true;
+      ipcMain.removeHandler(LAN_CHANNEL);
       ipcMain.removeHandler(IPC_CHANNELS.request);
       app.quit();
     });

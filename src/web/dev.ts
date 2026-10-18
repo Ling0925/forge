@@ -14,7 +14,13 @@ if (!/^\d+\.\d+\.\d+\.\d+$/.test(host) || host === "0.0.0.0" || !Number.isIntege
   throw new Error("Use a specific IPv4 address and a port between 1024 and 65535.");
 }
 const service = await createHarness();
-const web = await createWebHost({ service, workspace: argument("--workspace", process.cwd()), host, port });
+const web = await createWebHost({
+  service,
+  workspace: argument("--workspace", process.cwd()),
+  host,
+  port,
+  restrictWorkspace: true,
+});
 const vite = await createViteServer({
   configFile: false,
   root: "src/renderer",

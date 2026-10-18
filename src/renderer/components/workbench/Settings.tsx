@@ -9,6 +9,7 @@ import {
   Palette,
   Code,
   PuzzlePiece,
+  DeviceMobile,
   Trash,
   Plus,
   Check,
@@ -26,6 +27,7 @@ import { Input } from "../primitives/Input";
 import { Select } from "../primitives/Select";
 import { ProviderSources } from "./ProviderSources";
 import { McpPanel } from "./McpPanel";
+import { PhonePairing } from "./PhonePairing";
 import "./settings-page.css";
 
 export const permissionLabels = {
@@ -42,6 +44,7 @@ const sections = [
   { id: "browser", title: "浏览器", description: "明确授权浏览器工具可以访问的网络来源与内核。", keywords: "origin Chromium 可执行路径 网络", icon: Globe },
   { id: "language", title: "语言服务", description: "配置本机 LSP 服务器，为代码提供智能诊断与语义能力。", keywords: "LSP 命令 参数 扩展名", icon: Code },
   { id: "mcp", title: "MCP 扩展", description: "管理外部工具服务器及其连接。", keywords: "stdio 服务器 工具 注册", icon: PuzzlePiece },
+  { id: "pairing", title: "手机连接", description: "在同一局域网公开当前核心，让 Android 扫码配对。", keywords: "手机 Android 扫码 二维码 局域网 LAN 配对 端口 地址", icon: DeviceMobile },
 ] as const;
 
 type Section = typeof sections[number]["id"];
@@ -611,6 +614,20 @@ export function Settings() {
                 </div>
                 <div className="settings-card-body">
                   <McpPanel />
+                </div>
+              </div>
+            </section>
+          )}
+
+          {visible("pairing") && (
+            <section className="settings-section" aria-label="手机连接配置">
+              <div className="settings-card">
+                <div className="settings-card-header">
+                  <h3>Android 局域网配对</h3>
+                  <p>配对独立于底部“保存设置”：这里的操作立即生效，不影响模型或执行配置。</p>
+                </div>
+                <div className="settings-card-body">
+                  <PhonePairing />
                 </div>
               </div>
             </section>

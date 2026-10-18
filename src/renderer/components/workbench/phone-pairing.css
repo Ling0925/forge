@@ -1,0 +1,210 @@
+/* Android LAN pairing panel (settings · 手机连接) */
+
+.phone-pairing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-primary);
+}
+
+.phone-pairing-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.phone-pairing-head-text {
+  min-width: 0;
+}
+
+.phone-pairing-head h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: var(--leading-base);
+  overflow-wrap: anywhere;
+}
+
+.phone-pairing-head p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  overflow-wrap: anywhere;
+}
+
+.phone-pairing-badge {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--surface-sunken, var(--sidebar-bg));
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+  white-space: nowrap;
+}
+
+.phone-pairing-badge.is-live {
+  border-color: color-mix(in srgb, var(--accent, #3b825b) 45%, transparent);
+  color: var(--accent, #3b825b);
+}
+
+.phone-pairing-notes {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  overflow-wrap: anywhere;
+}
+
+.phone-pairing-notes li::marker {
+  color: var(--text-tertiary, var(--text-secondary));
+}
+
+.phone-pairing-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.phone-pairing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.phone-pairing-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  overflow-wrap: anywhere;
+}
+
+.phone-pairing-error,
+.phone-pairing-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  overflow-wrap: anywhere;
+}
+
+.phone-pairing-error {
+  border: 1px solid color-mix(in srgb, var(--danger, #b4423a) 40%, transparent);
+  background-color: color-mix(in srgb, var(--danger, #b4423a) 8%, transparent);
+  color: var(--danger, #b4423a);
+}
+
+.phone-pairing-notice {
+  border: 1px solid var(--border-subtle);
+  background-color: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.phone-pairing-live {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.phone-pairing-qr-wrap {
+  flex-shrink: 0;
+}
+
+.phone-pairing-qr {
+  display: block;
+  width: 160px;
+  height: 160px;
+  border-radius: var(--radius-sm);
+  background-color: #fff;
+  image-rendering: pixelated;
+}
+
+.phone-pairing-qr.is-placeholder {
+  border: 1px dashed var(--border-subtle);
+  background-color: transparent;
+}
+
+.phone-pairing-url {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.phone-pairing-url label {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.phone-pairing-url-field {
+  width: 100%;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-sunken, var(--sidebar-bg));
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  overflow-x: auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+.phone-pairing-url-field:focus {
+  outline: 2px solid var(--focus-ring, var(--accent, #3b825b));
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (max-width: 560px) {
+  .phone-pairing-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .phone-pairing-live {
+    flex-direction: column;
+  }
+
+  .phone-pairing-qr {
+    width: 132px;
+    height: 132px;
+  }
+
+  .phone-pairing-url {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTransportBridge } from "../shared/bridge";
 import { htmlPreviewResponseSchema } from "../shared/html-preview";
+import { lanStatusSchema, type ForgeLanBridge } from "../shared/lan";
 import {
   externalUrlSchema,
   rpcResponseSchema,
@@ -116,8 +117,8 @@ export async function installWebHost(): Promise<void> {
       },
     });
     for (const event of handshake.recovery) receive(event);
-    const connectedTitle = `Web Dev · WebSocket 实时连接 · 固定工作区：${handshake.workspace} · 断线自动重连 · 后端修改需重启`;
-    const connectedStatus = "Web Dev · 已连接";
+    const connectedTitle = `Forge Web · WebSocket 实时连接 · 默认服务器工作区：${handshake.workspace} · 断线自动重连 · 后端修改需重启`;
+    const connectedStatus = "Forge Web · 已连接";
     let wake = () => {};
     await new Promise<void>((ready, reject) => {
       let failures = 0;
@@ -231,6 +232,17 @@ export async function installWebHost(): Promise<void> {
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
     };
+    Object.defineProperty(window, "forgeLan", {
+      value: Object.freeze({
+        canControl: false,
+        status: async () => {
+          const pairing = z.object({ url: z.string().url(), workspace: z.string() }).parse(await post("/api/pairing", {}));
+          return lanStatusSchema.parse({ url: pairing.url, addresses: [] });
+        },
+        start: async () => { throw new Error("请在桌面端或服务器启动局域网服务。"); },
+        stop: async () => { throw new Error("请在桌面端或服务器停止局域网服务。"); },
+      } satisfies ForgeLanBridge),
+    });
     Object.defineProperty(window, "forge", {
       value: Object.freeze({
         ...bridge,

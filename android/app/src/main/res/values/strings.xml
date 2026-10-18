@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Forge Mobile</string>
+    <string name="app_tagline">连接 Forge 工作台</string>
+    <string name="app_description">轻客户端：界面与任务都由服务器提供，手机上只负责显示和扫码连接。</string>
+
+    <string name="scan_button">扫码连接</string>
+    <string name="connect_button">连接</string>
+    <string name="address_hint">http://192.168.1.2:5173/</string>
+    <string name="address_label">地址</string>
+    <string name="manual_section">手动输入地址</string>
+    <string name="recent_section">最近连接</string>
+    <string name="recent_empty">还没有连接记录</string>
+    <string name="clear_recent_button">清空记录</string>
+    <string name="scan_prompt">对准工作台上的二维码</string>
+
+    <string name="open_button">打开</string>
+    <string name="reload_button">刷新</string>
+    <string name="change_button">更换连接</string>
+    <string name="retry_button">重试</string>
+    <string name="error_title">页面加载失败</string>
+    <string name="error_detail">请确认服务器仍在运行，且手机与电脑在同一局域网。</string>
+    <string name="error_load_failed">无法加载 %1$s</string>
+    <string name="error_empty_address">请输入地址</string>
+    <string name="error_invalid_address">地址无效</string>
+    <string name="error_scan_prefix">扫码结果：</string>
+    <string name="error_unsupported_scheme">仅支持 http/https 链接</string>
+    <string name="error_no_file_picker">没有可用的文件选择器</string>
+    <string name="download_unsupported">下载请在桌面端完成</string>
+    <string name="choose_image">选择图片</string>
+</resources>

@@ -193,6 +193,12 @@ export type WorkbenchAction =
   | { readonly type: "SET_ALERT_ERROR"; readonly error: string | null };
 const active = (status: SessionStatus) =>
   status === "running" || status === "awaiting_approval";
+/** No further events can arrive for a run that already reached a terminal status. */
+const terminal = (status: SessionStatus) =>
+  status === "completed" ||
+  status === "cancelled" ||
+  status === "failed" ||
+  status === "interrupted";
 function putRun(state: WorkbenchState, run: ActiveRunState): WorkbenchState {
   return {
     ...state,
@@ -395,14 +401,47 @@ export function workbenchReducer(
     case "RUN_EVENT_RECEIVED": {
       const { runId, event } = action.event;
       const previous = state.activeRuns[event.sessionId];
-      if (previous?.runId && previous.runId !== runId) return state;
-      const run: ActiveRunState = {
-        sessionId: event.sessionId,
-        status: "running",
-        streamingText: "",
-        ...previous,
-        runId,
-      };
+      const trackedRunId = previous?.runId;
+      const trackedStatus = previous?.status;
+      // A different runId than the one this surface already tracks is normally a
+      // stale event from an older controller. The one exception is a fresh
+      // `run_started` arriving after the tracked run reached a terminal status:
+      // another client may have started the next turn, and ignoring it would
+      // wedge this surface on the old finished run forever. Everything else — a
+      // late delta, a late approval, a late terminal event, or any event for a
+      // run this surface still considers live — stays rejected.
+      const supersedesTerminalRun =
+        trackedRunId !== undefined &&
+        trackedRunId !== runId &&
+        event.type === "run_started" &&
+        trackedStatus !== undefined &&
+        terminal(trackedStatus);
+      if (
+        trackedRunId !== undefined &&
+        trackedRunId !== runId &&
+        !supersedesTerminalRun
+      )
+        return state;
+      const run: ActiveRunState = supersedesTerminalRun
+        ? {
+            // Clean slate for the new turn: nothing is inherited from the old
+            // run — no stream buffers, approvals, cancellation flag, retry
+            // counter or error. Only unsaved display debts carry over so text
+            // that is not on disk yet does not blink out of the transcript.
+            sessionId: event.sessionId,
+            status: "running",
+            streamingText: "",
+            pendingOutputs: previous?.pendingOutputs ?? [],
+            pendingReasoning: previous?.pendingReasoning ?? [],
+            runId,
+          }
+        : {
+            sessionId: event.sessionId,
+            status: "running",
+            streamingText: "",
+            ...previous,
+            runId,
+          };
       let next = run;
       // Live tool-argument metadata is display-only: it never becomes a call,
       // never executes, and never enters the stored transcript.
@@ -522,6 +561,34 @@ export function workbenchReducer(
               queue.findIndex((other) => other.id === request.id) === index,
           ),
         };
+      if (event.type === "approval_resolved") {
+        // Another client (or a permission change) settled this approval. Drop
+        // the card locally instead of re-sending an answer: the shared
+        // controller already applied the decision, so answering again would
+        // either double-execute or fail. Remaining queued approvals stay
+        // untouched and advance to the head; the submit spinner is always
+        // cleared because this surface may have had a reply in flight.
+        const queued =
+          run.approvalQueue ?? (run.pendingApproval ? [run.pendingApproval] : []);
+        const remaining = queued.filter(
+          (request) => request.id !== event.approvalId,
+        );
+        const resolvedInFlight = remaining.length !== queued.length;
+        next = {
+          ...run,
+          approvalQueue: remaining,
+          pendingApproval: remaining[0],
+          isSubmittingApproval: false,
+          status:
+            remaining.length > 0
+              ? "awaiting_approval"
+              : resolvedInFlight && run.status === "awaiting_approval"
+                ? // The controller resumed the run by itself; nothing is left
+                  // to display as blocked, and no duplicate event is emitted.
+                  "running"
+                : run.status,
+        };
+      }
       if (event.type === "state_changed")
         next = {
           ...run,

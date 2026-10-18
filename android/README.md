@@ -1,0 +1,116 @@
+# Forge Mobile — 原生 Android 轻客户端
+
+一个**独立**的 Android 客户端，用 Java + Android `WebView` 复用服务器上的 Web 工作台。
+
+手机端**不包含**任何核心逻辑：会话、任务、工具、审批、断线重连全部留在服务器。App 只做三件事：
+
+1. 扫码或手输服务器地址；
+2. 用 `WebView` 加载该地址的 Web UI；
+3. 把系统图片选择器接进来，并处理好返回键。
+
+> 没有账号系统、没有令牌交换、没有自定义 TLS、没有 Capacitor/Cordova、没有 JavaScript bridge。
+
+---
+
+## 目录结构
+
+```
+android/
+├── settings.gradle.kts
+├── build.gradle.kts
+├── gradle.properties
+├── gradlew / gradlew.bat / gradle/wrapper/     # Gradle 8.9 wrapper（可重复构建）
+├── .gitignore                                  # 忽略 .gradle/ build/ local.properties 等
+├── docs/BUILD.md                               # 构建、环境与验证边界
+├── tests/ServerUrlTest.java                    # 纯 JDK 的 URI 规范化测试
+└── app/
+    ├── build.gradle.kts
+    ├── proguard-rules.pro
+    └── src/main/
+        ├── AndroidManifest.xml
+        ├── java/dev/forge/mobile/
+        │   ├── MainActivity.java               # 首页：扫码 / 手输 / 最近地址
+        │   ├── WebAppActivity.java             # 唯一的 WebView 壳
+        │   ├── ServerUrl.java                  # 地址校验与规范化（无 Android 依赖）
+        │   └── RecentServers.java              # 最近地址（只存 URL）
+        └── res/…                               # 简单原生 UI（无第三方 UI 框架）
+```
+
+---
+
+## 行为约定
+
+### 首页（`MainActivity`）
+
+- **扫码连接**：使用成熟库 [ZXing Android Embedded](https://github.com/journeyapps/zxing-android-embedded)
+  (`com.journeyapps:zxing-android-embedded:4.3.0`，Maven 依赖，非源码内联)。
+- **手输地址**：输入框 + 连接按钮，键盘 `Go/Done` 亦可提交。
+- **最近地址**：最多 8 条，只保存 URL 字符串，可一键清空或点选重连。
+- 二维码内容按**普通根 URL** 处理，例如 `http://192.168.1.2:5173/`。
+  服务器将来若返回带类型的 JSON，客户端首版**不解析**，会按普通 URL 校验失败并提示。
+
+### 地址校验（`ServerUrl`）
+
+| 输入 | 结果 |
+| :--- | :--- |
+| `http://192.168.1.2:5173/` | 通过 |
+| `192.168.1.2:5173` | 通过，补成 `http://192.168.1.2:5173/` |
+| `https://forge.example.com/workbench` | 通过 |
+| `http://[::1]:5173/` | 通过（IPv6 见“未验证项”） |
+| `javascript:…` / `intent://…` / `file://…` / `content://…` / `data:…` / `ftp://…` | **拒绝** |
+| `http://user:pass@host/` | **拒绝**（不静默保存/重放凭据） |
+| `http://host:abc/`、`http://host:99999/`、含空白 | **拒绝** |
+
+- 只允许 `http` / `https`；协议之外的 scheme 直接拒绝，不会被“顺手改成 http”。
+- 端口必须是 `1..65535`；路径/查询里的 `:` 不会被误判为端口。
+- 裸 IPv6（`::1`）会被补上方括号；带方括号的 host 不会出现双层括号。
+
+### WebView 壳（`WebAppActivity`）
+
+- 开启 **JS**、**DOM storage**（`setDomStorageEnabled` + `setDatabaseEnabled`）。
+- `usesCleartextTraffic="true"`：允许局域网 HTTP。
+- **不添加** `addJavascriptInterface()`：网页无法调用任何原生方法。
+- **不重写** `onReceivedSslError()`：TLS 错误保持 WebView 默认行为（拒绝加载）。
+- `setAllowFileAccess(false)`；`setAllowContentAccess(true)` 仅为让系统选择器返回的
+  `content://` URI 能被上传读取；`file://`/`javascript:` 等顶层导航一律拦截。
+- 顶层导航只允许 `http(s)`；子 frame 额外放行 `about:`、`blob:`、`data:`
+  （iframe 与内联预览需要），拦截时不再弹 Toast（WebView 内部也会走该回调）。
+- 图片选择：`onShowFileChooser` → `Intent.createChooser` 系统 chooser，
+  **不申请存储权限**、不内置图库；取消/无选择时回传 `null`。
+- `onShowFileChooser` 需要 API 21+，`WebChromeClient.FileChooserParams` 已在 API 21 引入。
+- 返回键：先用 `canGoBack()` 回退，再退出到首页（最近地址保留）。
+- 顶部常驻「刷新 / 更换连接」和当前地址；加载失败显示原生错误面板 + 重试。
+- 断网期间任务仍由服务器持有，Web UI 自己重连；客户端不实现重连状态机。
+- 下载不做处理（提示到桌面端完成），避免把服务器产物落到手机。
+
+### 已明确不做
+
+- 账号/登录/令牌、TLS 自定义（含“忽略证书错误”开关）；
+- 任意网页可调用的 JS bridge；
+- 把 core/会话逻辑移植到手机，或内嵌 Node/前端资源；
+- 修改仓库根 `package.json` / `pnpm-lock.yaml` / `src/` / 其他目录。
+
+---
+
+## 构建
+
+完整环境要求、可重复命令与阻塞说明见 **[docs/BUILD.md](docs/BUILD.md)**。最小用法：
+
+```sh
+cd android
+export ANDROID_HOME=/path/to/Android/Sdk      # 或写 local.properties（已被忽略）
+./gradlew :app:assembleDebug
+./gradlew checkServerUrl                      # 纯 JVM 的 URI 校验，不需要设备
+```
+
+产物：`android/app/build/outputs/apk/debug/app-debug.apk`（**不入 git**，已被 `android/.gitignore` 忽略）。
+
+---
+
+## 版本与兼容性
+
+- `minSdk 23`、`targetSdk 33`、`compileSdk 33`（本机 SDK 现成可用的最高平台）。
+- Web UI 的构建目标是 **Chrome 132**，因此手机上需要**较新的 Android System WebView**
+  （建议 Chromium ≥ 132；Android 10+ 通常可在应用商店更新）。WebView 过旧时页面可能空白或
+  JS 报错，此时先更新 System WebView 再重试。
+- 建议在 Android 10 及以上、WebView 已更新的设备上使用。

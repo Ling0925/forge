@@ -13,6 +13,7 @@
 | [CLI](CLI.md) | 命令、参数与交互行为 |
 | [工作流](WORKFLOWS.md) | 模式、会话及跨入口操作 |
 | [Web 开发工作台](WEB_DEV.md) | 开发服务、热更新、图片与 HTML 预览 |
+| [Android 局域网客户端](ANDROID.md) | 桌面/Web 公开、扫码连接、核心共享与 Android 构建 |
 | [桌面 Slash 命令](DESKTOP_SLASH_COMMANDS.md) | 桌面命令入口与共享行为 |
 | [终端阅读与复制](TERMINAL_SELECTION.md) | Ink 阅读、选区和复制 |
 | [会话归档与工作记忆](SESSION_MEMORY.md) | 会话归档、工作状态与回查 |
