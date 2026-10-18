@@ -19,6 +19,7 @@ import { Markdown } from "./Markdown";
 import { StreamingMarkdown } from "./StreamingMarkdown";
 import { Reasoning } from "./Reasoning";
 import { ImageAttachments } from "./ImageAttachments";
+import { PublishedFiles } from "./PublishedFiles";
 import { foldedTool, transcriptStages, type TranscriptStage } from "../../state/transcript-stages";
 import "./transcript.css";
 import "./tool-live.css";
@@ -411,6 +412,7 @@ export const StoredTranscript = memo(function StoredTranscript({
           : turn.items;
         const blocks = groupTurnEntries(processItems, headers);
         const summaryText = computeTurnSummary(turn.items);
+        const files = turn.items.flatMap(({ item }) => item.kind === "tool" && item.status === "completed" && item.call.function.name === "publish_file" ? item.files ?? [] : []);
 
         return (
           <section className="transcript-turn" key={turn.id} data-turn={turn.turnNumber}>
@@ -510,6 +512,7 @@ export const StoredTranscript = memo(function StoredTranscript({
                     })}
                   </ExecutionProcess>
                   {finalEntry && renderTimelineEntry(finalEntry, snapshot, headers, phases)}
+                  <PublishedFiles sessionId={snapshot.id} files={files} />
                 </div>
               )
             )}

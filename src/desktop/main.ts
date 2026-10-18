@@ -25,6 +25,7 @@ import {
 import type { SessionId } from "../shared/schemas";
 import { safeError } from "./controller";
 import { exportSessionToFile } from "./export-session";
+import { savePublishedFileToFile } from "./save-published-file";
 import { createReadyGate, createShutdownController } from "./lifecycle";
 
 let activeWindow: BrowserWindow | undefined;
@@ -356,6 +357,24 @@ export function launchDesktop(): void {
         runs.get(request.runId)?.owner !== contents
       )
         return failure(request);
+      if (request.method === "savePublishedFile") {
+        try {
+          const saved = await savePublishedFileToFile(request.fileId, {
+            load: async () => {
+              const response = await sendWorker({ id: randomUUID(), method: "getPublishedFile", sessionId: request.sessionId, fileId: request.fileId }, contents);
+              if (!response.ok || response.method !== "getPublishedFile") throw new Error("Attachment unavailable.");
+              return response.result;
+            },
+            choose: async defaultPath => {
+              if (stopping || failed || contents.isDestroyed()) throw new Error("Desktop service unavailable.");
+              const selected = await dialog.showSaveDialog(window, { title: "保存对话附件", defaultPath });
+              if (stopping || failed || contents.isDestroyed()) throw new Error("Desktop service unavailable.");
+              return selected.canceled ? undefined : selected.filePath;
+            },
+          });
+          return rpcResponseSchema.parse({ id: request.id, method: request.method, ok: true, result: saved });
+        } catch { return failure(request); }
+      }
       if (request.method === "exportSession") {
         try {
           const saved = await exportSessionToFile(request.sessionId, {

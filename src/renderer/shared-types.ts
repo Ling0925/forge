@@ -17,6 +17,11 @@ export type {
 } from "../shared/schemas";
 
 export type {
+  PublishedFile,
+  PublishedFileResponse,
+} from "../shared/published-files";
+
+export type {
   ForgeBridge,
   RpcRequest,
   RpcResponse,

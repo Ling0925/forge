@@ -246,6 +246,10 @@ export function createWorkerController(
         case "getSession":
           respond(request, await service.getSession(request.sessionId));
           break;
+        case "getPublishedFile":
+          if (!service.getPublishedFile) throw new ForgeError("not_found", "File attachments are unavailable on this host.");
+          respond(request, await service.getPublishedFile(request.sessionId, request.fileId));
+          break;
         case "getProjectContext": {
           const catalog = await service.getProjectContext(request.sessionId);
           respond(

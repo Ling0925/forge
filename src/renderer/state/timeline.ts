@@ -1,6 +1,7 @@
 import { fileChangeSchema } from "../../shared/schemas";
 import type { ImageAttachment } from "../../shared/images";
-import type { FileChange, SessionSnapshot, ToolCall } from "../shared-types";
+import { publishedFilesSchema } from "../../shared/published-files";
+import type { FileChange, PublishedFile, SessionSnapshot, ToolCall } from "../shared-types";
 
 export type TimelineItem =
   | {
@@ -20,6 +21,7 @@ export type TimelineItem =
       readonly status: "running" | "completed" | "failed" | "unexecuted";
       readonly output: string;
       readonly changes?: readonly FileChange[];
+      readonly files?: readonly PublishedFile[];
       /** Measured wall-clock time between the recorded start and finish events. */
       readonly durationMs?: number;
       /** Start timestamp, so the row can show when the action ran. */
@@ -220,6 +222,9 @@ export function reduceTimeline(
             ...(finish?.result.changes?.length
               ? { changes: finish.result.changes }
               : {}),
+            ...(finish?.result.files?.length && !finish.result.isError && call.function.name === "publish_file"
+              ? { files: finish.result.files }
+              : {}),
           });
         }
     } else if (message.role === "tool") {
@@ -230,6 +235,7 @@ export function reduceTimeline(
       let output = message.content ?? "";
       let failed = item.status === "failed";
       let changes: readonly FileChange[] | undefined;
+      let files: readonly PublishedFile[] | undefined;
       try {
         const parsed: unknown = JSON.parse(output);
         if (
@@ -248,15 +254,23 @@ export function reduceTimeline(
               return change.success ? [change.data] : [];
             });
           }
+          if ("isError" in parsed && parsed.isError === false && item.call.function.name === "publish_file" && "files" in parsed && Array.isArray(parsed.files)) {
+            const parsedFiles = publishedFilesSchema.safeParse(parsed.files);
+            if (parsedFiles.success && parsedFiles.data.length > 0) {
+              files = parsedFiles.data;
+            }
+          }
         }
       } catch {
         /* native tool results may be plain text */
       }
+      const { files: _eventFiles, ...messageItem } = item;
       items[position] = {
-        ...item,
+        ...messageItem,
         output,
         status: failed ? "failed" : "completed",
         ...(changes?.length ? { changes } : {}),
+        ...(files?.length ? { files } : {}),
       };
     }
   }
@@ -317,7 +331,10 @@ export function reduceTimeline(
           ...(item.startedAt === undefined
             ? {}
             : toolTiming({ timestamp: item.startedAt }, event)),
-          ...(event.result.changes?.length ? { changes: event.result.changes } : {}) };
+          ...(event.result.changes?.length ? { changes: event.result.changes } : {}),
+          ...(event.result.files?.length && !event.result.isError && item.call.function.name === "publish_file"
+            ? { files: event.result.files }
+            : {}) };
       }
     }
   }
