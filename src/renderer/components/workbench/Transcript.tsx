@@ -1,4 +1,4 @@
-import { Check, Copy } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, Check, Copy } from "@phosphor-icons/react";
 import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
 import type {
@@ -22,6 +22,7 @@ import { foldedTool, transcriptStages, type TranscriptStage } from "../../state/
 import "./transcript.css";
 import "./tool-live.css";
 export { phaseMarkers, foldedTool } from "../../state/transcript-stages";
+export { partitionTurns, groupTurnEntries, computeTurnSummary };
 
 /**
  * Live argument-generation rows. They are display metadata only: no arguments,
@@ -105,14 +106,229 @@ function StageHeader({ stage }: { readonly stage: TranscriptStage }) {
     </h3>
   );
 }
+interface TurnEntry {
+  readonly item: TimelineItem;
+  readonly index: number;
+}
+
+interface TranscriptTurnData {
+  readonly id: string;
+  readonly turnNumber: number;
+  readonly userEntry?: TurnEntry & {
+    readonly item: TimelineItem & { readonly kind: "message"; readonly role: "user" };
+  };
+  readonly items: readonly TurnEntry[];
+}
+
+function partitionTurns(timeline: readonly TimelineItem[]): readonly TranscriptTurnData[] {
+  const turns: TranscriptTurnData[] = [];
+  let currentTurnNumber = 0;
+  let currentTurn: {
+    id: string;
+    turnNumber: number;
+    userEntry?: TurnEntry & { readonly item: TimelineItem & { readonly kind: "message"; readonly role: "user" } };
+    items: TurnEntry[];
+  } | null = null;
+
+  for (let index = 0; index < timeline.length; index++) {
+    const item = timeline[index];
+    if (item.kind === "error" && item.historical) continue;
+
+    const isHumanUser =
+      item.kind === "message" && item.role === "user" && !item.origin;
+
+    if (isHumanUser) {
+      currentTurnNumber++;
+      currentTurn = {
+        id: item.id || `turn-${currentTurnNumber}`,
+        turnNumber: currentTurnNumber,
+        userEntry: { item, index } as any,
+        items: [],
+      };
+      turns.push(currentTurn);
+    } else {
+      if (!currentTurn) {
+        currentTurn = {
+          id: `turn-prelude`,
+          turnNumber: 0,
+          items: [],
+        };
+        turns.push(currentTurn);
+      }
+      currentTurn.items.push({ item, index });
+    }
+  }
+
+  return turns;
+}
+
+type TurnBlock =
+  | { readonly kind: "single"; readonly entry: TurnEntry }
+  | { readonly kind: "tool_group"; readonly id: string; readonly entries: readonly TurnEntry[] };
+
+function groupTurnEntries(
+  entries: readonly TurnEntry[],
+  headers: readonly (TranscriptStage | null)[],
+): readonly TurnBlock[] {
+  const blocks: TurnBlock[] = [];
+  let currentTools: TurnEntry[] | null = null;
+
+  for (const entry of entries) {
+    const hasHeader = Boolean(headers[entry.index]);
+    const isTool = entry.item.kind === "tool";
+
+    if (isTool && !hasHeader) {
+      if (!currentTools) {
+        currentTools = [];
+        blocks.push({
+          kind: "tool_group",
+          id: `tool-group-${entry.item.id}`,
+          entries: currentTools,
+        });
+      }
+      currentTools.push(entry);
+    } else {
+      currentTools = null;
+      blocks.push({ kind: "single", entry });
+    }
+  }
+
+  return blocks;
+}
+
+function computeTurnSummary(items: readonly TurnEntry[]): string {
+  let toolCount = 0;
+  let hasAssistant = false;
+  let hasError = false;
+  let hasReasoning = false;
+  for (const { item } of items) {
+    if (item.kind === "tool") {
+      toolCount++;
+      if (item.status === "failed") hasError = true;
+    } else if (item.kind === "error") {
+      hasError = true;
+    } else if (item.kind === "message" && item.role === "assistant") {
+      if (item.content) hasAssistant = true;
+      if (item.reasoning) hasReasoning = true;
+    }
+  }
+  const parts: string[] = [];
+  if (toolCount > 0) parts.push(`${toolCount} 次工具调用`);
+  if (hasAssistant) parts.push("已回复");
+  if (hasReasoning) parts.push("含思考过程");
+  if (hasError) parts.push("含异常记录");
+  return parts.length > 0 ? parts.join(" · ") : "本轮已完成";
+}
+
+function renderTimelineEntry(
+  entry: TurnEntry,
+  snapshot: SessionSnapshot,
+  headers: readonly (TranscriptStage | null)[],
+  phases: readonly number[],
+) {
+  const { item, index } = entry;
+  if (item.kind === "error" && item.historical) return null;
+  if (item.kind === "message" && item.origin === "agent_reconciliation")
+    return (
+      <details className="message message-internal" key={item.id}>
+        <summary>子代理汇总 · 内部记录</summary>
+        <p className="wb-muted">运行时追加的子任务汇总，不是人工输入。</p>
+        <pre className="message-body">{item.content}</pre>
+      </details>
+    );
+  if (item.kind === "message")
+    return (
+      <Fragment key={item.id}>
+        {headers[index] && <StageHeader stage={headers[index]} />}
+        <article className={`message message-${item.role}`}>
+          {item.role === "user" && <div className="message-header">你</div>}
+          {item.role === "assistant" && (
+            <div className="message-header message-author-row">
+              <span>Forge</span>
+              {item.content && <MessageCopyButton text={item.content} />}
+            </div>
+          )}
+          {item.role === "user" && item.images && item.images.length > 0 && (
+            <ImageAttachments key={snapshot.id} images={item.images} />
+          )}
+          {item.reasoning && (
+            <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
+          )}
+          {item.content && <div className="message-body"><Markdown source={item.content} /></div>}
+        </article>
+      </Fragment>
+    );
+  if (item.kind === "error")
+    return (
+      <ErrorState
+        key={item.id}
+        title="执行错误（历史记录）"
+        error={{
+          code: "internal",
+          message: item.message,
+          retryable: false,
+        }}
+        impact={`历史事件时间：${new Date(item.timestamp).toLocaleString()}。此错误不会覆盖当前会话状态。`}
+      />
+    );
+  if (item.status === "unexecuted")
+    return (
+      <section
+        key={item.id}
+        className="wb-stack tool-unexecuted message-evidence"
+      >
+        <strong>{item.call.function.name} · 无匹配执行记录</strong>
+        <p className="wb-muted">
+          已保存调用意图，但没有可可靠关联的执行或结果记录。
+        </p>
+        <code>{item.call.function.arguments.slice(0, 12000)}</code>
+      </section>
+    );
+  const argvActivity =
+    item.call.function.name === "run_command"
+      ? commandActivity(item.call)
+      : undefined;
+  return (
+    <Fragment key={item.id}>
+      {headers[index] && <StageHeader stage={headers[index]} />}
+      <ToolDisclosure
+        toolName={item.call.function.name}
+        target={toolActivity(item.call).target || undefined}
+        command={argvActivity?.command || undefined}
+        cwd={argvActivity?.cwd || undefined}
+        parameters={item.call.function.arguments.slice(0, 12000)}
+        output={item.output.slice(0, 24000)}
+        truncated={
+          item.output.length > 24000 ||
+          item.call.function.arguments.length > 12000
+        }
+        status={item.status}
+        {...(item.durationMs === undefined
+          ? {}
+          : { durationMs: item.durationMs })}
+        {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
+        changes={item.changes}
+        autoCollapsed={foldedTool(index, phases)}
+      />
+    </Fragment>
+  );
+}
+
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
 }: { readonly snapshot: SessionSnapshot }) {
   const timeline = reduceTimeline(snapshot);
   const { phases, headers } = transcriptStages(timeline);
+  const [collapsedTurns, setCollapsedTurns] = useState<Record<string, boolean>>({});
+  const toggleTurn = useCallback((turnId: string) => {
+    setCollapsedTurns((prev) => ({ ...prev, [turnId]: !prev[turnId] }));
+  }, []);
+
   const historicalErrors = timeline.filter(
     (item) => item.kind === "error" && item.historical,
   );
+  const turns = partitionTurns(timeline);
+
   return (
     <>
       {historicalErrors.length > 0 && (
@@ -128,91 +344,111 @@ export const StoredTranscript = memo(function StoredTranscript({
           )}
         </details>
       )}
-      {timeline.map((item, index) => {
-        if (item.kind === "error" && item.historical) return null;
-        if (item.kind === "message" && item.origin === "agent_reconciliation")
-          return (
-            <details className="message message-internal" key={item.id}>
-              <summary>子代理汇总 · 内部记录</summary>
-              <p className="wb-muted">运行时追加的子任务汇总，不是人工输入。</p>
-              <pre className="message-body">{item.content}</pre>
-            </details>
-          );
-        if (item.kind === "message")
-          return (
-            <Fragment key={item.id}>
-              {headers[index] && <StageHeader stage={headers[index]} />}
-              <article className={`message message-${item.role}`}>
-                {item.role === "user" && <div className="message-header">你</div>}
-                {item.role === "assistant" && (
-                  <div className="message-header message-author-row">
-                    <span>Forge</span>
-                    {item.content && <MessageCopyButton text={item.content} />}
+      {turns.map((turn) => {
+        const isCollapsed = Boolean(collapsedTurns[turn.id]);
+        const userItem = turn.userEntry?.item;
+        const blocks = groupTurnEntries(turn.items, headers);
+        const summaryText = computeTurnSummary(turn.items);
+
+        return (
+          <section className="transcript-turn" key={turn.id} data-turn={turn.turnNumber}>
+            {userItem && (
+              <article className="message message-user">
+                <div className="message-header">你</div>
+                {turn.turnNumber > 0 && (
+                  <div className="transcript-turn-actions">
+                    <span className="transcript-turn-badge">第 {turn.turnNumber} 轮</span>
+                    <button
+                      type="button"
+                      className="transcript-turn-toggle"
+                      onClick={() => toggleTurn(turn.id)}
+                      aria-expanded={!isCollapsed}
+                      aria-label={isCollapsed ? `展开第 ${turn.turnNumber} 轮对话` : `收起第 ${turn.turnNumber} 轮对话`}
+                      title={isCollapsed ? "展开此轮" : "收起此轮"}
+                    >
+                      {isCollapsed ? (
+                        <>
+                          <CaretRight size={12} weight="bold" aria-hidden="true" />
+                          <span>展开本轮</span>
+                        </>
+                      ) : (
+                        <>
+                          <CaretDown size={12} weight="bold" aria-hidden="true" />
+                          <span>收起本轮</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
-                {item.role === "user" && item.images && item.images.length > 0 && (
-                  <ImageAttachments key={snapshot.id} images={item.images} />
+                {userItem.images && userItem.images.length > 0 && (
+                  <ImageAttachments key={snapshot.id} images={userItem.images} />
                 )}
-                {item.reasoning && (
-                  <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
+                {userItem.content && (
+                  <div className="message-body">
+                    <Markdown source={userItem.content} />
+                  </div>
                 )}
-                {item.content && <div className="message-body"><Markdown source={item.content} /></div>}
               </article>
-            </Fragment>
-          );
-        if (item.kind === "error")
-          return (
-            <ErrorState
-              key={item.id}
-              title="执行错误（历史记录）"
-              error={{
-                code: "internal",
-                message: item.message,
-                retryable: false,
-              }}
-              impact={`历史事件时间：${new Date(item.timestamp).toLocaleString()}。此错误不会覆盖当前会话状态。`}
-            />
-          );
-        if (item.status === "unexecuted")
-          return (
-            <section
-              key={item.id}
-              className="wb-stack tool-unexecuted message-evidence"
-            >
-              <strong>{item.call.function.name} · 无匹配执行记录</strong>
-              <p className="wb-muted">
-                已保存调用意图，但没有可可靠关联的执行或结果记录。
-              </p>
-              <code>{item.call.function.arguments.slice(0, 12000)}</code>
-            </section>
-          );
-        const argvActivity =
-          item.call.function.name === "run_command"
-            ? commandActivity(item.call)
-            : undefined;
-        return (
-          <Fragment key={item.id}>
-          {headers[index] && <StageHeader stage={headers[index]} />}
-          <ToolDisclosure
-            toolName={item.call.function.name}
-            target={toolActivity(item.call).target || undefined}
-            command={argvActivity?.command || undefined}
-            cwd={argvActivity?.cwd || undefined}
-            parameters={item.call.function.arguments.slice(0, 12000)}
-            output={item.output.slice(0, 24000)}
-            truncated={
-              item.output.length > 24000 ||
-              item.call.function.arguments.length > 12000
-            }
-            status={item.status}
-            {...(item.durationMs === undefined
-              ? {}
-              : { durationMs: item.durationMs })}
-            {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
-            changes={item.changes}
-            autoCollapsed={foldedTool(index, phases)}
-          />
-          </Fragment>
+            )}
+            {turn.items.length > 0 && (
+              isCollapsed ? (
+                <button
+                  type="button"
+                  className="transcript-turn-collapsed-bar"
+                  onClick={() => toggleTurn(turn.id)}
+                  aria-label={`展开第 ${turn.turnNumber} 轮执行与回复`}
+                >
+                  <CaretRight size={13} weight="bold" className="transcript-turn-collapsed-caret" aria-hidden="true" />
+                  <span className="transcript-turn-collapsed-title">本轮执行已收起</span>
+                  <span className="transcript-turn-collapsed-sep" aria-hidden="true">·</span>
+                  <span className="transcript-turn-collapsed-meta">{summaryText}</span>
+                  <span className="transcript-turn-collapsed-action">点击展开</span>
+                </button>
+              ) : (
+                <div className="transcript-turn-body">
+                  {blocks.map((block) => {
+                    if (block.kind === "single") {
+                      return renderTimelineEntry(block.entry, snapshot, headers, phases);
+                    }
+                    return (
+                      <div className="tool-call-group" key={block.id}>
+                        {block.entries.map((entry) => {
+                          const { item, index } = entry;
+                          if (item.kind !== "tool") return null;
+                          const argvActivity =
+                            item.call.function.name === "run_command"
+                              ? commandActivity(item.call)
+                              : undefined;
+                          return (
+                            <ToolDisclosure
+                              key={item.id}
+                              toolName={item.call.function.name}
+                              target={toolActivity(item.call).target || undefined}
+                              command={argvActivity?.command || undefined}
+                              cwd={argvActivity?.cwd || undefined}
+                              parameters={item.call.function.arguments.slice(0, 12000)}
+                              output={item.output.slice(0, 24000)}
+                              truncated={
+                                item.output.length > 24000 ||
+                                item.call.function.arguments.length > 12000
+                              }
+                              status={item.status}
+                              {...(item.durationMs === undefined
+                                ? {}
+                                : { durationMs: item.durationMs })}
+                              {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
+                              changes={item.changes}
+                              autoCollapsed={foldedTool(index, phases)}
+                            />
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+          </section>
         );
       })}
     </>
@@ -368,7 +604,9 @@ export function Transcript() {
         onClickCapture={(event) => {
           if (
             event.target instanceof Element &&
-            event.target.closest(".tool-disclosure-header, summary")
+            event.target.closest(
+              ".tool-disclosure-header, summary, .transcript-turn-toggle, .transcript-turn-collapsed-bar",
+            )
           ) {
             navigation.current.inspectDisclosure();
           }

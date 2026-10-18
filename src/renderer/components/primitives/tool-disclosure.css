@@ -13,16 +13,16 @@
   border-radius: var(--radius-card);
   background: transparent;
   text-align: left;
-  /* Evidence cards are rhythm elements in the reading flow: a hair more air
-     than the message gap keeps a long run of tool calls scannable. */
-  margin: var(--space-1) 0;
+  /* Evidence cards are rhythm elements in the reading flow: compact rhythm keeps
+     sequential operations tight without crowding text prose. */
+  margin: 2px 0;
   transition: background-color var(--transition-fast), border-color
     var(--transition-fast);
 }
 
 /* Sequential operations in one phase read as a tight group. */
 .tool-disclosure + .tool-disclosure {
-  margin-top: var(--space-1);
+  margin-top: 2px;
 }
 
 /* --------------------------------------------------------------------------
