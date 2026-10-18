@@ -130,6 +130,15 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   useAutosizePrompt(promptRef, prompt);
+  const [longPressing, setLongPressing] = useState(false);
+  const [steerReady, setSteerReady] = useState(false);
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressStartRef = useRef<number>(0);
+  useEffect(() => {
+    return () => {
+      if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    };
+  }, []);
   useEffect(() => {
     if (/[\r\n]/.test(prompt))
       setManualDrafts((old) =>
@@ -538,6 +547,50 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     } else if (selectedDraft.current === capturedDraftId)
       setError("未能开始对话，草稿已保留。请检查错误详情后重试。");
   };
+  const handleSendPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    setLongPressing(true);
+    setSteerReady(false);
+    pressStartRef.current = Date.now();
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => {
+      setSteerReady(true);
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        try { navigator.vibrate(30); } catch {}
+      }
+    }, 500);
+  };
+  const handleSendPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!longPressing && !pressStartRef.current) return;
+    const isSteer = steerReady || (Date.now() - pressStartRef.current >= 500);
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    setLongPressing(false);
+    setSteerReady(false);
+    pressStartRef.current = 0;
+    if (isSteer) {
+      void submit("steer");
+    } else {
+      void submit("follow-up");
+    }
+  };
+  const handleSendPointerCancel = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+    setLongPressing(false);
+    setSteerReady(false);
+    pressStartRef.current = 0;
+  };
+  const handleSendClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (pressStartRef.current === 0 && !longPressing) {
+      void submit("follow-up");
+    }
+  };
   const listModels = async (refresh = false) => {
     if (listing) return;
     const cached = modelCatalogCache.read(modelSource);
@@ -841,19 +894,86 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             }}
           />
         </div>
-          <div className="composer-submit-col">
+          <div
+            className={`composer-submit-col ${
+              running && Boolean(prompt.trim() || images.length > 0)
+                ? "is-dual"
+                : ""
+            }`}
+          >
             {running ? (
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                className="composer-cancel composer-action"
-                loading={Boolean(run?.isCancelling)}
-                aria-label={run?.isCancelling ? "正在取消" : "取消"}
-                title={run?.isCancelling ? "正在取消…" : "停止生成"}
-                icon={<Stop size={16} weight="fill" aria-hidden="true" />}
-                onClick={() => void cancelRun()}
-              />
+              <>
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  className="composer-cancel composer-action"
+                  loading={Boolean(run?.isCancelling)}
+                  aria-label={run?.isCancelling ? "正在取消" : "取消"}
+                  title={run?.isCancelling ? "正在取消…" : "停止生成"}
+                  icon={<Stop size={16} weight="fill" aria-hidden="true" />}
+                  onClick={() => void cancelRun()}
+                />
+                {Boolean(prompt.trim() || images.length > 0) && (
+                  <div className="composer-dual-send-wrap">
+                    {longPressing && (
+                      <div
+                        className={`composer-longpress-tip ${
+                          steerReady ? "is-steer" : ""
+                        }`}
+                        role="status"
+                      >
+                        {steerReady ? "松开立即插话 ⚡" : "长按插话…"}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className={`btn btn-primary btn-sm composer-submit composer-action composer-btn-steer-hold ${
+                        longPressing ? "is-pressing" : ""
+                      } ${steerReady ? "is-steer-ready" : ""}`}
+                      disabled={busy || !!submission || reading || savingEffort}
+                      aria-label={steerReady ? "插话" : "发送"}
+                      title="点击排队发送，长按插话"
+                      onContextMenu={(e) => e.preventDefault()}
+                      onPointerDown={handleSendPointerDown}
+                      onPointerUp={handleSendPointerUp}
+                      onPointerLeave={handleSendPointerCancel}
+                      onPointerCancel={handleSendPointerCancel}
+                      onClick={handleSendClick}
+                    >
+                      {longPressing && (
+                        <svg
+                          className={`composer-longpress-ring ${
+                            steerReady ? "is-ready" : ""
+                          }`}
+                          viewBox="0 0 44 44"
+                          aria-hidden="true"
+                        >
+                          <circle
+                            cx="22"
+                            cy="22"
+                            r="18"
+                            className="composer-ring-track"
+                          />
+                          <circle
+                            cx="22"
+                            cy="22"
+                            r="18"
+                            className={`composer-ring-indicator ${
+                              steerReady ? "is-ready" : ""
+                            }`}
+                          />
+                        </svg>
+                      )}
+                      {steerReady ? (
+                        <Lightning size={16} weight="fill" aria-hidden="true" />
+                      ) : (
+                        <ArrowUp size={16} weight="bold" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <Button
                 type="submit"

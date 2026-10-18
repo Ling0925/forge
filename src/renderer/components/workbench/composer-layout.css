@@ -1,6 +1,6 @@
 .wb-app .composer-split .composer-input-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2, 8px);
   align-items: end;
   width: 100%;
@@ -23,10 +23,11 @@
 .wb-app .composer-split .composer-submit-col {
   display: flex;
   align-items: flex-end;
-  justify-content: center;
-  width: 44px;
+  justify-content: flex-end;
+  gap: 6px;
   min-width: 44px;
   height: 100%;
+  position: relative;
 }
 
 .wb-app .composer-split .composer-submit-col .btn,
@@ -40,6 +41,145 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Dual action send container with smooth entry animation */
+.composer-dual-send-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  animation: composer-dual-send-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes composer-dual-send-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateX(8px);
+    max-width: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    max-width: 44px;
+  }
+}
+
+/* Long-press steering hold button */
+.composer-btn-steer-hold {
+  position: relative;
+  overflow: visible !important;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+
+.composer-btn-steer-hold.is-pressing {
+  transform: scale(0.92);
+}
+
+.composer-btn-steer-hold.is-steer-ready {
+  transform: scale(1.06);
+  background: var(--accent, #d97706) !important;
+  border-color: var(--accent, #d97706) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(217, 119, 6, 0.6) !important;
+  animation: composer-steer-pulse 0.45s ease-in-out infinite alternate;
+}
+
+@keyframes composer-steer-pulse {
+  from {
+    transform: scale(1.04);
+    box-shadow: 0 0 10px rgba(217, 119, 6, 0.45);
+  }
+  to {
+    transform: scale(1.08);
+    box-shadow: 0 0 20px rgba(217, 119, 6, 0.8);
+  }
+}
+
+/* Long press circular SVG progress ring */
+.composer-longpress-ring {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  pointer-events: none;
+  transform: rotate(-90deg);
+  z-index: 3;
+}
+
+.composer-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 2.5;
+}
+
+.composer-ring-indicator {
+  fill: none;
+  stroke: var(--accent-light, #fbbf24);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 113.1;
+  stroke-dashoffset: 113.1;
+  animation: composer-ring-fill 0.5s linear forwards;
+}
+
+.composer-ring-indicator.is-ready {
+  stroke: #ffffff;
+  stroke-dashoffset: 0;
+  animation: none;
+}
+
+@keyframes composer-ring-fill {
+  from {
+    stroke-dashoffset: 113.1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Floating indicator tooltip pill */
+.composer-longpress-tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  white-space: nowrap;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--surface-overlay, rgba(24, 24, 27, 0.94));
+  color: var(--text-primary, #ffffff);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.16));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+  z-index: 40;
+  animation: composer-tip-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.composer-longpress-tip.is-steer {
+  background: #d97706;
+  color: #ffffff;
+  border-color: #f59e0b;
+  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.5);
+  transform: scale(1.05);
+}
+
+@keyframes composer-tip-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .wb-app .composer-split .composer-toolbar {
