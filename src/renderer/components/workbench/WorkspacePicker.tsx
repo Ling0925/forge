@@ -296,40 +296,32 @@ export function WorkspacePicker({
                     </div>
                   )}
 
-                  <details className="workspace-picker-jump">
-                    <summary>
-                      <div className="workspace-picker-jump-summary-content">
-                        <CaretRight size={12} className="workspace-picker-jump-caret" aria-hidden="true" />
-                        <span>通过路径跳转（可选）</span>
-                      </div>
-                    </summary>
-                    <div className="workspace-picker-jump-body">
-                      <label htmlFor={jumpId} className="workspace-picker-jump-label">跳转到指定目录路径：</label>
-                      <div className="workspace-picker-jump-row">
-                        <Input
-                          id={jumpId}
-                          value={jumpPath}
-                          placeholder="/path/to/project"
-                          onChange={(event) => setJumpPath(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              if (!loading && jumpPath.trim()) void browse(jumpPath.trim());
-                            }
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={loading || !jumpPath.trim()}
-                          onClick={() => void browse(jumpPath.trim())}
-                        >
-                          跳转
-                        </Button>
-                      </div>
+                  <div className="workspace-picker-jump">
+                    <label htmlFor={jumpId} className="workspace-picker-jump-label">跳转路径</label>
+                    <div className="workspace-picker-jump-row">
+                      <Input
+                        id={jumpId}
+                        value={jumpPath}
+                        placeholder="输入或粘贴目录绝对路径…"
+                        onChange={(event) => setJumpPath(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            if (!loading && jumpPath.trim()) void browse(jumpPath.trim());
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={loading || !jumpPath.trim()}
+                        onClick={() => void browse(jumpPath.trim())}
+                      >
+                        跳转
+                      </Button>
                     </div>
-                  </details>
+                  </div>
                 </>
               ) : (
                 <div className="workspace-picker-path-box">
