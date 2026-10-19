@@ -15,7 +15,14 @@ import { ApprovalPanel } from "../primitives/ApprovalPanel";
 import { Button } from "../primitives/Button";
 import { EmptyState } from "../primitives/EmptyState";
 import { ErrorState } from "../primitives/ErrorState";
-import { ToolDisclosure, friendlyLabel, getToolIcon } from "../primitives/ToolDisclosure";
+import {
+  ToolDisclosure,
+  friendlyLabel,
+  getToolIcon,
+  PlanStepsList,
+  extractPlanData,
+  type PlanItemData,
+} from "../primitives/ToolDisclosure";
 import { Markdown } from "./Markdown";
 import { StreamingMarkdown } from "./StreamingMarkdown";
 import { Reasoning } from "./Reasoning";
@@ -128,17 +135,110 @@ function MessageCopyButton({ text }: { readonly text: string }) {
   );
 }
 
+export interface PlanStageDividerProps {
+  readonly title: string;
+  readonly completed?: number;
+  readonly total?: number;
+  readonly percent?: number;
+  readonly plan?: PlanItemData | null;
+}
+
 /**
- * Phase marker. Only a real AI plan step produces one, and it then carries that
- * step's title — a bare "Forge" line above every answer duplicated the author
- * label that the message itself now owns, so an unnamed stage renders nothing.
+ * Unified plan stage progress divider.
+ * Integrates stage title, sleek progress track and ratio count (e.g. 1/3)
+ * into a single horizontal rule, replacing redundant heavy tool cards.
+ */
+export function PlanStageDivider({
+  title,
+  completed,
+  total,
+  percent: propPercent,
+  plan,
+}: PlanStageDividerProps) {
+  const [expanded, setExpanded] = useState(false);
+  const actualTotal = total ?? plan?.steps.length ?? 0;
+  const actualCompleted =
+    completed ??
+    (plan ? plan.steps.filter((s) => s.status === "completed").length : 0);
+  const percent =
+    propPercent ??
+    (actualTotal > 0
+      ? Math.round((actualCompleted / actualTotal) * 100)
+      : 0);
+  const countText =
+    actualTotal > 0 ? `${actualCompleted}/${actualTotal}` : "";
+
+  return (
+    <div className="transcript-stage-divider">
+      <div
+        className={`transcript-stage-bar ${plan ? "is-interactive" : ""}`}
+        role={plan ? "button" : undefined}
+        tabIndex={plan ? 0 : undefined}
+        onClick={plan ? () => setExpanded((prev) => !prev) : undefined}
+        onKeyDown={
+          plan
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setExpanded((prev) => !prev);
+                }
+              }
+            : undefined
+        }
+        aria-expanded={plan ? expanded : undefined}
+        title={
+          plan
+            ? `${title} (点击${expanded ? "收起" : "查看"}步骤详情)`
+            : title
+        }
+      >
+        <span className="transcript-stage-title" title={title}>
+          {title}
+        </span>
+        <div className="transcript-stage-track" aria-hidden="true">
+          <div
+            className="transcript-stage-fill"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        {countText && (
+          <span className="transcript-stage-count" aria-hidden="true">
+            {countText}
+          </span>
+        )}
+      </div>
+      {plan && (
+        <Collapsible open={expanded}>
+          <div className="transcript-stage-details">
+            {plan.explanation && (
+              <p className="transcript-stage-explanation">
+                <span className="transcript-stage-explanation-label">
+                  说明：
+                </span>
+                {plan.explanation}
+              </p>
+            )}
+            <PlanStepsList steps={plan.steps} />
+          </div>
+        </Collapsible>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase marker. Only a real AI plan step produces one, and it carries the
+ * step's title with integrated progress track.
  */
 function StageHeader({ stage }: { readonly stage: TranscriptStage }) {
   if (!stage.title) return null;
   return (
-    <h3 className="transcript-stage-header">
-      <span className="transcript-stage-title">{stage.title}</span>
-    </h3>
+    <PlanStageDivider
+      title={stage.title}
+      completed={stage.completed}
+      total={stage.total}
+      percent={stage.percent}
+    />
   );
 }
 interface TurnEntry {
@@ -210,9 +310,16 @@ function groupTurnEntries(
 
   for (const entry of entries) {
     const hasHeader = Boolean(headers[entry.index]);
+    const isPlan =
+      entry.item.kind === "tool" &&
+      entry.item.call.function.name === "update_plan" &&
+      entry.item.status !== "failed";
     const isTool = entry.item.kind === "tool";
 
-    if (isTool && !hasHeader) {
+    if (isPlan) {
+      currentTools = null;
+      blocks.push({ kind: "single", entry });
+    } else if (isTool && !hasHeader) {
       if (!currentTools) {
         currentTools = [];
         blocks.push({
@@ -352,6 +459,36 @@ function renderTimelineEntry(
         <code>{item.call.function.arguments.slice(0, 12000)}</code>
       </section>
     );
+  if (
+    item.kind === "tool" &&
+    item.call.function.name === "update_plan" &&
+    item.status !== "failed"
+  ) {
+    const planData =
+      extractPlanData(item.output) ??
+      extractPlanData(item.call.function.arguments);
+    if (planData) {
+      const total = planData.steps.length;
+      const completed = planData.steps.filter((s) => s.status === "completed").length;
+      const inProgress = planData.steps.find((s) => s.status === "in_progress");
+      const title =
+        inProgress?.step ??
+        (completed === total
+          ? (planData.title || "全部步骤已完成")
+          : (planData.explanation || planData.title || "计划步骤"));
+      return (
+        <Fragment key={item.id}>
+          {headers[index] && <StageHeader stage={headers[index]} />}
+          <PlanStageDivider
+            title={title}
+            completed={completed}
+            total={total}
+            plan={planData}
+          />
+        </Fragment>
+      );
+    }
+  }
   return (
     <Fragment key={item.id}>
       {headers[index] && <StageHeader stage={headers[index]} />}

@@ -310,7 +310,7 @@ export function extractPlanData(data: unknown): PlanItemData | null {
   return { id, title, explanation, steps };
 }
 
-function PlanStepsList({ steps }: { readonly steps: readonly PlanStepItem[] }) {
+export function PlanStepsList({ steps }: { readonly steps: readonly PlanStepItem[] }) {
   return (
     <ol className="tool-plan-steps">
       {steps.map((item, idx) => {
