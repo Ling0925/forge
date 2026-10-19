@@ -6,11 +6,8 @@
   position: relative;
   width: 100%;
   min-width: 0;
-  /* Sits directly under the composer card, inset to the card's own padding so
-     the meter's ends line up with the card's text edges instead of running
-     wider than the card it belongs to. */
+  /* Sits directly under the composer card, aligned full width with the card */
   margin-top: 2px;
-  padding-inline: 13px;
 }
 [data-theme="light"] .composer-usage {
   --context-instructions: #005faf;
@@ -29,11 +26,8 @@
   font-size: 11px;
   list-style: none;
   font-variant-numeric: tabular-nums;
-  /* Full-width summary: the meter is the only control in this row, so the
-     entire strip is the target and the negative inline margin keeps the text
-     aligned with the composer card while the hover pill extends slightly. */
+  /* Full-width summary: the meter is the only control in this row, aligned with the composer card */
   padding: 2px var(--space-2);
-  margin-inline: calc(-1 * var(--space-2));
   border-radius: var(--radius-sm);
   transition: color var(--transition-fast), background-color
     var(--transition-fast);
