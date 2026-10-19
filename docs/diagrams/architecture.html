@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Forge · 架构与实现设计图</title>
+<style>
+  /* ── 色板取自 src/renderer/styles/workspace-theme.css + tokens.css（Warm Light-First） ── */
+  :root {
+    --canvas-bg: #faf9f6;
+    --sidebar-bg: #f2f1ed;
+    --surface-shell: #eae9e4;
+    --surface-elevated: #ffffff;
+    --surface-soft: #f0efeb;
+    --surface-hover: #e8e6e0;
+    --text-primary: #292824;
+    --text-secondary: #68665f;
+    --text-muted: #716e66;
+    --border-subtle: #e5e3dc;
+    --border-control: #d1cec5;
+    --accent: #a54f35;
+    --accent-soft: #f3e6df;
+    --sage: #55684d;
+    --sage-soft: #e6ebe0;
+    --amber: #8a6a1f;
+    --amber-soft: #f5ecd6;
+    --blue: #3f5a72;
+    --blue-soft: #e4ebf1;
+    --danger: #9c3b3b;
+    --danger-soft: #f6e2e2;
+    --radius-card: 12px;
+    --radius-lg: 14px;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+    --shadow: 0 1px 2px rgb(35 30 20 / 5%), 0 6px 20px rgb(35 30 20 / 5%);
+  }
+  [data-theme="dark"] {
+    --canvas-bg: #171716;   --sidebar-bg: #121211;  --surface-shell: #191918;
+    --surface-elevated: #222221; --surface-soft: #252524; --surface-hover: #30302e;
+    --text-primary: #eeede8; --text-secondary: #aaa79f; --text-muted: #aaa79f;
+    --border-subtle: #2b2b28; --border-control: #3d3c37;
+    --accent: #dc9477; --accent-soft: #3b2b24;
+    --sage: #a8c09a; --sage-soft: #25301f;
+    --amber: #d8bc74; --amber-soft: #322a17;
+    --blue: #a6c4dd; --blue-soft: #1e2830;
+    --danger: #e39a9a; --danger-soft: #35201f;
+    --shadow: 0 1px 2px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 25%);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: var(--font); font-size: 14px; line-height: 1.62; color: var(--text-primary); background: var(--canvas-bg); -webkit-font-smoothing: antialiased; }
+  .frame { display: flex; min-height: 100vh; }
+
+  nav.rail { width: 252px; flex: 0 0 252px; background: var(--sidebar-bg); border-right: 1px solid var(--border-subtle);
+    padding: 22px 14px 40px; position: sticky; top: 0; height: 100vh; overflow: auto; }
+  .brand { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+  .brand span { color: var(--accent); }
+  .brand-sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+  nav.rail ol { list-style: none; margin-top: 22px; }
+  nav.rail a { display: block; padding: 6px 10px; border-radius: 8px; color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+  nav.rail a:hover { background: var(--surface-hover); color: var(--text-primary); }
+  nav.rail .num { font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-right: 7px; }
+  .rail-foot { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+
+  main { flex: 1; min-width: 0; padding: 34px 40px 90px; max-width: 1200px; }
+  header.hero h1 { font-size: 26px; font-weight: 660; letter-spacing: -0.02em; }
+  header.hero p { color: var(--text-secondary); max-width: 860px; margin-top: 8px; }
+  /* 窄屏防溢出：长标识符、依赖链与路径允许任意断开 */
+  code { overflow-wrap: anywhere; }
+  .src { overflow-wrap: anywhere; }
+  .card p, .box, .note, .connector .lbl, .legend span { overflow-wrap: anywhere; }
+  .grid > *, .boxes > * { min-width: 0; }
+  .badges { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+  .badge { font-size: 11.5px; font-family: var(--mono); padding: 3px 9px; border-radius: 9999px; background: var(--surface-soft); color: var(--text-secondary); border: 1px solid var(--border-subtle); }
+  .badge.k { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+  section { margin-top: 46px; scroll-margin-top: 20px; }
+  h2 { font-size: 19px; font-weight: 640; letter-spacing: -0.01em; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 6px; display: flex; align-items: baseline; gap: 10px; }
+  h2 .idx { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 500; }
+  .lede { color: var(--text-secondary); max-width: 900px; margin-bottom: 18px; }
+  h3 { font-size: 14.5px; font-weight: 620; margin: 22px 0 8px; }
+  code { font-family: var(--mono); font-size: 12.2px; background: var(--surface-soft); padding: 1px 5px; border-radius: 5px; }
+  .src { font-family: var(--mono); font-size: 11.5px; color: var(--text-muted); }
+
+  .card { background: var(--surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-card); padding: 14px 16px; box-shadow: var(--shadow); }
+  .grid { display: grid; gap: 12px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .stat .n { font-size: 22px; font-weight: 660; letter-spacing: -0.02em; }
+  .stat .l { font-size: 12px; color: var(--text-muted); }
+
+  .layer { border-radius: var(--radius-lg); padding: 13px 15px 15px; border: 1px solid var(--border-control); background: var(--surface-elevated); }
+  .layer > .tag { font-size: 11px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 9px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .layer > .tag b { color: var(--text-primary); font-weight: 620; letter-spacing: 0; font-size: 12.5px; text-transform: none; }
+  .boxes { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); }
+  .box { background: var(--surface-soft); border: 1px solid var(--border-subtle); border-radius: 9px; padding: 8px 10px; font-size: 12.6px; }
+  .box .t { font-weight: 600; display: block; }
+  .box .d { color: var(--text-muted); font-size: 11.6px; font-family: var(--mono); display: block; margin-top: 2px; }
+  .box.hi { background: var(--accent-soft); border-color: transparent; }
+  .box.sage { background: var(--sage-soft); border-color: transparent; }
+  .box.blue { background: var(--blue-soft); border-color: transparent; }
+  .box.amber { background: var(--amber-soft); border-color: transparent; }
+  .connector { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; color: var(--text-secondary); font-size: 11px; gap: 8px; padding: 4px 0; }
+  .connector::before { content: ""; width: 1px; height: 100%; background: var(--border-control); }
+  .connector .lbl { background: var(--surface-shell); border-radius: 9999px; padding: 2px 10px; font-family: var(--mono); font-size: 11px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.8px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; }
+  tbody tr:hover { background: var(--surface-soft); }
+  td.ok { color: var(--sage); font-weight: 650; }
+  td.ask { color: var(--amber); font-weight: 650; }
+  td.no { color: var(--danger); font-weight: 650; }
+  .scroll-x { overflow-x: auto; }
+
+  .step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; padding: 9px 0; }
+  .step .dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-elevated); border: 1px solid var(--border-control); font-family: var(--mono); font-size: 12px; color: var(--text-secondary); position: relative; }
+  .step:not(:last-child) .dot::after { content: ""; position: absolute; top: 28px; left: 13.5px; width: 1px; height: 100%; background: var(--border-control); }
+  .step .body b { font-weight: 620; }
+  .step .body p { color: var(--text-secondary); font-size: 12.6px; }
+  .loopband { border: 1px dashed var(--accent); border-radius: var(--radius-lg); padding: 10px 12px 4px; margin: 6px 0; }
+  .loopband > .cap { font-size: 11.5px; font-family: var(--mono); color: var(--accent); margin-bottom: 4px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 10px 0 18px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+
+  pre.tree { font-family: var(--mono); font-size: 12.1px; line-height: 1.55; color: var(--text-secondary); background: var(--surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-card); padding: 14px 16px; overflow-x: auto; white-space: pre; }
+  pre.tree b { color: var(--text-primary); font-weight: 620; }
+  pre.tree em { color: var(--accent); font-style: normal; }
+  .soft pre.tree { background: var(--surface-soft); border-color: transparent; }
+
+  .note { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 10px 13px; font-size: 12.8px; }
+  .note.warn { border-color: var(--danger); background: var(--danger-soft); }
+  .note.tip { border-color: var(--sage); background: var(--sage-soft); }
+  .note ul { margin-left: 16px; }
+
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: var(--surface-soft); border: 1px solid var(--border-subtle); }
+  .pill.a { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+  .pill.s { background: var(--sage-soft); border-color: transparent; color: var(--sage); }
+  .pill.b { background: var(--blue-soft); border-color: transparent; color: var(--blue); }
+  .pill.m { background: var(--amber-soft); border-color: transparent; color: var(--amber); }
+
+  .toolgrp h4 { font-size: 12.5px; font-weight: 620; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolgrp .items { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sw { width: 100px; }
+  .sw i { display: block; height: 38px; border-radius: 8px; border: 1px solid var(--border-subtle); }
+  .sw .hex { font-family: var(--mono); font-size: 10.6px; color: var(--text-muted); }
+  .sw .nm { font-size: 11.5px; }
+
+  button.theme { font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 9999px; background: var(--surface-elevated); color: var(--text-secondary); border: 1px solid var(--border-control); cursor: pointer; }
+  button.theme:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+  @media (max-width: 900px) {
+    .frame { flex-direction: column; }
+    nav.rail { width: auto; flex: none; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border-subtle); }
+    nav.rail ol { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 12px; }
+    main { padding: 22px 16px 60px; }
+  }
+  @media print { nav.rail { display: none; } body { background: #fff; } .card, .layer { box-shadow: none; break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<nav class="rail" aria-label="目录">
+  <div class="brand">⚒ Forge <span>架构设计图</span></div>
+  <div class="brand-sub">本地桌面 + CLI 共享代理运行时<br>依据当前源码勘查绘制</div>
+  <ol>
+    <li><a href="#overview"><span class="num">01</span>规模与定位</a></li>
+    <li><a href="#layers"><span class="num">02</span>分层架构</a></li>
+    <li><a href="#deps"><span class="num">03</span>模块依赖</a></li>
+    <li><a href="#loop"><span class="num">04</span>Run 生命周期</a></li>
+    <li><a href="#perm"><span class="num">05</span>权限与审批</a></li>
+    <li><a href="#tools"><span class="num">06</span>工具总线</a></li>
+    <li><a href="#agents"><span class="num">07</span>子代理编排</a></li>
+    <li><a href="#store"><span class="num">08</span>持久化布局</a></li>
+    <li><a href="#hosts"><span class="num">09</span>多宿主拓扑</a></li>
+    <li><a href="#ctx"><span class="num">10</span>上下文与压缩</a></li>
+    <li><a href="#build"><span class="num">11</span>构建产物</a></li>
+    <li><a href="#ui"><span class="num">12</span>工作台结构</a></li>
+    <li><a href="#drift"><span class="num">13</span>文档偏差</a></li>
+  </ol>
+  <div class="rail-foot"><button class="theme" id="themeBtn" type="button">切换深色 / 浅色</button></div>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>Forge：单一共享核心的本地代理 Harness</h1>
+  <p>
+    一个包内同时产出 <b>Node 22 CLI</b>、<b>Electron 桌面工作台</b>、<b>LAN Web 前端</b>三种宿主；
+    它们调用<b>同一个</b> <code>HarnessService</code> → <code>AgentRuntime</code> 循环、同一套工具注册表、
+    同一个会话目录（<code>~/.local/share/forge</code> / <code>$FORGE_HOME</code>）。
+    CLI 不经过 IPC，桌面不把逻辑放进渲染进程 —— 差异只在“宿主外壳”。
+  </p>
+  <div class="badges">
+    <span class="badge k">TypeScript ESM · strict</span>
+    <span class="badge">Node ≥22.23.1 &lt;23</span>
+    <span class="badge">Electron 44.7</span>
+    <span class="badge">React 19 + Vite</span>
+    <span class="badge">esbuild + Vitest + Biome</span>
+    <span class="badge">pnpm workspace</span>
+    <span class="badge">Zod 边界校验</span>
+  </div>
+</header>
+
+<!-- 01 -->
+<section id="overview">
+  <h2><span class="idx">01</span>规模与定位</h2>
+  <p class="lede">数字来自本次仓库实测（<code>find src -name '*.ts*' | xargs wc -l</code>），不是文档宣称值。</p>
+  <div class="grid g4">
+    <div class="card stat"><div class="n">224</div><div class="l">src TS/TSX 文件</div></div>
+    <div class="card stat"><div class="n">43.7k</div><div class="l">src 代码行</div></div>
+    <div class="card stat"><div class="n">240</div><div class="l">tests Vitest 文件</div></div>
+    <div class="card stat"><div class="n">11</div><div class="l">src 子模块目录</div></div>
+  </div>
+
+  <h3>各模块体量与依赖方向</h3>
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>模块</th><th>职责</th><th>文件</th><th>行数</th><th>依赖方向</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/renderer</code></td><td>React 工作台 UI、状态 reducer、样式</td><td>80</td><td>16 867</td><td>→ shared，且只经 <code>window.forge</code></td></tr>
+      <tr><td><code>src/cli</code></td><td>命令解析、Ink TUI、事件渲染、审批策略</td><td>55</td><td>7 467</td><td>→ shared, core</td></tr>
+      <tr><td><code>src/tools</code></td><td>本地文件/命令/git/浏览器/LSP/MCP/skills 注册表</td><td>13</td><td>3 849</td><td>→ shared, mcp</td></tr>
+      <tr><td><code>src/core</code></td><td>harness 组装 + runtime 循环 + 子代理 + 压缩</td><td>15</td><td>3 415</td><td>→ shared, tools, store, provider, mcp, context</td></tr>
+      <tr><td><code>src/shared</code></td><td>schemas / contracts / ipc / bridge / errors（无 Node、无 IO）</td><td>23</td><td>3 030</td><td>叶子层，被所有模块依赖</td></tr>
+      <tr><td><code>src/provider</code></td><td>chat-completions / responses / anthropic 三协议</td><td>5</td><td>1 894</td><td>→ shared + 官方 SDK</td></tr>
+      <tr><td><code>src/store</code></td><td>会话、设置、检查点、journal、锁、原子 IO</td><td>8</td><td>1 872</td><td>→ shared</td></tr>
+      <tr><td><code>src/desktop</code></td><td>Electron main / preload / worker / runtime hub</td><td>9</td><td>1 528</td><td>→ shared, core</td></tr>
+      <tr><td><code>src/web</code></td><td>LAN HTTP + WebSocket 宿主、目录浏览</td><td>8</td><td>1 482</td><td>→ shared, desktop/runtime</td></tr>
+      <tr><td><code>src/mcp</code></td><td>stdio JSON-RPC 客户端、注册表、命名与边界</td><td>6</td><td>1 213</td><td>→ shared</td></tr>
+      <tr><td><code>src/context</code></td><td>AGENTS.md 优先级 + skills 目录/正文加载</td><td>2</td><td>1 079</td><td>→ shared</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note tip" style="margin-top:14px">
+    <b>三条硬约束</b>（源码可验证，是读懂全图的钥匙）：
+    <ul>
+      <li><code>src/shared</code> 不 import 任何 Node/Electron API，也不写文件 —— 它是纯契约层（docs/ARCHITECTURE.md:7 明述）。</li>
+      <li>工具执行<b>只发生在 worker / CLI 进程</b>；渲染进程只有 <code>ForgeBridge</code> 的方法白名单。</li>
+      <li>所有边界（持久化、HTTP、IPC、工具参数）都用 Zod <code>.strict()</code> 解析后才进入内存；类型不替代运行时校验。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 02 -->
+<section id="layers">
+  <h2><span class="idx">02</span>分层架构</h2>
+  <p class="lede">自上而下：宿主 → 组装根 → 执行循环 → 能力层 → 传输 → 落盘。L4 的工具与 L2 的 context 都是<b>每次 run 新建、finally 释放</b>的作用域资源。</p>
+  <div class="legend">
+    <span><i style="background:var(--accent-soft)"></i>宿主 / 入口</span>
+    <span><i style="background:var(--sage-soft)"></i>能力与工具</span>
+    <span><i style="background:var(--blue-soft)"></i>传输与协议</span>
+    <span><i style="background:var(--amber-soft)"></i>持久化</span>
+    <span><i style="background:var(--surface-soft)"></i>契约 / 中性</span>
+  </div>
+
+  <div class="layer">
+    <div class="tag">L1 · Entrypoints<b>四个宿主，零核心逻辑复制</b></div>
+    <div class="boxes">
+      <div class="box hi"><span class="t">CLI · <code>forge</code></span><span class="d">src/cli/index.ts → runCli(argv, service)<br>chat / run / resume / config / models / sessions / show / compact / fork / context / skills / checkpoints / mcp / export / files / rename / archive / diagnostics</span></div>
+      <div class="box hi"><span class="t">Desktop · Electron 44</span><span class="d">main.cjs（窗口 + chooser）<br>preload.cjs（contextBridge）<br>renderer（Vite / React 19）</span></div>
+      <div class="box hi"><span class="t">LAN Web</span><span class="d">src/web/server.ts<br>HTTP + /api/events WebSocket<br>多 workspace 只读浏览</span></div>
+      <div class="box hi"><span class="t">Android 轻客户端</span><span class="d">android/ — 纯 WebView 壳<br>扫码 / 手输地址，无 JS bridge<br>会话逻辑全留在服务器</span></div>
+    </div>
+  </div>
+  <div class="connector"><span class="lbl">同进程直接调用 · 跨进程经校验 RPC</span></div>
+
+  <div class="layer">
+    <div class="tag">L2 · Assembly root<b>src/core/harness.ts · createHarness(options) → HarnessService</b></div>
+    <div class="boxes">
+      <div class="box"><span class="t">状态目录解析</span><span class="d">options.stateDir → $FORGE_HOME → ~/.local/share/forge</span></div>
+      <div class="box amber"><span class="t">Store 打开</span><span class="d">sessions / settings / run-memory / published-files</span></div>
+      <div class="box blue"><span class="t">Provider 路由</span><span class="d">session.providerSourceId 决定端点+协议+凭据<br>全局激活不改已有会话路由</span></div>
+      <div class="box sage"><span class="t">buildTools()</span><span class="d">每 run 新建工具注册表 + ProjectContext<br>≤64 活动 MCP 服务</span></div>
+      <div class="box"><span class="t">Service 门面</span><span class="d">run / compactSession / forkSession / listCheckpoints / getCheckpointDiff / restoreCheckpoint / mcp* / updateSettings / dispose</span></div>
+      <div class="box"><span class="t">DI 工厂</span><span class="d">HarnessOptions.providerFactory / toolFactory → 确定性测试</span></div>
+    </div>
+  </div>
+  <div class="connector"><span class="lbl">AgentRuntimeDependencies{store, provider, tools, settings, autoTitle, runMemory, childToolFactory, onChildOperation, projectInstructions}</span></div>
+
+  <div class="layer" style="border-color:var(--accent)">
+    <div class="tag">L3 · Agent loop<b>src/core/runtime.ts · createAgentRuntime(deps).run(input, onEvent, approve, signal, control)</b></div>
+    <div class="boxes">
+      <div class="box hi"><span class="t">有界循环</span><span class="d">maxTurns 计完成次数<br>maxToolCalls 计尝试（含被拒）</span></div>
+      <div class="box"><span class="t">会话锁</span><span class="d">跨进程 flock，持有到最后一次 checkpoint</span></div>
+      <div class="box"><span class="t">预算与压缩</span><span class="d">标定估计 → 语义摘要 → 整轮硬裁剪</span></div>
+      <div class="box"><span class="t">事件流</span><span class="d">20 类判别联合；恰好一个 run_finished</span></div>
+      <div class="box"><span class="t">取消与重试</span><span class="d">AbortSignal 贯穿；1+5 次 provider 尝试退避</span></div>
+      <div class="box"><span class="t">终态收敛</span><span class="d">join 子代理 / 后台命令 / steering 后才 completed</span></div>
+    </div>
+  </div>
+  <div class="connector"><span class="lbl">ToolContext{sessionId, toolCallId, workspace, permission, signal, approve, onEvent, onCommandStarted/Output}</span></div>
+
+  <div class="layer">
+    <div class="tag">L4 · Capability buses<b>combined registry 重名即抛错，未知工具返回 bounded isError</b></div>
+    <div class="boxes">
+      <div class="box sage"><span class="t">Local registry · 10</span><span class="d">src/tools/local.ts<br>path-guard + 密钥脱敏 + 读回执</span></div>
+      <div class="box sage"><span class="t">command_task</span><span class="d">src/tools/command-tasks.ts<br>后台命令任务 4 活动 / 32 总</span></div>
+      <div class="box sage"><span class="t">MCP 工具 · 2</span><span class="d">mcp_list_tools / mcp_call_tool<br>stdio only</span></div>
+      <div class="box sage"><span class="t">Browser 6 / LSP 1</span><span class="d">条件注册；Playwright 首次使用才启动</span></div>
+      <div class="box sage"><span class="t">project_context / load_skill</span><span class="d">src/context + tools/skills.ts<br>只读、不授予权限</span></div>
+      <div class="box sage"><span class="t">publish_file</span><span class="d">不可变会话附件 ≤8 MiB</span></div>
+      <div class="box hi"><span class="t">Native · 11（循环内执行）</span><span class="d">src/core/agents.ts + history.ts<br>不进 registry，由 runtime 直接处理</span></div>
+    </div>
+  </div>
+  <div class="connector"><span class="lbl">ModelProvider.complete(messages, definitions, {model, signal, onText, onReasoning, onToolCall})</span></div>
+
+  <div class="layer">
+    <div class="tag">L5 · Provider transport<b>显式 apiMode，绝不自动探测 / 降级 / 跨模式重放</b></div>
+    <div class="boxes">
+      <div class="box blue"><span class="t">chat-completions（默认）</span><span class="d">openai SDK，maxRetries: 0<br>流式 tool-call 片段组装</span></div>
+      <div class="box blue"><span class="t">responses</span><span class="d">src/provider/responses.ts<br>function_call / function_call_output<br>providerState 仅对匹配 origin 重放</span></div>
+      <div class="box blue"><span class="t">anthropic</span><span class="d">@anthropic-ai/sdk<br>signed thinking 续写 + SDK 分页</span></div>
+      <div class="box blue"><span class="t">sdk-transport</span><span class="d">生成空闲时限 / 目录总时限 / 字节上限 / 错误分类</span></div>
+      <div class="box"><span class="t">listModels</span><span class="d">GET 保留 1 次有界重试</span></div>
+      <div class="box"><span class="t">无 Gemini 原生适配</span><span class="d">仅 OpenAI 兼容面 + Anthropic</span></div>
+    </div>
+  </div>
+  <div class="connector"><span class="lbl">原子写（tmp + fsync + rename + syncDirectory）· 0700 / 0600 · 拒 symlink · flock</span></div>
+
+  <div class="layer">
+    <div class="tag">L6 · Durable state<b>src/store · 单一状态目录，多宿主共享</b></div>
+    <div class="boxes">
+      <div class="box amber"><span class="t">sessions/&lt;uuid&gt;.json</span><span class="d">base 快照 + _journalGeneration</span></div>
+      <div class="box amber"><span class="t">summaries/&lt;id&gt;.json</span><span class="d">列表读索引，脏记录跳过不致命</span></div>
+      <div class="box amber"><span class="t">&lt;id&gt;.&lt;baseHash&gt;.journal/</span><span class="d">不可变 delta，64 条 / 4 MiB / 终态换 base</span></div>
+      <div class="box amber"><span class="t">checkpoints/&lt;sha256(workspace)&gt;/</span><span class="d">工作区外私有备份，<b>不是 git reset</b></span></div>
+      <div class="box amber"><span class="t">settings · session-memory · published-files · prompt-history · mcp</span><span class="d">凭据与会话记录分离</span></div>
+      <div class="box amber"><span class="t">&lt;id&gt;.json.lock</span><span class="d">inode 永久保留，绝不 unlink</span></div>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <b>harness 内的实际组装管线：</b>
+    <code>createDefaultTools</code> = local(+withCommandTasks) → [lsp] → mcp → [browser] → <code>createCombinedToolRegistry(...)</code>，
+    再与 <code>createPublishedFileTool</code>、<code>createSkillTool(context)</code> 组合成 run 级注册表；
+    <code>dispose()</code> 在 finally 级联回收，构造失败时 <code>Promise.allSettled</code> 清理已建注册表（harness.ts:96）。
+  </div>
+</section>
+
+<!-- 03 -->
+<section id="deps">
+  <h2><span class="idx">03</span>模块依赖地图</h2>
+  <p class="lede">没有环：<code>shared</code> 是叶子契约，<code>core</code> 是唯一组装者，<code>desktop / web / cli / renderer</code> 互不复制核心逻辑。</p>
+  <div class="card">
+    <pre class="tree">
+                     ┌────────────────────── <b>src/shared</b>（叶子契约）──────────────────────┐
+                     │ schemas.ts(780) · contracts.ts · ipc.ts · bridge.ts · errors.ts    │
+                     │ context-usage · tool-activity · published-files · workspaces · diff │
+                     └──┬─────────┬──────────┬──────────┬─────────┬─────────┬──────────────┘
+   <em>core</em> ────────────────┤         │          │          │         │         │
+     harness.ts(组装根) ─┼─ runtime.ts(循环) ─ agents.ts(子代理/原生) ─ working-memory(压缩) ─ run-memory(冷恢复)
+                        │                    history.ts(mN 检索) · plans.ts · prompts.ts · tool-preview.ts
+   <em>能力</em> ┌ tools/combined ┬ local ─┬ git ─┬ path-guard ─ protected-roots ┬ command-tasks
+           ├ mcp/registry ─ protocol(stdio JSON-RPC) ─ names ─ bounds ─ cleanup
+           ├ context/project-context（AGENTS 优先级 + skills 目录/正文）─ tools/skills
+           └ browser(Playwright) ─ lsp / lsp-client ─ tools/published-files
+   <em>传输</em> └ provider/openai ─ responses ─ anthropic ─ sdk-transport ─ errors
+   <em>存储</em> └ store/sessions ─ io(atomic/fsync) ─ lock(flock) ─ session-journal
+             ├ checkpoints ├ settings ├ published-files ├ prompt-history
+   <em>宿主</em> └ desktop/main ⇄ preload ⇄ worker ─ runtime(hub) ─ controller ─ lifecycle
+             ├ web/server(HTTP+WS) ─ lan ─ workspaces ─ html-preview ─ static
+             ├ cli/index ─ cli ─ interactive(+tasks) ─ ink/* ─ render/* ─ approval-policy ─ terminal
+             └ renderer/main.tsx ─ components/workbench/App ─ state/* ─ components/primitives/*
+                    └── <b>window.forge（ForgeBridge）= 唯一 IPC 面</b> ── shared/bridge.ts ──┘
+</pre>
+  </div>
+
+  <h3>契约层的关键抽象</h3>
+  <div class="grid g3">
+    <div class="card"><b>HarnessService</b><p class="src">contracts.ts:86</p><p style="font-size:12.5px;color:var(--text-secondary)">30+ 方法门面：run、会话操作、MCP 管理、checkpoint 三件套、compact/fork/rename/archive、getProjectContext、diagnostics、tasks、dispose。宿主只认这一个接口。</p></div>
+    <div class="card"><b>LocalToolRegistry</b><p class="src">contracts.ts:62</p><p style="font-size:12.5px;color:var(--text-secondary)"><code>definitions</code> + <code>execute(call, ctx)</code> + 可选 <code>settleBackground()</code> / <code>commandTasks</code> + <code>dispose()</code>。所有能力（含 MCP、浏览器、LSP）都实现它，才能被 combined 组合。</p></div>
+    <div class="card"><b>ModelProvider</b><p class="src">contracts.ts:33</p><p style="font-size:12.5px;color:var(--text-secondary)"><code>complete()</code> 收 <code>onText / onReasoning / onToolCall</code> 三个流式回调；预览只报字符数与行数计数，<b>参数原文永不过 UI 边界</b>。</p></div>
+    <div class="card"><b>AgentEvent（20 类）</b><p class="src">schemas.ts:538</p><p style="font-size:12.5px;color:var(--text-secondary)">run_started · run_finished · state_changed · error · text_delta · reasoning_delta · tool_call_preview · tool_preview_reset · tool_started · tool_finished · approval_requested · approval_resolved · context_usage · context_compacted · plan_updated · agent_update · permission_changed · provider_retry · retry_reset · title_changed</p></div>
+    <div class="card"><b>SessionSnapshot</b><p class="src">schemas.ts</p><p style="font-size:12.5px;color:var(--text-secondary)">messages（含 assistant <code>providerState</code> 与 <code>contextSummary</code> 边界）· events · plan · status(7 态) · permissionCeiling · pendingTool · providerSourceId · model · parentSessionId · agentTask / ownership / writePaths。</p></div>
+    <div class="card"><b>RunControl</b><p class="src">contracts.ts:27</p><p style="font-size:12.5px;color:var(--text-secondary)">宿主在运行中插话：<code>drainSteering(final?)</code> 在模型/工具交换结束后取走新指令；<code>getPermission()</code> 支持 run 中改权限（仍被 session ceiling 夹住）。</p></div>
+  </div>
+</section>
+
+<!-- 04 -->
+<section id="loop">
+  <h2><span class="idx">04</span>一次 Run 的生命周期</h2>
+  <p class="lede">依据 <code>src/core/runtime.ts:440 → 1107</code> 的实际控流绘制。虚线框内是每个 agent turn 都会重入的循环体。</p>
+
+  <div class="card">
+    <div class="step"><div class="dot">1</div><div class="body"><b>取会话锁 → 载入快照</b><p><code>store.acquire()</code> 用 Linux <code>flock -n -E 75</code>；Zod 校验后进入内存；若配置 <code>runMemory</code> 先做冷恢复（闲置 ≥1h / &gt;32 000 token）。</p></div></div>
+    <div class="step"><div class="dot">2</div><div class="body"><b>孤儿状态收敛</b><p>持久化的 <code>running</code> / <code>awaiting_approval</code> 一律改判 <code>interrupted</code> 并落盘；剥离 <code>pendingTool</code>，未闭合调用由 <code>closeCalls()</code> 写入“上次执行被中断，先检查效果再重试”。</p></div></div>
+    <div class="step"><div class="dot">3</div><div class="body"><b>权限夹紧</b><p><code>plan</code> 模式 → 强制 <code>readonly</code>；否则取 <code>input.permission ?? settings.defaultPermission</code>，再与 <code>session.permissionCeiling</code> 取<b>较低者</b>。运行中经 <code>control.getPermission()</code> 重算（runtime.ts:464）。</p></div></div>
+    <div class="step"><div class="dot">4</div><div class="body"><b>组装系统指令</b><p><code>buildSystemInstructions()</code> = 核心指令 + <b># Project context</b>（AGENTS.md + skills 元数据）+ <b># Current run</b>（workspace / mode / effective permission / maxToolCalls）。纯函数、字节稳定，不改写持久历史。</p></div></div>
+    <div class="step"><div class="dot">5</div><div class="body"><b>提交用户轮 + 自动标题</b><p>追加 user message（可含 images）；<code>claimAutoTitle</code> 抢占式异步起名，仅当标题未被用户改动才应用，并以 <code>title_changed</code> 通知。</p></div></div>
+    <div class="step"><div class="dot">6</div><div class="body"><b>发布 <code>run_started</code> → 解析上下文窗口</b><p>模型以<b>会话持久值</b>为权威，<code>input.model</code> 覆盖只在拿锁后写入；缺失窗口用 2s 超时向 provider 元数据试探，失败不阻塞请求。</p></div></div>
+
+    <div class="loopband">
+      <div class="cap">循环体 · 每个 agent turn 重入（turn ≤ maxTurns，call ≤ maxToolCalls）</div>
+      <div class="step"><div class="dot">7</div><div class="body"><b>drainSteering → 预算判定</b><p>先吸收插话。用<b>标定后</b>尺寸（本地字符估计 × 本会话自学的 1.25–2.0 缩放）对比 budget，而不是裸估计。</p></div></div>
+      <div class="step"><div class="dot">8</div><div class="body"><b>语义压缩 / 整轮硬裁剪</b><p>超线 → 找合法 <code>summaryBoundary</code> → <code>summarizeWorkingState()</code> 由 provider 生成 ≤8192 结构化 working state（goal / constraints / decisions / completed / nextSteps / verification / uncertainties + <code>mN</code> 引用），<b>不改持久 transcript</b>，发 <code>context_compacted</code>。兜底 <code>compactContext()</code> 只删完整已闭合轮；放不下则 <code>budget</code> 失败，而不是截断工具 JSON。</p></div></div>
+      <div class="step"><div class="dot">9</div><div class="body"><b>provider.complete（流式）</b><p><code>context_usage</code>(projected) → 传输。瞬时失败按 <code>RETRY_DELAYS_MS [500,1000,2000,4000,8000]</code> 重试<b>同一请求</b>（不耗 turn、不重跑已完成工具），发 <code>provider_retry</code>；取消经 <code>withCancellation</code> race，绝不重放不确定副作用。</p></div></div>
+      <div class="step"><div class="dot">10</div><div class="body"><b>tool_call_preview（瞬态）</b><p><code>createToolPreviewStream</code> 只报 previewId / 名称 / argumentsChars / 行数估计；<b>参数片段不过 UI 边界</b>。定稿前 <code>tool_preview_reset</code>。</p></div></div>
+      <div class="step"><div class="dot">11</div><div class="body"><b>无 tool_calls → 逐级收敛</b><p>依次 join：未交付的子代理（以 <code>origin:"agent_reconciliation"</code> 的 user 消息注入有界报告）→ 后台命令 <code>settleBackground()</code> → 最终 steering 队列；三者皆空才 <code>finish("completed")</code>。</p></div></div>
+      <div class="step"><div class="dot">12</div><div class="body"><b>有 tool_calls → 串行执行</b><p>先校验 call id 唯一；逐个：<code>pendingTool</code> 落盘 → <code>tool_started</code> → 审批（先置 <code>awaiting_approval</code> 落盘，<code>approval_requested</code> 经队列串行化）→ native 或 registry 执行 → 结果与 FileChanges 落盘 → <code>tool_finished</code>。<b>被拒也算一次 attempt</b>。</p></div></div>
+      <div class="step"><div class="dot">13</div><div class="body"><b>每个交换都 checkpoint</b><p>执行前 checkpoint 调用、执行后 checkpoint 结果/变更，副作用经 <code>serialized()</code> 串行；写/编辑额外生成<b>文件级私有备份</b>（命令效果不进备份）。</p></div></div>
+    </div>
+
+    <div class="step"><div class="dot">14</div><div class="body"><b>唯一终态 → 释放</b><p><code>run_finished</code>(completed / cancelled / failed) 恰好一次；预算耗尽先 <code>error(code=budget)</code> 再终态；子代理有未处理失败时父的 completed 降级为 <code>failed</code>。finally 里释放会话锁、dispose run 级工具与 ProjectContext。</p></div></div>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><b>事件 vs 持久化</b><p style="font-size:12.6px;color:var(--text-secondary);margin-top:6px"><code>text_delta</code> / <code>reasoning_delta</code> / <code>tool_call_preview</code> 是<b>瞬态通知</b>（EventSink 同步、无背压，宿主自行限制缓冲）；只有归一化的最终 assistant 消息进入 transcript，失败或被取消的部分回复压缩为一条有界历史事件。</p></div>
+    <div class="card"><b>设置与会话的边界</b><p style="font-size:12.6px;color:var(--text-secondary);margin-top:6px">run 边界捕获公共设置与私有 provider 配置；<b>设置变更不影响进行中的 run</b>。<code>settings.model</code> 只影响新会话，恢复的会话坚持自身持久模型；锁获取失败或启动前被拒则不得改动会话模型。</p></div>
+  </div>
+</section>
+
+<!-- 05 -->
+<section id="perm">
+  <h2><span class="idx">05</span>权限与审批模型</h2>
+  <p class="lede">
+    两级正交：<b>Permission</b>（<code>readonly → workspace → unrestricted</code>，取请求值与 <code>permissionCeiling</code> 的较低者）决定工具<b>能不能做</b>；
+    <b>Approval</b>（宿主策略）决定做之前<b>要不要问</b>；第三道是工具自身的 path / origin / 注册状态守卫。<code>plan</code> 模式把 permission 夹到 readonly。
+  </p>
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>工具</th><th>readonly</th><th>workspace</th><th>unrestricted</th><th>实施位置与理由</th></tr></thead>
+    <tbody>
+      <tr><td><code>read_file</code> / <code>list_files</code> / <code>search_files</code></td><td class="ok">允许</td><td class="ok">允许</td><td class="ok">允许</td><td>路径须 workspace 相对，拒 symlink / 敏感文件；单文件 2 MiB、分页有界</td></tr>
+      <tr><td><code>git_status</code> / <code>git_diff</code> / <code>git_log</code></td><td class="ok">允许</td><td class="ok">允许</td><td class="ok">允许</td><td>只读观测，64 KiB 上限；敏感路径省略、已知值脱敏；无 init/commit</td></tr>
+      <tr><td><code>project_context</code> / <code>load_skill</code></td><td class="ok">允许</td><td class="ok">允许</td><td class="ok">允许</td><td>只读数据，明确“不授予权限、不是指令执行”</td></tr>
+      <tr><td><code>list_models</code> / <code>update_plan</code> / <code>list_agents</code> / <code>wait_agents</code> / <code>get_agent_result</code> / <code>history_*</code></td><td class="ok">允许</td><td class="ok">允许</td><td class="ok">允许</td><td>native 无副作用，plan 模式也可用</td></tr>
+      <tr><td><code>write_file</code> / <code>edit_file</code> / <code>make_directory</code></td><td class="no">拒绝<br><span class="src">local.ts:917</span></td><td class="ask">约束内允许<br><span class="src">编辑前须本会话已 read</span></td><td class="ask">允许</td><td>runtime 判定 mutation + readonly 硬拒；写前后 checkpoint，0700 私有备份</td></tr>
+      <tr><td><code>run_command</code></td><td class="no">拒绝</td><td class="ask">每次调用审批<br><span class="src">显示精确 argv</span></td><td class="ok">直接执行</td><td>显式 argv（不做隐式 shell 插值）；超时 30s/上限 120s；合并输出 64 KiB；<b>非 OS 沙箱</b>，可越工作区与网络</td></tr>
+      <tr><td><code>command_task</code></td><td class="no">拒绝</td><td class="ok">允许（本 run 已批任务）</td><td class="ok">允许</td><td>只能观察 / join / stop 本进程已批准任务，无跨 run 恢复</td></tr>
+      <tr><td><code>mcp_list_tools</code> / <code>mcp_call_tool</code></td><td class="no">两者拒绝</td><td class="ask">每次审批并显示注册 command argv（绝不显示 env）</td><td class="ok">仅限已注册且 enabled 的服务器</td><td>stdio only；<code>setEnabled(false)</code> / <code>remove</code> 主动撤销本进程活动连接与子进程组</td></tr>
+      <tr><td>browser 6 工具</td><td class="no">拒绝</td><td class="ask">仅白名单 origin</td><td class="ask">同左</td><td><code>browserAllowedOrigins</code> 为空则注册表根本不装载；懒启动 Chromium，headless</td></tr>
+      <tr><td><code>lsp</code></td><td class="no">拒绝</td><td class="ok">配置了才注册</td><td class="ok">同左</td><td>仅当 <code>settings.lspServers</code> 非空才建注册表</td></tr>
+      <tr><td><code>publish_file</code></td><td class="ask">凭据/敏感内容拒发</td><td class="ok">≤8 MiB / 文件</td><td class="ok">同左</td><td>快照不可变；仅工作区相对路径，拒 symlink / hardlink</td></tr>
+      <tr><td><code>spawn_agent</code></td><td class="ok">允许</td><td class="ok">允许</td><td class="ok">允许</td><td><b>plan 继承 readonly</b>；子 ceiling = 父 ceiling；深度 1、活动 ≤4、总量 ≤32</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>宿主侧审批策略（与 Permission 分离）</h3>
+  <div class="grid g3">
+    <div class="card">
+      <span class="pill a">CLI · full-access（默认）</span>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-top:8px"><code>DEFAULT_APPROVAL_MODE</code>（approval-policy.ts:5）。在既有权限边界内自动应答审批请求，含 MCP / 浏览器 / 子代理。启动与切换都有可见警告；自动应答输出 tool/argv 审计行并脱敏常见凭据。</p>
+    </div>
+    <div class="card">
+      <span class="pill m">CLI · auto</span>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-top:8px">只对<b>根 run 的 <code>run_command</code></b> 这类合格请求自动放行（存在 <code>childSessionId</code> 不自批）。非交互 <code>run</code> / <code>resume</code> 仍需显式 <code>unrestricted</code> + <code>--yes</code>。</p>
+    </div>
+    <div class="card">
+      <span class="pill s">CLI · manual（别名 ask）</span>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-top:8px">逐次 <code>Approve? [Y/n]</code>。只有<b>新鲜未被污染的回车</b>或 y/yes 才算批准：粘贴、队列消息、历史输入、Esc、abort、EOF 一律不能授权。</p>
+    </div>
+    <div class="card">
+      <span class="pill b">桌面 / Web</span>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-top:8px">审批走 <code>approval_requested</code> 事件 + Inspector 面板按钮，<code>answerApproval(runId, approvalId, approved)</code> 匹配后只解析一次。<code>false</code> 即拒绝；无自动应答。</p>
+    </div>
+  </div>
+  <div class="note warn" style="margin-top:12px">
+    审批模式只对<b>当前 CLI 进程</b>生效（<code>/new</code>、<code>/resume</code> 后仍保持），不写回全局设置。
+    任何模式都<b>不是</b> OS 沙箱、也不是权限提升 —— 工具自身的路径 / origin / 注册状态 / 子代理 ceiling 检查始终生效。<code>unrestricted</code> 只是刻意放宽策略，不是解除守卫。
+  </div>
+
+  <h3>会话与子代理状态机</h3>
+  <div class="card soft">
+    <pre class="tree">
+<b>SessionStatus</b> = idle | running | awaiting_approval | completed | cancelled | failed | interrupted
+
+  idle ──run_started──▶ running ──approval_requested──▶ awaiting_approval
+                        ▲                                     │
+                        └───── approval_resolved(true/false) ─┘
+                        │
+                        ├─ tool_started / tool_finished / context_compacted / context_usage
+                        ├─ plan_updated / agent_update / permission_changed / title_changed
+                        ├─ provider_retry / retry_reset / error
+                        └─▶ run_finished{ completed | cancelled | failed }
+                                 ▲
+   进程崩溃或重开载入 ──▶ running|awaiting_approval 记录改判 <em>interrupted</em>
+                          （保留 pendingTool 的不确定性，绝不自动重放副作用）
+
+<b>子代理收敛：</b>父 finish 前 join 全部子；任一子被 reject 或未达 completed
+    → 父请求的 completed 降级为 <em>failed</em>，失败报告进入父收尾轮由模型对账
+    子构造失败 → 子会话持久化为 failed 并发对应 agent_update
+</pre>
+  </div>
+</section>
+
+<!-- 06 -->
+<section id="tools">
+  <h2><span class="idx">06</span>工具总线全景</h2>
+  <p class="lede">模型可见工具 ≈ <b>34</b> 个（10 local + 11 native + 2 MCP + 6 browser + 1 lsp + 1 command_task + 3 context/交付），其中浏览器与 LSP 属条件注册。</p>
+
+  <div class="grid g2">
+    <div class="card toolgrp">
+      <h4><span class="pill s">Local registry · 10</span><span class="src">src/tools/local.ts</span></h4>
+      <div class="items"><span class="badge">read_file</span><span class="badge">list_files</span><span class="badge">search_files</span><span class="badge">write_file</span><span class="badge">edit_file</span><span class="badge">make_directory</span><span class="badge">run_command</span><span class="badge">git_status</span><span class="badge">git_diff</span><span class="badge">git_log</span></div>
+      <p style="font-size:12.4px;color:var(--text-secondary);margin-top:9px">
+        单一 <code>argumentsSchema</code> + <code>tool</code> 判别（strict 拒绝未知字段与外部绝对拼写）。
+        读取返回 <b>SHA-256 version</b>、<code>offset/limit/end_line/next_offset/total_lines/truncated/partial_line/cache_hit</code>，<code>if_version</code> 命中则 <code>unchanged:true</code> 且不回正文；页上限 12 000 字符。
+        写/编辑要求“本会话已 read”的 <b>receipt</b>（<code>requireRead</code> 比对 inode stamp），且唯一匹配或显式 <code>replace_all</code>。
+      </p>
+    </div>
+
+    <div class="card toolgrp">
+      <h4><span class="pill a">Native · 11</span><span class="src">src/core/agents.ts · history.ts</span></h4>
+      <div class="items"><span class="badge">history_search</span><span class="badge">history_read</span><span class="badge">list_models</span><span class="badge">update_plan</span><span class="badge">spawn_agent</span><span class="badge">list_agents</span><span class="badge">wait_agents</span><span class="badge">cancel_agent</span><span class="badge">get_agent_result</span><span class="badge">send_agent_message</span><span class="badge">resolve_agent</span></div>
+      <p style="font-size:12.4px;color:var(--text-secondary);margin-top:9px">
+        由 runtime <code>executeNative()</code> 直接处理，<b>不注册进 store</b>，因此子代理事件不外泄。
+        结果一律 <code>JSON.stringify().slice(0, 131072)</code>；<code>list_models</code> 目录再限 32 768 UTF-8 字节，且不产出半个 JSON、不切半个 ID。
+      </p>
+    </div>
+
+    <div class="card toolgrp">
+      <h4><span class="pill">扩展注册表 · 10</span><span class="src">mcp / browser / lsp / command-tasks</span></h4>
+      <div class="items"><span class="badge">mcp_list_tools</span><span class="badge">mcp_call_tool</span><span class="badge">browser_navigate</span><span class="badge">browser_read</span><span class="badge">browser_click</span><span class="badge">browser_fill</span><span class="badge">browser_screenshot</span><span class="badge">browser_close</span><span class="badge">lsp</span><span class="badge">command_task</span></div>
+      <p style="font-size:12.4px;color:var(--text-secondary);margin-top:9px">
+        <code>MCP_PROTOCOL_VERSION = "2025-11-25"</code>，命名 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>（≤64 字符、防碰撞）；JSON-RPC 2.0 换行分帧，<code>initialize → initialized</code>，<code>tools/list</code> 有界游标分页，<code>tools/call</code> 脱敏截断。
+        浏览器模块<b>懒 import</b>，因此纯本机宿主无需安装 Playwright。
+      </p>
+    </div>
+
+    <div class="card toolgrp">
+      <h4><span class="pill">上下文与交付 · 3</span><span class="src">context / skills / published</span></h4>
+      <div class="items"><span class="badge">project_context</span><span class="badge">load_skill</span><span class="badge">publish_file</span></div>
+      <p style="font-size:12.4px;color:var(--text-secondary);margin-top:9px">
+        skills 根顺序：<code>&lt;workspace&gt;/.forge/skills</code> → <code>&lt;workspace&gt;/.agents/skills</code> → 显式用户绝对目录；重复 ID 首根胜出并作为警告列出来源。
+        注入的只是<b>元数据</b>（描述 ≤1024，目录 ≤256 条），正文按需 <code>load_skill</code> 载入（≤64 KiB），是数据不是权限。
+      </p>
+    </div>
+  </div>
+
+  <h3>路径防护 —— 工具侧不可绕过的第三道门</h3>
+  <div class="card soft">
+    <pre class="tree">
+<b>WorkspacePathGuard</b> (src/tools/path-guard.ts)
+  ├ parseRelative：NUL 拒 · 本地绝对路径拒 · win32 绝对拼写拒 · 盘符相对（有环境驱动器状态）拒
+  │                 ".." 深度计数为负 → <em>OUTSIDE_WORKSPACE</em>
+  ├ resolveRead / resolveWrite：逐级 lstat，遇 symlink → <em>SYMLINK</em>；缺目录/文件分别报错
+  ├ createProtectedRootMatcher(protectedRoots = [stateDirectory]) → <em>PROTECTED_PATH</em>
+  │      （~/.local/share/forge 即使被复制进 workspace 也不可读写）
+  └ 错误码集合：PROTECTED_PATH · OUTSIDE_WORKSPACE · SYMLINK · NOT_DIRECTORY · MISSING · INVALID_PATH
+    </pre>
+  </div>
+</section>
+
+<!-- 07 -->
+<section id="agents">
+  <h2><span class="idx">07</span>子代理编排</h2>
+  <div class="grid g2">
+    <div class="card soft">
+      <pre class="tree">
+主代理 run ──<em>spawn_agent</em>──▶ 子会话（<b>独立 Session</b>）
+                              · 独立 context / session / model / tool registry
+                              · depth <b>1</b>（子不能再 spawn）
+                              · 每 run ≤<b>4</b> 活动槽，总量 ≤<b>32</b>
+                              · permissionCeiling = <b>继承父级上限</b>
+                              · 父 plan 模式 → 子继承 readonly
+
+        ├── <em>send_agent_message</em>  排队提示（≤8 条），仅下个模型边界生效，非中断
+        ├── <em>list_agents</em>         currentRun / active / controllable 区分历史记录与本地所有权
+        ├── <em>wait_agents</em>         all | any · timeout_ms ≤120 000；超时<b>不取消</b>工作
+        ├── <em>get_agent_result</em>    有界分页读最终报告（UTF-16 偏移，先脱敏）
+        ├── <em>cancel_agent</em>        取消并 join（不清除失败事实、不动兄弟任务）
+        └── <em>resolve_agent</em>       父检查效果后记录“已处理”的具体依据
+
+父终态：join 全部子 → 未交付报告以 <b>agent_reconciliation</b> user 消息注入
+        → 有未处理失败 ⇒ completed 降级 <em>failed</em>（阻塞父成功）
+      </pre>
+    </div>
+    <div class="grid" style="gap:10px">
+      <div class="card"><b>事件边界</b><p style="font-size:12.5px;color:var(--text-secondary)">只有 <b>parent-scoped</b> 的 <code>agent_update</code> 信封外发；子的原始事件<b>不转发</b>。子的审批用<b>根 sessionId + 原子 toolCallId + 请求 UUID</b>，并串行化在父的审批队列里，避免 UI 交错。</p></div>
+      <div class="card"><b>对账消息是本地元数据</b><p style="font-size:12.5px;color:var(--text-secondary)"><code>origin:"agent_reconciliation"</code> 只存在于 <code>user</code> 消息（schema 唯一接受处），provider 上线前剥离；它<b>不算人类轮</b>（<code>isHumanTurn</code> 排除），轮次边界与渲染层折叠都按内部记录处理。</p></div>
+      <div class="card"><b>模型选择纪律</b><p style="font-size:12.5px;color:var(--text-secondary)"><code>list_models</code> 只证明目录成员资格，不证明配额或可用性；换模型不自动重试、不 fallback、不重放有副作用的任务。本仓库 <code>AGENTS.md</code> 进一步把子代理模型固定为 <code>cbcn/deepseek-v4.1-flash</code>。</p></div>
+      <div class="card"><b>失败恢复</b><p style="font-size:12.5px;color:var(--text-secondary)">父 run 结束或进程重启会留下记录但<b>不恢复</b>任何子任务（无跨 run 恢复）；后台命令任务同样在父终态时被 join，未检查的输出不会静默丢失成孤儿进程。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 -->
+<section id="store">
+  <h2><span class="idx">08</span>持久化布局与恢复</h2>
+  <p class="lede">单一状态目录被桌面 / CLI / Web 共享，因此会话可跨宿主接续（桌面创建 → <code>forge resume &lt;uuid&gt;</code>）。</p>
+  <div class="grid g2">
+    <div class="card soft">
+      <pre class="tree">
+<b>$FORGE_HOME</b>（默认 <code>~/.local/share/forge</code>，harness.ts:120-124）  目录 0700 / 文件 0600
+├─ sessions/
+│   ├─ &lt;uuid&gt;.json                 <em>base 快照</em> + _journalGeneration
+│   ├─ &lt;uuid&gt;.json.lock            <em>flock inode 永久，绝不 unlink/替换</em>
+│   ├─ &lt;uuid&gt;.&lt;baseHash&gt;.journal/  <em>不可变 delta 记录（fsync）</em>
+│   └─ summaries/&lt;id&gt;.json          <em>列表索引 + 磁盘 stamp（可懒重建）</em>
+├─ settings/state.json(.lock)       公共设置 · provider sources · 凭据分离存储
+├─ checkpoints/&lt;sha256(workspace)&gt;/
+│   ├─ checkpoint.lock              <em>跨完成持有 flock</em>
+│   └─ &lt;uuid&gt;.json                  <em>工作区外私有备份</em>
+├─ session-memory/&lt;sha256(source)&gt;/ <em>冷恢复摘要（v1，≤8192）</em>
+├─ published-files/
+│   ├─ &lt;fileId&gt;.json                附件记录（不可变快照）
+│   └─ sessions/&lt;sessionId&gt;.(json|lock)
+├─ prompt-history/                  显式开启的工作区输入历史（默认关）
+└─ mcp/servers.json                 注册表（新注册默认 <em>disabled</em>）
+      </pre>
+    </div>
+    <div class="grid" style="gap:10px">
+      <div class="card"><b>Journal 的换 base 规则</b><p style="font-size:12.5px;color:var(--text-secondary)">64 条 delta / 4 MiB / run 终态 → base 原子替换并<b>换 generation ID</b>，因此被保留的恢复记录不可能在被打断的 checkpoint 之后二次应用；未提交的临时文件被忽略。混用新旧可执行文件是<b>被禁止的</b>：旧严格读会拒绝新的私有 base 标记，而不是把陈旧 checkpoint 当完整历史打开。</p></div>
+      <div class="card"><b>IO 底座（store/io.ts）</b><p style="font-size:12.5px;color:var(--text-secondary)"><code>privateDirectory()</code> 递归拒绝祖先 symlink、校验并强制 mode 0700；<code>atomicJson()</code> = 临时文件 + fsync + rename + syncDirectory；快照上限 64 MiB。列表读到坏记录只跳过该文件，不阻断健康会话访问。</p></div>
+      <div class="card"><b>Checkpoint ≠ git</b><p style="font-size:12.5px;color:var(--text-secondary)"><code>begin/complete/release</code> 只覆盖 <code>write_file</code> / <code>edit_file</code> 等<b>直接文件编辑</b>；<code>run_command</code> 效果<b>不进检查点</b>，FileChange 预览也只是预览。恢复要求：单个 checkpoint + 单文件、状态 <code>completed</code>、会话非活动、当前字节与权限模式等于记录的 after-hash —— 冲突即拒绝，<b>从不做 git reset</b>。<code>getCheckpointDiff</code> RPC 上限 256 KiB。</p></div>
+      <div class="card"><b>锁的语义</b><p style="font-size:12.5px;color:var(--text-secondary)">runtime 持有跨进程会话锁直到最后一次 checkpoint，finally 释放；并发获取失败返回 <code>busy</code> 而非静默交错；取消不泄漏锁；harness 不再包第二层锁。孤儿 running 快照在锁内恢复为 interrupted。</p></div>
+      <div class="card"><b>Provider source 归属</b><p style="font-size:12.5px;color:var(--text-secondary)"><code>providerSourceId</code> 属于会话：创建时捕获所选源，fork 与子继承。删除源不得孤立会话 —— 设置存储会反查仍引用该源的会话 ID 列表（harness.ts:128）。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 -->
+<section id="hosts">
+  <h2><span class="idx">09</span>多宿主拓扑与安全边界</h2>
+  <div class="card soft">
+    <pre class="tree">
+<b>桌面进程树</b>
+
+Electron <b>main</b> (dist/desktop/main.cjs)
+  · BrowserWindow + contextIsolation=true, sandbox=true, nodeIntegration=false
+  · index.html 内联 CSP：default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+                      font-src 'self' data:; img-src 'self' data:; connect-src 'none'
+  · <b>唯一</b>负责目录选择器 chooseWorkspace、openExternal、会话导出、附件另存为
+  · 双向校验：匹配 UUID request id + <b>method</b>（schema refine 后需再判方法以收窄类型）
+  · 把请求 / 运行 / 审批绑定到发起者的 trusted webContents；订阅过滤 + 幂等退订
+        │ WorkerRequest（校验后转发）              ▲ WorkerMessage{runEvent | response}
+        ▼                                        │
+Node <b>worker_threads</b> · dist/desktop/worker.cjs     <em>只有 worker 执行工具</em>
+  · createHarness() → 一个 <b>RuntimeHub</b>（controller + pending map + 120s 传输超时）
+  · 同一 hub 同时服务 <b>桌面 IPC</b> 与 <b>LAN Web 页面</b>
+      ⇒ 手机与桌面看到同一 run / 审批 / steering 状态
+  · worker 死亡：main 拒绝挂起 RPC，为已知 run 上报 interrupted；由 store 恢复判定不确定效果
+        ▲
+        │ contextBridge 只暴露 <b>ForgeBridge</b>（无 ipcRenderer、无原始 channel、无路径）
+<b>renderer</b> React 19（dist/renderer/index.html → main.tsx；showcase 走 ?showcase=1）
+
+<b>LAN 面</b>（同 worker 内）
+  · startLanServer(host = 具体 IPv4（拒 0.0.0.0）, port 1024–65535, workspace)
+  · HTTP：/api/* RPC + /api/events <b>WebSocket</b>（cursor + clientId + recovery 事件重放、心跳 ping/pong、1008 拒非法游标）
+  · HTML 预览走内存 HtmlPreviewStore 的临时 URL；多 workspace 宿主下文件预览关闭，改为对话附件
+  · <em>非安全上下文</em>：randomUUID 可能缺失 → bridge.requestId() 改用 getRandomValues
+    </pre>
+  </div>
+
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><b>订阅与响应隔离</b><p style="font-size:12.5px;color:var(--text-secondary)">hub 的 <code>request()</code>（HTTP 路径）响应<b>不广播</b>，避免桌面收到无挂起项的响应；<code>subscribe()</code> 能看到所有 controller 消息。坏订阅者或已关闭的 worker port 不会拖垮共享运行时。</p></div>
+    <div class="card"><b>预启动拒绝</b><p style="font-size:12.5px;color:var(--text-secondary)">run 未开始即失败 → 返回 RPC 错误，<b>不是</b> run 事件；<code>cancelRun</code> / <code>answerApproval</code> 只回执 null，不宣称已终结；陈旧或外部 ID → <code>not_found</code>。取消、断连与关机都会清理 map 并拒绝挂起审批。</p></div>
+    <div class="card"><b>凭据隔离</b><p style="font-size:12.5px;color:var(--text-secondary)">私有 <code>ProviderConfig</code> 永不进 RPC 或会话记录；工具注册表统一 <code>redactValues:[apiKey]</code>；MCP 子进程只拿最小环境、不透传开发 API key、拒绝 key 形状主机名；日志与传输必须经 <code>toErrorInfo()</code>，不得序列化未知 Error.message / stack / cause。</p></div>
+  </div>
+</section>
+
+<!-- 10 -->
+<section id="ctx">
+  <h2><span class="idx">10</span>上下文装配与压缩</h2>
+  <div class="grid g2">
+    <div class="card soft">
+      <h3 style="margin-top:0">AGENTS.md 与 skills 装配</h3>
+      <pre class="tree" style="background:var(--surface-soft);border-color:transparent">
+<b>根</b>   &lt;workspace&gt;/AGENTS.md  → <em>总是生效</em>（绝不向上扫父目录或家目录）
+<b>嵌套</b> **/AGENTS.md           → 仅对<em>被访问子树</em>生效，
+                               由 project_context(path) 按需载入
+<b>排序</b> 返回“最外层在前，最具体在后”的 source 列表
+<b>拒绝</b> symlink 逃逸 · 二进制/NUL · &gt;2 MiB 文件 · 密钥形状文本
+       正文 &gt;64 KiB（<em>显式拒绝，绝不静默截断</em>）
+<b>限制</b> 指令深度 8 · 指令正文 64 KiB · skillId 128 · 描述 1024
+       skill 正文 64 KiB · 目录 ≤256 条 · 警告 ≤64 条
+      </pre>
+      <p style="font-size:12.5px;color:var(--text-secondary)">密钥形状检测在 <code>project-context.ts:330</code>：<code>api_key | access_token | client_secret | password = …</code> 直接判为内容错误。run 边界把 <code>getSystemContext()</code> 前置进系统消息，并向 UI 暴露 <code>getFingerprint()</code> 供缓存可见性。</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">压缩管线（三级）</h3>
+      <div class="step"><div class="dot">A</div><div class="body"><b>标定估计</b><p><code>seedContextScale()</code> 取本会话持久事件里 <code>projected → reported</code> 比率的中位数，夹在 <code>1.25 … 2.0</code>；长会话恢复时不必每次重新学习，一次异常轮次也无法扭曲它。</p></div></div>
+      <div class="step"><div class="dot">B</div><div class="body"><b>语义摘要</b><p>provider 生成 ≤8192 的结构化 working state（6 类条目 × ≤12，每条带 <code>mN</code> 引用，整体 ≤6000 字符）。稳定 system 前缀保持；持久 transcript 不被改写，只推进 <code>contextSummary.boundary</code>。</p></div></div>
+      <div class="step"><div class="dot">C</div><div class="body"><b>整轮硬裁剪</b><p><code>compactContext()</code> 保留指令与当前请求，只删除<b>完整已闭合</b>轮次及其工具交换；遇到无法归属的 tool result 或未解决原生调用 → 以 <code>budget</code> 失败。若最近三轮本身就超硬预算，则保留更少整轮而非丢弃语义。excerpt-only 兜底会标记 <code>contextSummary.fallback</code>。</p></div></div>
+      <div class="note tip" style="margin-top:10px">压缩后的 working state 自我标注为<b>部分摘录、非穷尽覆盖</b>，并指示用 <code>history_search</code> / <code>history_read</code>（<code>mN</code> 记录）取回原始证据 —— 而不是把摘要当完整历史。</div>
+      <div class="note warn" style="margin-top:10px"><b>为什么必须标定：</b>实测 788 个轮次中，真实输入约为裸字符估计的 1.16×（p50），工具结果密集或 CJK 时 &gt;1.4×（p90），而<b>裸估计从未越线</b> —— 只用原始估计会让请求在已超窗之后才触发裁剪。</div>
+    </div>
+  </div>
+
+  <h3>Fork · Compact · Resume 的差异</h3>
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>操作</th><th>做什么</th><th>硬约束</th></tr></thead>
+    <tbody>
+      <tr><td><code>forkSession(id, boundary?)</code></td><td>复制历史生成新会话（继承 <code>providerSourceId</code> 与 ceiling）</td><td>只复制，<b>绝不执行</b>复制来的调用；边界须通过 <code>assertBoundary</code> 的完整原生调用对校验；<b>仅当</b>源 summary 边界 ≤ 请求边界且在副本中构成完整原生边界时才保留 <code>contextSummary</code>，更早的 fork 省略以免导入未来历史；持久 <code>ProviderState</code> 续写上限 256 项 / 256 KiB</td></tr>
+      <tr><td><code>compactSession(id)</code></td><td>宿主显式触发语义压缩</td><td>transcript 不变，只推进摘要边界；provider 生成失败可用有界 excerpt 兜底并标注 fallback</td></tr>
+      <tr><td><code>run</code> / <code>resume</code></td><td>在同一 store 上继续会话</td><td>必须先报告不确定效果并安全清理 pending 状态；显式 resume 要求历史已 settled</td></tr>
+      <tr><td>冷恢复 <code>session-memory</code></td><td>闲置 ≥1h 或 &gt;32 000 token 时留下可恢复的最近状态</td><td><code>sourceHash</code> 覆盖 messages / plan / contextSummary / status / 最后 run_finished，指纹不符即不套用</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- 11 -->
+<section id="build">
+  <h2><span class="idx">11</span>构建与产物拓扑</h2>
+  <div class="card soft">
+    <pre class="tree">
+<b>node scripts/build.mjs</b>（完整）· <b>node scripts/build-core.mjs</b>（本机日常，只产 CLI）
+
+ esbuild ─ src/cli/index.ts       → <em>dist/cli.mjs</em>          ESM · target node22 · chmod 0755
+             banner 注入 createRequire（被捆绑的 CJS 依赖需要）
+             external: electron, playwright, playwright-core, ink, react
+ esbuild ─ src/desktop/main.ts    → <em>dist/desktop/main.cjs</em>    CJS
+ esbuild ─ src/desktop/worker.ts  → <em>dist/desktop/worker.cjs</em>  CJS（唯一执行工具者）
+ esbuild ─ src/desktop/preload.ts → <em>dist/desktop/preload.cjs</em> CJS
+             <b>metafile 守卫</b>：输入只允许 preload.ts + src/shared/** + node_modules/zod/**
+                       外部 import 只允许 "electron"，否则构建 <em>直接失败</em>
+ Vite ──── src/renderer/index.html → <em>dist/renderer/</em>        base "./" · target chrome132
+
+ electron-builder（仅正式分发）→ release/&lt;build-id&gt;/{cli,desktop} + tar.gz
+             + SOURCE-SHA256.json + PAYLOAD-SHA256.json + SHA256SUMS + release.json
+             asar=true；playwright(-core) asarUnpack；浏览器二进制不随包分发
+ scripts/install-local.mjs → ~/.local/share/forge-harness/releases/&lt;id&gt; + ~/.local/bin/forge{,-desktop}
+             校验 release.json / 四个 checksum 文件 / 归档清单 / 可执行位，再切 <b>current</b> 软链
+             保留旧版本；无 sudo、无自启、无卸载脚本
+    </pre>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="note tip"><b>本机更新短路径（AGENTS.md 约定）</b><br>改代码 → <code>node scripts/build-core.mjs</code> → 重开 <code>forge</code> 即加载新产物（当前进程不热更新）。默认不跑桌面构建 / Electron 打包 / release 校验 / install-local；不把全量测试、typecheck、lint 当本机更新门槛，但要做最小检查（编译退出码、语法/启动检查），并用临时 <code>FORGE_HOME</code> 做启动检查以免读真实密钥。<b>编译通过 ≠ 功能全部验证。</b></div>
+    <div class="note warn"><b>本轮修改必须提交</b><br>每轮实际改动仓库后完成 <code>git add</code> + <code>git commit</code>，只暂存本轮自己的文件，不夹带用户已有修改 / 凭据 / 构建产物；说明沿用 <code>feat:/fix:/docs:</code> 风格；默认不 push。</div>
+  </div>
+</section>
+
+<!-- 12 -->
+<section id="ui">
+  <h2><span class="idx">12</span>桌面工作台结构</h2>
+  <p class="lede">80 个 renderer 文件；状态集中在单一 reducer，视觉遵循 <code>DESIGN.md</code> 的 Warm Light-First Minimal Workbench 语法 —— 本文件即用该色板与度量绘制。</p>
+  <div class="grid g2">
+    <div class="card soft">
+      <pre class="tree">
+<b>Shell.tsx</b> (layout) ─ 视口外壳固定，正文拥有唯一直属纵向滚动（杜绝双滚动条）
+├─ <b>Sidebar</b> ─ 会话列表 · status dot · SessionListItem · WorkspacePicker · 紧凑 232px
+├─ <b>WorkbenchHeader</b> ─ 标题 / 权限 / 模型标签 · CommandPalette（Cmd/Ctrl+K）
+├─ <b>Transcript</b> ─ Quiet Tool Rows：工具与证据行默认折叠为水平静默单行条
+│    ├─ primitives/ToolDisclosure(1162) · DiffViewer · CodeBlock · HtmlPreview
+│    ├─ Reasoning · StreamingMarkdown · PublishedFiles · ImageAttachments
+│    └─ state/transcript-stages · timeline · turn-execution · transcript-sync（顺序与折叠语义）
+├─ <b>Composer</b>(1169) ─ 一体化圆润输入舱（18–24px 圆角，内部无嵌套边框）
+│    └─ useSlashCommands · ComposerDropdown · run-input-queue（排队 / 插话）
+└─ <b>Inspector</b> ─ 三 Tab：概览&运行时 · 变更&检查点 · 资源
+     └─ RuntimePanels · CheckpointPanel · McpPanel · ProjectResources · UsagePopover · PhonePairing
+
+状态层 workbench-context.tsx + workbench-reducer.ts(725)
+   drafts · operation-scope · tool-outcome · session-usage · persistent-usage-cache
+   model-catalog-cache · session-info-cache · settings-draft · refresh-events
+   html-preview · code-highlight(789) · mobile-connection · modal-shortcuts
+      </pre>
+    </div>
+    <div class="grid" style="gap:10px">
+      <div class="card">
+        <b>色板（light / dark）</b>
+        <div class="swatches" style="margin-top:8px">
+          <div class="sw"><i style="background:#faf9f6"></i><div class="hex">#faf9f6</div><div class="nm">canvas</div></div>
+          <div class="sw"><i style="background:#f2f1ed"></i><div class="hex">#f2f1ed</div><div class="nm">sidebar</div></div>
+          <div class="sw"><i style="background:#ffffff"></i><div class="hex">#ffffff</div><div class="nm">elevated</div></div>
+          <div class="sw"><i style="background:#a54f35"></i><div class="hex">#a54f35→#dc9477</div><div class="nm">accent</div></div>
+          <div class="sw"><i style="background:#292824"></i><div class="hex">#292824</div><div class="nm">text</div></div>
+          <div class="sw"><i style="background:#35332e"></i><div class="hex">#35332e</div><div class="nm">run 按钮</div></div>
+        </div>
+        <p style="font-size:12.4px;color:var(--text-muted);margin-top:8px">dark 画布 <code>#171716</code> / 侧栏 <code>#121211</code>。字体 Geist Variable + Geist Mono；4px 间距刻度；去边框化，只保留 1px 微弱细线。</p>
+      </div>
+      <div class="card"><b>度量</b><p style="font-size:12.5px;color:var(--text-secondary)">阅读行长 <code>--reading-measure</code> 760–780px · 消息间距 28–36px · 触控最小目标 44px · 窄屏 prose 17px/1.75 · <code>prefers-reduced-motion</code> 全局降级 · 侧栏 264/232px，Inspector 380/320px。</p></div>
+      <div class="card"><b>纪律</b><p style="font-size:12.5px;color:var(--text-secondary)">渲染进程无特权操作，一切经 <code>window.forge</code>；<b>未经真实执行不得展示成功</b>；严禁在产品中植入伪造展示数据、虚构阶段或营销 Hero；showcase 页只用真实原语与真实会话状态。</p></div>
+      <div class="card"><b>CLI 同构</b><p style="font-size:12.5px;color:var(--text-secondary)"><code>src/cli/ink/*</code>（app / output / transcript / input-editor / rich-row）用 Ink 6 + React 消费<b>同一事件流</b>；<code>render/*</code> 负责 diff、markdown 缓存、tool-presentation、envelope、token-count、auto-approval；<code>plain-controller</code> / <code>terminal-controller</code> 提供非 TTY 纯文本与 <code>--json</code> 机读流。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 -->
+<section id="drift">
+  <h2><span class="idx">13</span>勘查发现：文档 / 代码偏差与风险</h2>
+  <p class="lede">下列均为本次读码实测，供决定改文档还是改代码时取舍。<b>本图只报告，未修改任何源码或文档。</b></p>
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>#</th><th>位置</th><th>宣称</th><th>实测</th><th>性质</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="src">docs/ARCHITECTURE.md:106</td><td>defaultPublicSettings 提供 “<b>readonly</b> permission”</td><td><code>src/shared/schemas.ts:168</code> → <code>defaultPermission: "workspace"</code></td><td><span class="pill m">文档过期</span> 默认值直接决定首次运行的写能力，属安全语义描述偏差，建议优先纠正</td></tr>
+      <tr><td>2</td><td class="src">README.md:40</td><td>“10 个本地文件/系统工具 <b>及</b> 3 个原生只读 Git 工具”</td><td>本地注册表共 <b>10</b> 个，3 个 git 工具<b>已包含在内</b>（docs/ARCHITECTURE.md:87 的说法正确）</td><td><span class="pill m">计数表述</span> 易被读成 13 个</td></tr>
+      <tr><td>3</td><td class="src">README.md:54 · package.json:37</td><td>“终端 CLI (Node 22 <b>Commander</b>)”，依赖 <code>commander ^13.1.0</code></td><td><code>src/</code> 与 <code>scripts/</code> 中<b>无任何 commander 引用</b>，CLI 用自写 <code>parseArgs</code></td><td><span class="pill m">未使用依赖</span> 可移除，或注明历史遗留</td></tr>
+      <tr><td>4</td><td class="src">docs/ARCHITECTURE.md:23, 33</td><td>强制集成点：browser.ts → <code>createBrowserTools(...)</code>；<code>src/renderer/App.tsx</code> → <code>App</code></td><td>实际导出 <code>createBrowserToolRegistry()</code>（harness.ts:84 用的正是它）；组件是 <code>src/renderer/components/workbench/App.tsx</code>，<code>src/renderer/App.tsx</code> 不存在</td><td><span class="pill a">契约表漂移</span> 照表接线会失败</td></tr>
+      <tr><td>5</td><td class="src">README.md:67 · docs/DELIVERY.md</td><td>会话存储 “<code>~/.local/share/forge-harness</code>”</td><td>运行态默认是 <code>~/.local/share/forge</code>（harness.ts:123）；<code>forge-harness</code> 只是<b>发布包安装目录</b></td><td><span class="pill a">两个路径易混</span> 建议区分“状态目录 vs 发布目录”</td></tr>
+      <tr><td>6</td><td class="src">docs/ARCHITECTURE.md:12</td><td>“No explicit untyped escape annotations, non-null assertions …”</td><td><code>runtime.ts</code> / <code>local.ts</code> 存在 <code>as</code> 收窄（如 <code>args.tool.slice(4) as "status"|"diff"|"log"</code>）与少量 <code>?.</code>/<code>!</code> 组合</td><td><span class="pill s">契约文字比实现绝对</span> 非缺陷，但描述应改为“允许的收窄形式”</td></tr>
+      <tr><td>7</td><td class="src">仓库根</td><td>—</td><td>约 60 个 <code>playwright_chromiumdev_profile-*</code> / <code>playwright-artifacts-*</code> / <code>com.google.Chrome.*</code> 及随机名目录散落在工作区根</td><td><span class="pill m">工作区卫生</span> 会污染 <code>list_files</code>/<code>git status</code>；建议 ignore 或清理</td></tr>
+      <tr><td>8</td><td class="src">工作区状态</td><td>—</td><td><code>git status</code> 显示 5 个文件处于未提交修改（Transcript.tsx · tool-live.css · workbench-reducer.ts · 2 个测试）</td><td><span class="pill b">非本轮改动</span> 本图未触碰、也未提交它们</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note tip" style="margin-top:16px">
+    <b>值得保留的原创设计要点</b>（读码结论，非文档复制）：
+    <ul>
+      <li><b>三层防御正交</b>：Permission（能不能）→ 宿主 Approval（要不要问）→ path / origin / 注册状态守卫（做了也不能越界）。任何一层被单独绕过都不致命。</li>
+      <li><b>“预览不是保证”反复贯彻</b>：FileChange 预览、tool_call_preview、context_usage 估计、skills 目录元数据都被显式标注为非权威、有界、不可执行。</li>
+      <li><b>不确定性优先于便利性</b>：孤儿态改判 interrupted、fork 不执行复制来的调用、命令效果不进检查点、目录成员不等于可用性 —— 一致地拒绝“自动重放”。</li>
+      <li><b>preload 依赖图由构建守卫</b>：不是靠约定，而是 esbuild metafile 检查硬失败，防止宿主 API 泄漏进渲染面。</li>
+      <li><b>跨宿主同一 hub</b>：桌面与手机共用一个 controller/审批/steering 视图，避免“两端各一套状态”的经典腐化。</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="card">
+    <span class="src">绘制依据：本次会话对 src/{shared,core,tools,store,provider,mcp,context,cli,desktop,renderer,web} 与 docs/ARCHITECTURE.md、DESIGN.md、README.md、IMPLEMENTATION_NOTES.md、AGENTS.md、scripts/build*.mjs、vite.config.ts 的直接读码。</span><br>
+    <span class="src">未经真实 Electron / 浏览器 QA；行号与计数会随后续提交漂移。深色/浅色切换的状态保存在 localStorage（键 forge-diagram-theme）。</span>
+  </div>
+</section>
+</main>
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById("themeBtn");
+    var root = document.documentElement;
+    function apply(mode) {
+      if (mode === "dark") root.setAttribute("data-theme", "dark");
+      else root.removeAttribute("data-theme");
+      try { localStorage.setItem("forge-diagram-theme", mode); } catch (e) { /* file:// 或禁用存储 */ }
+    }
+    var saved = null;
+    try { saved = localStorage.getItem("forge-diagram-theme"); } catch (e) { /* noop */ }
+    apply(saved === "dark" ? "dark" : "light");
+    btn.addEventListener("click", function () {
+      apply(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    });
+  })();
+</script>
+</body>
+</html>
