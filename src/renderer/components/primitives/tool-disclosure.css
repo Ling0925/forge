@@ -18,6 +18,18 @@
   margin: 1px 0;
   transition: background-color var(--transition-fast), border-color
     var(--transition-fast);
+  animation: tool-card-appear 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes tool-card-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Sequential operations in one phase read as a tight group. */

@@ -28,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Collapsible } from "./Collapsible";
 import type { FileChange } from "../../shared-types";
 import { DiffViewer, diffStats } from "./DiffViewer";
 import "./tool-disclosure.css";
@@ -986,8 +987,8 @@ export function ToolDisclosure({
         </div>
       </button>
 
-      {expanded && (
-        <div id={detailsId} className="tool-disclosure-body">
+      <Collapsible open={expanded} id={detailsId}>
+        <div className="tool-disclosure-body">
           {truncated && (
             <p className="tool-notice">
               <WarningCircle size={13} weight="regular" aria-hidden="true" />
@@ -1148,7 +1149,7 @@ export function ToolDisclosure({
             </details>
           </div>
         </div>
-      )}
+      </Collapsible>
     </section>
   );
 }

@@ -83,6 +83,29 @@
 }
 
 /* 3. Smooth expansion animations & chevron transitions */
+.smooth-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.16s ease;
+}
+
+.smooth-collapse.is-expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.smooth-collapse.is-collapsing {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.smooth-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .tool-disclosure-body {
   animation: tool-body-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

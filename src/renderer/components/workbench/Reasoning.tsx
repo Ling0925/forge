@@ -1,5 +1,6 @@
 import { Brain, CaretRight } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef, useState } from "react";
+import { Collapsible } from "../primitives/Collapsible";
 import { Markdown } from "./Markdown";
 
 /** Live viewport shows this many trailing lines; the finished row keeps one. */
@@ -87,20 +88,20 @@ export function Reasoning({
         )}
       </button>
 
-      {live && (
+      <Collapsible open={live}>
         <div className="reasoning-viewport" ref={viewport}>
           <span className="reasoning-text">{tail}</span>
         </div>
-      )}
+      </Collapsible>
 
-      {!live && expanded && (
+      <Collapsible open={!live && expanded}>
         <div className="reasoning-full">
           {truncated && (
             <p className="wb-muted">思考预览已达显示上限，内容可能不完整。</p>
           )}
           <Markdown source={text} />
         </div>
-      )}
+      </Collapsible>
     </section>
   );
 }

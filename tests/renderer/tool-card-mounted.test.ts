@@ -259,9 +259,9 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       await edited.getByRole("button", { name: "收起差异" }).click();
       expect(await edited.locator(".diff-line").count()).toBe(10);
       await edited.locator(".tool-disclosure-header").click();
-      expect(await edited.locator(".diff-viewer").count()).toBe(0);
+      await expect.poll(() => edited.locator(".diff-viewer").count()).toBe(0);
       await edited.locator(".tool-disclosure-header").click();
-      expect(await edited.locator(".diff-viewer").count()).toBe(1);
+      await expect.poll(() => edited.locator(".diff-viewer").count()).toBe(1);
       const written = surface.locator('[data-tool="write_file"]');
       expect(await written.getAttribute("data-expanded")).toBe("true");
       expect(await written.locator(".diff-line-added").innerText()).toContain(

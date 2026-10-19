@@ -1,5 +1,6 @@
 import { CaretDown, CaretRight, Check, Copy } from "@phosphor-icons/react";
 import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Collapsible } from "../primitives/Collapsible";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
 import type {
   ApprovalRequest,
@@ -392,7 +393,9 @@ function ExecutionProcess({
         <span aria-hidden="true">·</span>
         <span>{execution.speed}</span>
       </button>
-      {expanded && <div className="transcript-execution-items">{children}</div>}
+      <Collapsible open={expanded}>
+        <div className="transcript-execution-items">{children}</div>
+      </Collapsible>
     </div>
   );
 }
