@@ -12,6 +12,7 @@ export interface TabItem {
   readonly id: string;
   readonly label: string;
   readonly icon?: ReactNode;
+  readonly badge?: ReactNode;
   readonly disabled?: boolean;
   readonly content?: ReactNode;
 }
@@ -163,8 +164,11 @@ export function Tabs({
               onClick={() => onChange(tab.id)}
               onKeyDown={(e) => handleKeyDown(e, index)}
             >
-              {tab.icon && <span aria-hidden="true">{tab.icon}</span>}
+              {tab.icon && <span aria-hidden="true" className="tab-icon">{tab.icon}</span>}
               <span>{tab.label}</span>
+              {tab.badge !== undefined && tab.badge !== null && (
+                <span aria-hidden="true" className="tab-badge">{tab.badge}</span>
+              )}
             </button>
           );
         })}

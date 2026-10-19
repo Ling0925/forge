@@ -33,7 +33,10 @@ function PlanSteps({ plan }: { readonly plan: TaskPlan }) {
   return (
     <ol className="wb-plan-progress">
       {plan.steps.map((step, position) => (
-        <li key={`${step.step}:${position}`}>
+        <li
+          key={`${step.step}:${position}`}
+          className={`plan-step-item plan-step-${step.status}`}
+        >
           <span className={`plan-status plan-${step.status}`}>
             {step.status === "completed"
               ? "✓"
@@ -66,20 +69,42 @@ export function PlanSection({
   const currentPlan =
     current ?? (currentId === null && plans.length ? (plans.at(-1) ?? null) : null);
   const currentProgress = currentPlan ? planProgress(currentPlan) : null;
+  const percent =
+    currentProgress && currentProgress.total > 0
+      ? Math.round((currentProgress.completed / currentProgress.total) * 100)
+      : 0;
+
   return (
-    <section className="wb-stack inspector-section">
-      <h3>计划</h3>
+    <section className="wb-stack inspector-section inspector-plan-section">
+      <div className="inspector-card-header">
+        <div className="inspector-title-row">
+          <ListChecks size={14} weight="bold" className="inspector-title-icon" />
+          <h3>计划</h3>
+        </div>
+        {currentProgress && (
+          <span className="inspector-plan-badge">
+            {currentProgress.completed}/{currentProgress.total} · {currentProgress.label}
+          </span>
+        )}
+      </div>
       {currentPlan && currentProgress ? (
-        <>
+        <div className="inspector-plan-body wb-stack">
           {/* Plan progress stays visible (live status); only the long-form
               explanation collapses. */}
-          <p className="wb-plan-current-title">
-            <strong>{currentPlan.title ?? "原有计划"}</strong>{" "}
-            <span className="wb-muted">
-              {currentProgress.completed}/{currentProgress.total} ·{" "}
-              {currentProgress.label}
-            </span>
-          </p>
+          <div className="wb-plan-current-title">
+            <div className="wb-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <strong>{currentPlan.title ?? "原有计划"}</strong>
+              <span className="wb-muted" style={{ fontSize: "11px" }}>
+                {percent}%
+              </span>
+            </div>
+            <div className="inspector-plan-progress-track">
+              <div
+                className="inspector-plan-progress-fill"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
           <PlanSteps plan={currentPlan} />
           <details className="wb-disclosure inspector-disclosure-card">
             <summary>
@@ -89,7 +114,7 @@ export function PlanSection({
               <Markdown source={currentPlan.explanation} />
             </div>
           </details>
-        </>
+        </div>
       ) : (
         <p className="wb-muted">
           尚无已保存计划。使用 Plan 模式请求只读规划。
@@ -199,6 +224,7 @@ export function RuntimePanels() {
     snapshot.status === "awaiting_approval";
   return (
     <>
+      <PlanSection snapshot={snapshot} />
       {/* Active children stay visible by default: this is live delegation
           state, not raw metadata. */}
       <section className="wb-stack inspector-section">
@@ -389,7 +415,6 @@ export function RuntimePanels() {
           </p>
         )}
       </section>
-      <PlanSection snapshot={snapshot} />
     </>
   );
 }

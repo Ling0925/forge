@@ -88,18 +88,20 @@ export function Inspector({
           <SlidersHorizontal size={15} weight="bold" className="inspector-title-icon" />
           <span>执行详情</span>
         </div>
-        {snapshot && <StatusBadge status={run?.status ?? snapshot.status} />}
-        {onRequestCollapse && (
-          <button
-            type="button"
-            className="wb-icon-btn wb-inspector-close"
-            aria-label="收起详情"
-            title="收起详情"
-            onClick={onRequestCollapse}
-          >
-            <CaretRight size={14} weight="bold" />
-          </button>
-        )}
+        <div className="inspector-head-actions">
+          {snapshot && <StatusBadge status={run?.status ?? snapshot.status} />}
+          {onRequestCollapse && (
+            <button
+              type="button"
+              className="wb-icon-btn wb-inspector-close"
+              aria-label="收起详情"
+              title="收起详情"
+              onClick={onRequestCollapse}
+            >
+              <CaretRight size={14} weight="bold" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="inspector-scroll wb-stack">
         {pendingApprovals.length > 0 && (
@@ -198,6 +200,12 @@ export function Inspector({
               {
                 id: "inspector-runtime",
                 label: "运行",
+                badge:
+                  pendingApprovals.length > 0 ? (
+                    <span className="inspector-tab-badge-warn">
+                      {pendingApprovals.length}
+                    </span>
+                  ) : undefined,
                 content: (
                   <div className="inspector-sections">
                     <section className="inspector-overview inspector-card">
@@ -311,6 +319,12 @@ export function Inspector({
               {
                 id: "inspector-changes",
                 label: "变更",
+                badge:
+                  snapshot.changes.length > 0 ? (
+                    <span className="inspector-tab-badge-num">
+                      {snapshot.changes.length}
+                    </span>
+                  ) : undefined,
                 content: (
                   <div className="wb-stack">
                     {(snapshot.parentSessionId ||
@@ -346,6 +360,9 @@ export function Inspector({
                         <div className="inspector-files-list">
                           {snapshot.changes.map((change, i) => {
                             const stats = diffStats(change);
+                            const lastSlash = change.path.lastIndexOf("/");
+                            const dir = lastSlash >= 0 ? change.path.slice(0, lastSlash + 1) : "";
+                            const name = lastSlash >= 0 ? change.path.slice(lastSlash + 1) : change.path;
                             return (
                               <details
                                 key={`${change.path}-${i}`}
@@ -355,7 +372,8 @@ export function Inspector({
                                   <div className="inspector-file-info">
                                     <FileCode size={14} className="inspector-file-icon" />
                                     <span className="inspector-file-path" title={change.path}>
-                                      {change.path}
+                                      {dir && <span className="inspector-file-dir">{dir}</span>}
+                                      <span className="inspector-file-name">{name}</span>
                                     </span>
                                   </div>
                                   <div className="inspector-file-badges">
