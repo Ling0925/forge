@@ -25,6 +25,12 @@ Use ordinary installed Playwright Chromium. Defaults use Playwright's bundled ex
 
 ## Tools and permission scope
 
+Forge's core denies every browser tool in readonly/plan mode before approval.
+The standalone registry's readonly behavior below applies only when embedded
+directly without that core policy. `browser_read` and `browser_close` accept an
+optional `reason` string (up to 512 characters); `{}` remains valid. Declaring
+this field avoids incompatible empty-object placeholders added by gateways.
+
 - `browser_navigate`: bounded credential-free HTTP(S) URL, at most 4096 characters. `allowedOrigins` is required: exact canonical parsed origins, no wildcard; `[]` denies all navigation. Local HTTP QA origins are supported. Workspace and readonly emit a typed `approval_requested` event **before** invoking the approval handler. Unrestricted does not prompt. Approval grants that origin for this run, not other configured origins. Subresources on a second configured origin stay blocked until explicitly approved through navigation to it.
 - `browser_read`: bounded DOM text extraction inside the browser, at most 12000 characters / 20000 visited text nodes, with truncation metadata. Script/style text is excluded; visibility filtering is best effort, not a full accessibility snapshot. Output is untrusted page data.
 - `browser_click`, `browser_fill`: selectors at most 1000 characters; fill text at most 4000. Readonly denies them. Workspace prompts for the origin, selector and action (fill length, not secret input text). Unrestricted executes without a prompt, still under the network policy.
@@ -39,7 +45,7 @@ Every routed HTTP request must have an allowed AND approved exact origin. HTTP f
 
 Operations are serialized. Pre-aborted signals perform no operation. Any run signal abort permanently cancels the registry, closes Chromium, joins launch and routed work, and interrupts pending approvals even if their handler never settles. Disposal cancels first, then joins active work. Launch uses a finite timeout and closes a browser that finishes launching after cancellation. The caller's approval handler must honor its signal for its own UI/resource cleanup; an uncooperative external promise cannot be forcibly terminated.
 
-Errors use authored generic messages rather than Playwright exception strings (which may contain query secrets, selectors or form text). Page text and approval descriptions support the optional redaction list. There is no automatic discovery of provider secrets.
+Invalid arguments return `code: "invalid_input"` with bounded field constraints and no submitted values. Browser execution errors use authored generic messages rather than Playwright exception strings (which may contain query secrets, selectors or form text). Page text and approval descriptions support the optional redaction list. There is no automatic discovery of provider secrets.
 
 ## Verification
 

@@ -32,7 +32,12 @@ enabling alone do not launch a server. Discovery, calls, and **a user-requested
 health probe of an enabled server** can launch it.
 
 The native registry exposes `mcp_list_tools {server}` and
-`mcp_call_tool {toolName, arguments}`. Use the alias returned by discovery;
+`mcp_call_tool {toolName, arguments_json?}`. Encode the discovered tool's input
+object as JSON text, for example `{"toolName":"mcp__echo__echo","arguments_json":"{\"text\":\"hello\"}"}`.
+Omitting `arguments_json` sends `{}`. JSON text prevents gateways from rewriting
+arbitrary nested input fields. Existing object-valued `arguments` calls still
+work; supplying both representations is rejected before approval or execution.
+Use the alias returned by discovery;
 long or transformed names are hashed and mapped back to their exact remote
 name. Readonly denies both tools. Workspace requires fresh approval for each
 operation; unrestricted allows explicitly registered enabled servers.
