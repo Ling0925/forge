@@ -76,6 +76,7 @@ export interface WorkbenchState {
   readonly isSnapshotLoading: boolean;
   readonly activeRuns: Readonly<Record<string, ActiveRunState>>;
   readonly isSettingsOpen: boolean;
+  readonly isUsageDashboardOpen: boolean;
   readonly isNewSessionOpen: boolean;
   readonly mobileTab: "task" | "inspector";
   readonly isMobileSidebarOpen: boolean;
@@ -150,6 +151,7 @@ export const initialWorkbenchState: WorkbenchState = {
   isSnapshotLoading: false,
   activeRuns: {},
   isSettingsOpen: false,
+  isUsageDashboardOpen: false,
   isNewSessionOpen: true,
   mobileTab: "task",
   isMobileSidebarOpen: false,
@@ -190,6 +192,7 @@ export type WorkbenchAction =
       readonly approvalId: string;
     }
   | { readonly type: "OPEN_SETTINGS"; readonly isOpen: boolean }
+  | { readonly type: "OPEN_USAGE_DASHBOARD"; readonly isOpen: boolean }
   | { readonly type: "OPEN_NEW_SESSION"; readonly isOpen: boolean }
   | { readonly type: "SET_MOBILE_TAB"; readonly tab: "task" | "inspector" }
   | { readonly type: "SET_MOBILE_SIDEBAR"; readonly isOpen: boolean }
@@ -705,12 +708,15 @@ export function workbenchReducer(
     }
     case "OPEN_SETTINGS":
       return { ...state, isSettingsOpen: action.isOpen };
+    case "OPEN_USAGE_DASHBOARD":
+      return { ...state, isUsageDashboardOpen: action.isOpen };
     case "OPEN_NEW_SESSION":
       return action.isOpen
         ? {
             ...state,
             isNewSessionOpen: true,
             isSettingsOpen: false,
+            isUsageDashboardOpen: false,
             mobileTab: "task",
             isMobileSidebarOpen: false,
           }

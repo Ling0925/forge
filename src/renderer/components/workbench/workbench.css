@@ -590,6 +590,12 @@
   background: var(--sidebar-bg);
 }
 
+.sidebar-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .sidebar-settings-btn {
   display: inline-flex;
   align-items: center;

@@ -310,6 +310,10 @@ export function createWorkerController(
         case "cancelSession":
           respond(request, await service.cancelSession(request.sessionId));
           break;
+        case "getUsageStats":
+          if (!service.getUsageStats) throw new ForgeError("not_found", "Usage statistics are unavailable on this host.");
+          respond(request, await service.getUsageStats(request.filter));
+          break;
         case "compactSession":
           respond(request, await service.compactSession(request.sessionId));
           break;

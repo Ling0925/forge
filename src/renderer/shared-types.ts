@@ -28,4 +28,9 @@ export type {
   RunEvent,
   RunHandle,
   RunId,
+  UsageFilter,
+  UsageStatsDto,
+  ModelUsageStat,
+  DailyUsageStat,
+  SessionUsageStat,
 } from "../shared/ipc";

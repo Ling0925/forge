@@ -419,6 +419,8 @@ function useController() {
     },
     openSettings: (isOpen: boolean) =>
       dispatch({ type: "OPEN_SETTINGS", isOpen }),
+    openUsageDashboard: (isOpen: boolean) =>
+      dispatch({ type: "OPEN_USAGE_DASHBOARD", isOpen }),
     openNewSession: (isOpen: boolean) => {
       dispatch({ type: "OPEN_NEW_SESSION", isOpen });
       if (isOpen) requestAnimationFrame(() => document.getElementById("new-prompt")?.focus());

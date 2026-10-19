@@ -1,6 +1,7 @@
 import {
   Archive,
   CaretRight,
+  ChartBar,
   Folder,
   FolderOpen,
   Gear,
@@ -31,8 +32,13 @@ const DEFAULT_VISIBLE_COUNT = 10;
 const PAGE_SIZE = 10;
 
 export function Sidebar() {
-  const { state, openNewSession, setMobileSidebar, openSettings } =
-    useWorkbench();
+  const {
+    state,
+    openNewSession,
+    setMobileSidebar,
+    openSettings,
+    openUsageDashboard,
+  } = useWorkbench();
 
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -247,19 +253,34 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-footer">
-        <button
-          type="button"
-          className="sidebar-settings-btn"
-          onClick={() => {
-            setMobileSidebar(false);
-            openSettings(true);
-          }}
-          title="设置"
-          aria-label="设置"
-        >
-          <Gear size={15} />
-          <span>设置</span>
-        </button>
+        <div className="sidebar-footer-actions">
+          <button
+            type="button"
+            className="sidebar-settings-btn"
+            onClick={() => {
+              setMobileSidebar(false);
+              openUsageDashboard(true);
+            }}
+            title="用量看板"
+            aria-label="用量看板"
+          >
+            <ChartBar size={15} />
+            <span>用量</span>
+          </button>
+          <button
+            type="button"
+            className="sidebar-settings-btn"
+            onClick={() => {
+              setMobileSidebar(false);
+              openSettings(true);
+            }}
+            title="设置"
+            aria-label="设置"
+          >
+            <Gear size={15} />
+            <span>设置</span>
+          </button>
+        </div>
         <div className="wb-row sidebar-footer-status">
           {!state.settings?.isConfigured && (
             <span className="wb-status-warning" title="尚未配置 API 端点或模型">

@@ -8,6 +8,7 @@ import { Inspector } from "./Inspector";
 import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
 import { Transcript } from "./Transcript";
+import { UsageDashboard } from "./UsageDashboard";
 import { Welcome } from "./Welcome";
 import { WorkbenchHeader } from "./WorkbenchHeader";
 import "./workbench.css";
@@ -145,6 +146,7 @@ function Workbench() {
         </div>
       </div>
       <Settings />
+      <UsageDashboard />
     </>
   );
 }
