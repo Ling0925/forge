@@ -305,14 +305,6 @@ export function Inspector({
                         )}
                       </div>
                     </details>
-                    <Button
-                      size="sm"
-                      className="inspector-refresh-bottom"
-                      onClick={() => void refreshActiveSession()}
-                    >
-                      <ArrowsCounterClockwise size={13} weight="bold" />
-                      <span>刷新记录</span>
-                    </Button>
                   </div>
                 ),
               },

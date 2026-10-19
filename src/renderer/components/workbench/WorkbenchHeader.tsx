@@ -1,4 +1,4 @@
-import { ChatText, Info, SidebarSimple } from "@phosphor-icons/react";
+import { ChatText, SidebarSimple } from "@phosphor-icons/react";
 import { type Ref, useEffect, useState } from "react";
 import { useWorkbench } from "../../state/workbench-context";
 import { CommandPalette } from "./CommandPalette";
@@ -77,8 +77,9 @@ export function WorkbenchHeader({
             else inspector.reveal();
           }}
         >
-          <Info size={18} className="wb-details-icon" />
+          <SidebarSimple size={16} className="wb-details-icon" />
           <ChatText size={18} className="wb-return-icon" />
+          <span className="wb-details-label">详情</span>
           {pending > 0 && (
             <span
               className="wb-header-pending"

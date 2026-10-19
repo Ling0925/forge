@@ -19,15 +19,16 @@
   gap: var(--space-2);
   height: 44px;
   min-height: 44px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-4, 16px);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-card);
+  transition: background-color var(--transition-normal);
 }
 
 .wb-inspector-head .inspector-title-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-primary);
@@ -36,6 +37,7 @@
 
 .wb-inspector-head .inspector-title-icon {
   color: var(--accent);
+  flex-shrink: 0;
 }
 
 .wb-inspector-head > .status-badge {
@@ -47,20 +49,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   transition: all 0.15s ease;
+  margin-left: 2px;
 }
 
 .wb-inspector .wb-inspector-close:hover {
   color: var(--text-primary);
   background: var(--surface-hover);
   border-color: var(--border-subtle);
+  transform: translateX(1px);
 }
 
 /* Tabs: Segmented Control Bar */
@@ -74,29 +78,31 @@
 .wb-inspector .inspector-tabs .tablist {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 4px;
-  margin: var(--space-2) var(--space-3) var(--space-3);
+  gap: 2px;
+  padding: 3px;
+  margin: var(--space-3) var(--space-4) var(--space-3);
   background: var(--surface-soft);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   position: relative;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .wb-inspector .inspector-tabs .tab-btn {
   flex: 1;
-  min-height: 26px;
-  padding: 2px 8px;
-  font-size: 11.5px;
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, font-weight 0.15s ease;
   z-index: 1;
   text-align: center;
+  white-space: nowrap;
 }
 
 .wb-inspector .inspector-tabs .tab-btn:hover {
@@ -105,11 +111,11 @@
 
 .wb-inspector .inspector-tabs .tabs-indicator {
   position: absolute;
-  top: 4px;
-  height: calc(100% - 8px);
+  top: 3px;
+  height: calc(100% - 6px);
   border-radius: var(--radius-md);
   background: var(--surface-card);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
   border: 1px solid var(--border-subtle);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 0;
@@ -133,7 +139,7 @@
 
 /* Scroll Area & Stacks */
 .wb-app .wb-inspector .inspector-scroll {
-  padding: 0 var(--space-3) var(--space-4);
+  padding: 0 var(--space-4, 16px) var(--space-4, 16px);
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
@@ -190,13 +196,14 @@
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
-  padding: var(--space-3);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  transition: border-color 0.15s ease;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .wb-inspector .inspector-card:hover {
   border-color: var(--border-default);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .wb-inspector .inspector-card-header {
@@ -204,34 +211,40 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-2);
-  padding-bottom: 6px;
-  border-bottom: 1px dashed var(--border-subtle);
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .wb-inspector .inspector-card-title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .wb-inspector .inspector-refresh-mini {
   height: 22px;
-  padding: 0 6px;
+  padding: 0 7px;
   font-size: 11px;
   gap: 4px;
   color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  transition: all 0.15s ease;
 }
 
 .wb-inspector .inspector-refresh-mini:hover {
   color: var(--accent);
+  background: var(--surface-hover);
+  border-color: var(--border-default);
 }
 
 /* Key-Value Details */
 .wb-inspector .inspector-scroll .wb-details {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 68px minmax(0, 1fr);
   gap: var(--space-2);
   margin: 0;
   align-items: center;
@@ -248,13 +261,14 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .wb-inspector .wb-details dt .dt-icon {
   color: var(--text-muted);
   flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .wb-inspector .wb-details dd {
@@ -269,7 +283,7 @@
   font-family: var(--font-mono);
   font-size: 11px;
   background: var(--surface-soft);
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   display: inline-block;
@@ -283,9 +297,9 @@
 .wb-inspector .inspector-permission-pill {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: 9999px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   background: var(--accent-subtle, rgba(59, 130, 246, 0.1));
   color: var(--accent, #2563eb);
@@ -310,14 +324,16 @@
   min-width: 0;
   overflow: hidden;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .wb-inspector .wb-disclosure[open] {
   border-color: var(--border-default);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .wb-inspector details > summary {
-  padding: var(--space-2) var(--space-3);
+  padding: 9px 12px;
   cursor: pointer;
   font-size: var(--text-xs);
   font-weight: 500;
@@ -337,15 +353,16 @@
 .wb-inspector .inspector-disclosure-head {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 500;
+  gap: 7px;
+  font-weight: 550;
+  color: var(--text-primary);
 }
 
 .wb-inspector .inspector-token-pill {
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 600;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
   color: var(--text-secondary);
@@ -353,7 +370,7 @@
 }
 
 .wb-inspector .wb-disclosure-body {
-  padding: var(--space-3);
+  padding: 12px;
   background: var(--surface-soft);
   border-top: 1px solid var(--border-subtle);
   overflow-wrap: anywhere;
@@ -406,7 +423,7 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
   padding-top: var(--space-2);
-  border-top: 1px dashed var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .wb-inspector .usage-footer-tag {
@@ -418,11 +435,6 @@
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
-}
-
-.wb-inspector .inspector-refresh-bottom {
-  align-self: flex-start;
-  gap: 6px;
 }
 
 /* File Changes Section */
