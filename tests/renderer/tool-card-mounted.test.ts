@@ -65,6 +65,14 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
               defaultExpanded={true}
             />
             <ToolDisclosure
+              toolName="list_files"
+              target="src"
+              status="completed"
+              parameters={JSON.stringify({path: 'src/a.ts', limit: 40})}
+              output={JSON.stringify({entries: ['src/a.ts']})}
+              defaultExpanded={true}
+            />
+            <ToolDisclosure
               toolName="read_file"
               target="src/a.ts"
               status="completed"
@@ -163,11 +171,17 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     );
     expect(focused).toContain("tool-disclosure-header");
     const params = page
-      .locator('.tool-disclosure[aria-label="工具调用：read_file"]')
+      .locator('.tool-disclosure[aria-label="工具调用：list_files"]')
       .first()
       .locator(".tool-details");
     expect(await params.getAttribute("open")).toBeNull();
     await params.locator("summary").click();
+    expect(
+      await page.locator('.tool-disclosure[aria-label="工具调用：read_file"] .tool-details').count(),
+    ).toBe(0);
+    expect(
+      await page.locator('.tool-disclosure[aria-label="工具调用：read_file"] .tool-debug').count(),
+    ).toBe(0);
     expect(
       await page.locator(".live-tool .tool-disclosure-target").innerText(),
     ).toBe("ToolDisclosure.tsx");

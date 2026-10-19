@@ -1305,7 +1305,9 @@ export function ToolDisclosure({
   const displayTarget = readPath
     ? readPath.split(/[\\/]/).pop() || readPath
     : target || planSummaryTarget || agentTarget || (isRunCommand ? command : undefined);
-  const showParameters = !writesFiles && !isRunCommand && !planData && !isAgentTool;
+  const showParameters =
+    !writesFiles && !isRunCommand && !planData && !isAgentTool && !isReadFile;
+  const showDebug = !isReadFile;
 
   useEffect(() => {
     if (
@@ -1664,28 +1666,32 @@ export function ToolDisclosure({
             </>
           )}
 
-          <div className="tool-disclosure-footer">
-            {showParameters && !isConsole && (
-              <details className="tool-details">
-                <summary className="tool-debug-summary">
-                  <CaretRight size={11} weight="bold" aria-hidden="true" />
-                  调用参数
-                </summary>
-                <ParameterFields parameters={parsedParams} />
-              </details>
-            )}
-            {/* Raw protocol fields stay collapsed by default, out of the main read. */}
-            <details className="tool-debug">
-              <summary className="tool-debug-summary">
-                <CaretRight size={11} weight="bold" aria-hidden="true" />
-                调试信息
-              </summary>
-              <div className="tool-section">
-                <span className="tool-section-title">原生名称</span>
-                <pre className="tool-section-content">{toolName}</pre>
-              </div>
-            </details>
-          </div>
+          {(showParameters || showDebug) && (
+            <div className="tool-disclosure-footer">
+              {showParameters && !isConsole && (
+                <details className="tool-details">
+                  <summary className="tool-debug-summary">
+                    <CaretRight size={11} weight="bold" aria-hidden="true" />
+                    调用参数
+                  </summary>
+                  <ParameterFields parameters={parsedParams} />
+                </details>
+              )}
+              {/* Raw protocol fields stay collapsed by default, out of the main read. */}
+              {showDebug && (
+                <details className="tool-debug">
+                  <summary className="tool-debug-summary">
+                    <CaretRight size={11} weight="bold" aria-hidden="true" />
+                    调试信息
+                  </summary>
+                  <div className="tool-section">
+                    <span className="tool-section-title">原生名称</span>
+                    <pre className="tool-section-content">{toolName}</pre>
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
         </div>
       </Collapsible>
     </section>

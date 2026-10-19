@@ -48,7 +48,7 @@ describe("tool disclosure row", () => {
 
   it("places results before collapsed arguments", () => {
     const html = render({
-      toolName: "read_file",
+      toolName: "list_files",
       status: "completed",
       defaultExpanded: true,
       parameters: { path: "src/a.ts" },
@@ -113,7 +113,7 @@ describe("tool disclosure row", () => {
 
   it("renders parsed parameter rows instead of a raw JSON blob", () => {
     const html = render({
-      toolName: "read_file",
+      toolName: "list_files",
       parameters: JSON.stringify({ path: "src/a.ts", offset: 40, limit: 80 }),
       status: "completed",
       defaultExpanded: true,
@@ -156,7 +156,7 @@ describe("tool disclosure row", () => {
 
   it("falls back to plain text for malformed arguments", () => {
     const html = render({
-      toolName: "read_file",
+      toolName: "list_files",
       parameters: "{not json",
       status: "completed",
       defaultExpanded: true,
@@ -710,6 +710,11 @@ describe("tool disclosure row", () => {
     expect(html).not.toContain('<dt class="tool-param-key">末行不完整</dt>');
     expect(html).not.toContain('<dt class="tool-param-key">下一页偏移</dt>');
     expect(html).not.toContain("cded94407e9e8d4d66730259d0e10266b95b44a2ec239621fc4bc482d37a225");
+
+    // 不再显示“调用参数”与“调试信息”
+    expect(html).not.toContain("调用参数");
+    expect(html).not.toContain("调试信息");
+    expect(html).not.toContain("tool-disclosure-footer");
   });
 
   it("renders partial read_file with line range badge and truncation warning", () => {
