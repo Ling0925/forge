@@ -24,6 +24,8 @@ export function useAutosizePrompt(
       let targetHeight: number;
       if (input.scrollHeight > currentHeight) {
         targetHeight = Math.max(36, Math.min(input.scrollHeight, limit));
+      } else if (currentHeight <= 36) {
+        targetHeight = 36;
       } else {
         const prevHeight = input.style.height;
         input.style.height = "auto";

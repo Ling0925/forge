@@ -295,36 +295,26 @@ export function workbenchReducer(
         // them when the saved content actually covers what is on screen (prefix match).
         const liveSaved =
           run.streamingText.length > 0 &&
-          (selectedSnapshot.messages.some(
-            (message) =>
-              message.role === "assistant" &&
-              Boolean(message.content?.startsWith(run.streamingText)),
-          ) ||
-            outputSaved(
-              {
-                id: "live",
-                text: run.streamingText,
-                truncated: Boolean(run.streamingTruncated),
-                afterMessage: run.streamStartMessage ?? 0,
-              },
-              selectedSnapshot,
-            ));
+          outputSaved(
+            {
+              id: "live",
+              text: run.streamingText,
+              truncated: Boolean(run.streamingTruncated),
+              afterMessage: run.streamStartMessage ?? 0,
+            },
+            selectedSnapshot,
+          );
         const reasoningSavedLive =
           Boolean(run.streamingReasoning) &&
-          (selectedSnapshot.messages.some(
-            (message) =>
-              message.role === "assistant" &&
-              Boolean(message.reasoning?.startsWith(run.streamingReasoning)),
-          ) ||
-            reasoningSaved(
-              {
-                id: "live-reasoning",
-                text: run.streamingReasoning,
-                truncated: Boolean(run.reasoningTruncated),
-                afterMessage: run.streamStartMessage ?? 0,
-              },
-              selectedSnapshot,
-            ));
+          reasoningSaved(
+            {
+              id: "live-reasoning",
+              text: run.streamingReasoning,
+              truncated: Boolean(run.reasoningTruncated),
+              afterMessage: run.streamStartMessage ?? 0,
+            },
+            selectedSnapshot,
+          );
         if (
           !active(run.status) &&
           !pendingOutputs.length &&
