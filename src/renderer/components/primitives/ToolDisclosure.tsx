@@ -65,6 +65,7 @@ export interface ToolDisclosureProps {
 const friendlyLabels: Readonly<Record<string, string>> = {
   read_file: "读取文件",
   write_file: "写入文件",
+  append_file: "追加文件",
   edit_file: "编辑文件",
   list_files: "列出文件",
   search_files: "搜索文件",
@@ -81,6 +82,7 @@ const friendlyLabels: Readonly<Record<string, string>> = {
   browser_screenshot: "截取网页",
   browser_close: "关闭浏览器",
   update_plan: "更新计划",
+  create_plan: "创建计划",
   spawn_agent: "委派子任务",
   wait_agents: "等待子任务",
   get_agent_result: "查看子任务结果",
@@ -102,14 +104,14 @@ export function friendlyLabel(name: string): string {
 /** One glyph per action family, so a long transcript is scannable by shape. */
 export function getToolIcon(name: string) {
   if (name === "read_file") return <FileText size={16} weight="regular" />;
-  if (name === "write_file") return <FilePlus size={16} weight="regular" />;
+  if (name === "write_file" || name === "append_file") return <FilePlus size={16} weight="regular" />;
   if (name === "edit_file") return <PencilSimple size={16} weight="regular" />;
   if (name === "make_directory")
     return <FolderPlus size={16} weight="regular" />;
   if (name === "list_files") return <ListBullets size={16} weight="regular" />;
   if (name === "search_files")
     return <MagnifyingGlass size={16} weight="regular" />;
-  if (name === "update_plan") return <ListChecks size={16} weight="regular" />;
+  if (name === "create_plan" || name === "update_plan") return <ListChecks size={16} weight="regular" />;
   if (name === "run_command" || name === "command_task") {
     return <TerminalWindow size={16} weight="regular" />;
   }
@@ -1205,7 +1207,7 @@ export function ToolDisclosure({
   autoCollapsed = false,
   className = "",
 }: ToolDisclosureProps) {
-  const writesFiles = toolName === "edit_file" || toolName === "write_file";
+  const writesFiles = ["edit_file", "write_file", "append_file"].includes(toolName);
   // A plain command's arguments are its command line (shown in the console); a
   // background task's arguments are the only record of the requested action.
   const isRunCommand = toolName === "run_command";

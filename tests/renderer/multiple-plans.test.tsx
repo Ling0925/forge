@@ -33,8 +33,8 @@ describe("multiple plan surfaces", () => {
     expect(oldHtml).not.toContain("历史计划");
   });
 
-  it("shows the identity of a plan in tool output", () => {
-    const html = renderToStaticMarkup(createElement(ToolDisclosure, { toolName: "update_plan", status: "completed",
+  it.each(["create_plan", "update_plan"])("shows the identity of a plan in %s output", (toolName) => {
+    const html = renderToStaticMarkup(createElement(ToolDisclosure, { toolName, status: "completed",
       defaultExpanded: true, parameters: second, output: JSON.stringify(second) }));
     expect(html).toContain("Second task");
     expect(html).toContain('title="plan-b"');

@@ -165,7 +165,7 @@ describe("Transcript Turn partitioning and grouping", () => {
     expect(html).toContain("1/3");
   });
 
-  it("separates update_plan tool entries as single blocks between surrounding tools", () => {
+  it.each(["create_plan", "update_plan"])("separates %s tool entries as single blocks between surrounding tools", (name) => {
     const planTool: TimelineItem = {
       kind: "tool",
       id: "plan-tool-1",
@@ -173,7 +173,7 @@ describe("Transcript Turn partitioning and grouping", () => {
         id: "call-plan",
         type: "function",
         function: {
-          name: "update_plan",
+          name,
           arguments: JSON.stringify({
             explanation: "e",
             steps: [{ step: "s1", status: "completed" }, { step: "s2", status: "in_progress" }],

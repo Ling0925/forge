@@ -34,7 +34,7 @@
 
 - 不引入远端渲染服务或 CDN 资源；渲染必须在本地完成。
 - 不支持会执行脚本的扩展语法（如 `rehype-raw` 直通 HTML、内联 `<script>`、`on*` 属性）。
-- 不在渲染层做事实推断：不解析 Markdown 清单来生成结构化任务状态（`update_plan` 才是权威状态，见 [WORKFLOWS.md](WORKFLOWS.md)）。
+- 不在渲染层做事实推断：不解析 Markdown 清单来生成结构化任务状态（以 `create_plan` / `update_plan` 保存的状态为准，见 [WORKFLOWS.md](WORKFLOWS.md)）。
 - 不追求与某个特定编辑器像素级一致。
 
 ## 4 功能需求

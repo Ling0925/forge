@@ -83,6 +83,8 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
             <LiveTool />
             <EditTool />
             <ToolDisclosure toolName="write_file" target="src/new.ts" status="completed" changes={[{path:'src/new.ts', kind:'created', patch:createDiffPatch('', 'export const value = 1;')}]} />
+            <ToolDisclosure toolName="append_file" target="src/new.ts" status="completed" changes={[{path:'src/new.ts', kind:'modified', patch:createDiffPatch('export const value = 1;', 'export const value = 1;\\nexport const next = 2;')}]} />
+            <ToolDisclosure toolName="create_plan" status="completed" defaultExpanded={true} output={JSON.stringify({id:'plan-fixture', title:'验证工具调用', explanation:'创建后继续更新', steps:[{step:'检查参数',status:'completed'},{step:'验证追加写入',status:'in_progress'}]})} />
             <ToolDisclosure toolName="edit_file" target="src/locked.ts" status="failed" error="Permission denied" />
           </div>
         );
@@ -282,6 +284,18 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       expect(await written.locator(".diff-line-added").innerText()).toContain(
         "export const value = 1;",
       );
+      const appended = surface.locator('[data-tool="append_file"]');
+      expect(await appended.getAttribute("data-expanded")).toBe("true");
+      expect(await appended.innerText()).toContain("追加文件");
+      expect((await appended.locator(".diff-line-added").allInnerTexts()).join("\n")).toContain("export const next = 2;");
+      await appended.locator(".tool-disclosure-header").click();
+      await expect.poll(() => appended.locator(".diff-viewer").count()).toBe(0);
+      await appended.locator(".tool-disclosure-header").click();
+      await expect.poll(() => appended.locator(".diff-viewer").count()).toBe(1);
+      const plan = surface.locator('[data-tool="create_plan"]');
+      expect(await plan.innerText()).toContain("创建计划");
+      expect(await plan.innerText()).toContain("验证工具调用");
+      expect(await plan.innerText()).toContain("验证追加写入");
       const failedEdit = surface.locator(
         '[data-tool="edit_file"][data-status="failed"]',
       );
@@ -313,6 +327,11 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
           .first()
           .screenshot({
             path: resolve(captureDirectory, `edit-390-${theme}.png`),
+            animations: "disabled",
+          });
+        for (const tool of ["append_file", "create_plan"])
+          await page.locator(`[data-tool="${tool}"]`).screenshot({
+            path: resolve(captureDirectory, `${tool}-390-${theme}.png`),
             animations: "disabled",
           });
       }

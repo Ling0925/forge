@@ -29,7 +29,7 @@ export function transcriptStages(timeline: readonly TimelineItem[]) {
 
     if (
       item.kind !== "tool" ||
-      item.call.function.name !== "update_plan" ||
+      !["create_plan", "update_plan"].includes(item.call.function.name) ||
       item.status !== "completed"
     )
       continue;

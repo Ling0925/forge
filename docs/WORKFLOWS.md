@@ -131,7 +131,7 @@ forge chat --workspace /absolute/path/to/project --session <session-uuid>
 
 行尾 `\` 续行。Ctrl+C 停止当前运行；空闲时（或再次按）退出。
 
-- `/plan` 显示**持久化**的 plan 元数据（`update_plan` 原生工具写入的步骤与状态）。
+- `/plan` 显示**持久化**的 plan 元数据（`create_plan` / `update_plan` 原生工具写入的步骤与状态）。
 - `/context` 显示项目指令来源（路径/顺序/字节数，不含正文）与技能目录；`/skills` 只显示技能列表。
 - `/checkpoints list|diff ID|restore ID` 检查和恢复 checkpoint。
 - `/diagnostics` 显示 `{transcriptChars, projectedChars, messageCount, summaryFallback}`。
@@ -165,7 +165,9 @@ forge checkpoints restore <session-uuid> <checkpoint-uuid>
 - `--mode plan`：请求权限被**强制钳制为 `readonly`**（见 `src/core/runtime.ts` 中 plan 模式的权限解析），无论 `--permission` 给什么。只读工具白名单：`list_files`、`read_file`、`search_files`、`project_context`、`load_skill`、`git_status`、`git_diff`、`git_log`，以及只读的模型发现工具 `list_models`。其他工具被核心 readonly 策略拒绝，**审批也无法覆盖 plan 模式**。
 - 子代理继承父的 `permissionCeiling`：实际生效权限取"请求权限"与"父上限"中**更严格**者（见 `src/core/runtime.ts` 中取请求权限与父上限更严格者的逻辑）。
 
-`update_plan` 是原生工具，写入持久化 plan 并发出 `plan_updated` 事件——它是**持久结构化状态**，不是从 Markdown 清单里解析出来的。
+`create_plan` / `update_plan` 写入持久化 plan 并发出 `plan_updated` 事件，计划模式也可用；它们修改会话元数据而非工作区文件。计划是**持久结构化状态**，不是从 Markdown 清单里解析出来的。
+
+新任务调用 `create_plan`，只传 `name`、`explanation`、`steps`，没有 ID 或 action 字段；返回值中的 `id` 由核心生成，`name` 保存为计划标题。继续任务时调用 `update_plan`，传返回的 ID 为 `planId`，并传完整的 `explanation`、`steps`；省略 ID 时继续当前未完成计划。每份计划最多一个 `in_progress` 步骤，独立任务保留为不同计划。旧的 `update_plan(action:create/update, title, ...)` 与无选择器调用仍兼容。
 
 ### 5.1 模型发现：原生 `list_models`
 
@@ -192,7 +194,8 @@ provider 顺序与精确 ID，不推断能力/价格/配额；`nextOffset` 在�
 原生编排工具（`src/core/agents.ts`）：
 
 - `list_models(query?, offset?, limit?)` — 只读发现 provider 目录中的精确模型 ID（见 5.1）。
-- `update_plan(explanation, steps)` — 持久化计划。
+- `create_plan(name, explanation, steps)` — 创建独立计划，返回生成的 ID。
+- `update_plan(explanation, steps, planId?)` — 更新已有计划。
 - `spawn_agent(task, ownership?, model?, writePaths?, maxToolCalls?)` — 启动**独立子会话**，独立上下文/session/模型与工具注册表，共享工作区。`maxToolCalls` 只能降低子任务工具预算，不能超过父运行的单任务上限。
 - `list_agents(offset?, limit?, currentRun?)` — 分页列出父会话的当前/历史子会话，返回 `{agents,total,offset,nextOffset,truncated}`；默认每页 20，最多 50。`currentRun/active/controllable` 区分本轮执行与持久化记录；历史 `running` 可能过时，不会自动恢复或接管。ownership/路径列表也有显式截断标记。
 - `wait_agents(ids?, mode?, timeout_ms?)` — `all`/`any` 等待，默认本轮所有子任务、30 秒；`0` 立即轮询，最长 120 秒。返回已结束摘要及仍活跃状态；超时**不取消**子任务。显式历史 ID 可返回保存的结果，但不等待不属于本轮的执行。一个子任务的异常不吞掉其他结果。
@@ -243,7 +246,7 @@ CLI 默认工具卡只显示状态/计数/页范围/排队状态，不展开报�
 
 这是最容易被误解的一点：
 
-- **原生 checkpoint ≠ 命令副作用日志。**对本地工具中的**直接文件写入/编辑**（`write_file`、`edit_file`），`CheckpointStore` 在变更**之前**持久化私有备份（在 workspace 之外、owner-only），并在完成后校验实际字节；可按 ID 恢复**单个文件**，带冲突保护（当前字节与记录的 after 哈希不符则拒绝）。`make_directory`、`run_command` 等其他工具**不产生** checkpoint。恢复是按文件的，**不是目录级反转**，也**不是** `git reset`。
+- **原生 checkpoint ≠ 命令副作用日志。**对本地工具中的**直接文件写入/编辑**（`write_file`、`append_file`、`edit_file`），`CheckpointStore` 在变更**之前**持久化私有备份（在 workspace 之外、owner-only），并在完成后校验实际字节；可按 ID 恢复**单个文件**，带冲突保护（当前字节与记录的 after 哈希不符则拒绝）。`make_directory`、`run_command` 等其他工具**不产生** checkpoint。恢复是按文件的，**不是目录级反转**，也**不是** `git reset`。
 - `run_command` 的副作用**不是** checkpoint；不可自动反向。
 - `FileChange` 预览（before/after 截断预览）**不是备份**，不能作为恢复内容。
 - 恢复语义（`checkpoints.ts:300`）：要求 checkpoint 状态为 `completed`；要求会话非活动；要求当前磁盘字节/模式与记录的 after 一致，否则 `busy` 拒绝；只针对**一个文件**，**绝不**是 `git reset`。

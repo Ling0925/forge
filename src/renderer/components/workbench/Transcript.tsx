@@ -328,7 +328,7 @@ function groupTurnEntries(
     const hasHeader = Boolean(headers[entry.index]);
     const isPlan =
       entry.item.kind === "tool" &&
-      entry.item.call.function.name === "update_plan" &&
+      ["create_plan", "update_plan"].includes(entry.item.call.function.name) &&
       entry.item.status !== "failed";
     const isTool = entry.item.kind === "tool";
 
@@ -477,7 +477,7 @@ function renderTimelineEntry(
     );
   if (
     item.kind === "tool" &&
-    item.call.function.name === "update_plan" &&
+    ["create_plan", "update_plan"].includes(item.call.function.name) &&
     item.status !== "failed"
   ) {
     const planData =
