@@ -51,3 +51,38 @@ it("caches empty lists and keeps working without browser storage", async () => {
   await cache.load("provider", loader);
   expect(loader).toHaveBeenCalledTimes(1);
 });
+
+it("drops catalogs for sources that no longer exist and persists the survivors", async () => {
+  let saved: string | null = null;
+  const storage = () => ({
+    getItem: () => saved,
+    setItem: (_key: string, value: string) => {
+      saved = value;
+    },
+  });
+  const cache = createModelCatalogCache(storage);
+  const loader = vi.fn(async () => ["provider/alpha"]);
+  await cache.load("keep", loader);
+  await cache.load("drop", loader);
+  cache.retain(["keep"]);
+  expect(JSON.parse(saved ?? "[]").map((record: { source: string }) => record.source)).toEqual(["keep"]);
+  const reloaded = createModelCatalogCache(storage);
+  expect(await reloaded.load("keep", loader)).toEqual(["provider/alpha"]);
+  expect(await reloaded.load("drop", loader)).toEqual(["provider/alpha"]);
+  expect(loader).toHaveBeenCalledTimes(3);
+});
+
+it("lets an explicit refresh supersede an in-flight read instead of reusing it", async () => {
+  const cache = createModelCatalogCache(() => { throw new Error("blocked"); });
+  let release: ((models: string[]) => void) | undefined;
+  const slow = vi.fn(
+    () => new Promise<readonly string[]>((resolve) => { release = (models) => resolve(models); }),
+  );
+  const first = cache.load("provider", slow);
+  await Promise.resolve();
+  const fresh = cache.load("provider", async () => ["provider/fresh"], true);
+  expect(slow).toHaveBeenCalledTimes(1);
+  expect(await fresh).toEqual(["provider/fresh"]);
+  release?.(["provider/stale"]);
+  expect(await first).toEqual(["provider/stale"]);
+});

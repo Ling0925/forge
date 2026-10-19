@@ -54,8 +54,8 @@ it("composer grows to six lines and requires explicit submission for multiline d
             setRuns(old=>({...old,[id]:{accepted:true,status:'completed'}}));return true;};
           return <Context.Provider value={{calls,startRun,toggleFailure:()=>setFailure(v=>!v),
             updateSettings:({settings})=>new Promise(resolve=>{pendingEffort.current={value:settings.reasoningEffort,resolve};}),
-            saveEffort:()=>{setEffort(pendingEffort.current.value);pendingEffort.current.resolve(true);},
-            failEffort:()=>pendingEffort.current.resolve(false),
+            saveEffort:()=>{setEffort(pendingEffort.current.value);pendingEffort.current.resolve({ok:true});},
+            failEffort:()=>pendingEffort.current.resolve({ok:false,error:'思考等级保存失败，请重试。'}),
             holdSend:()=>{hold.current=true;},
             acceptSend:()=>{setRuns({[id]:{accepted:true,status:'running',permission:'workspace'}});resolveSend.current?.(true);},
             awaitApproval:()=>setRuns({[id]:{accepted:true,status:'awaiting_approval',permission:'workspace'}}),

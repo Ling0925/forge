@@ -18,20 +18,33 @@ export function modelCatalogKey(source: {
 export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" | "setItem"> = () => localStorage) {
   const memory = new Map<string, readonly string[]>();
   const pending = new Map<string, Promise<readonly string[]>>();
+  // Hydrate the whole map once so a prune never wipes entries it has not read.
+  const hydrate = (): void => {
+    try {
+      const raw = storage().getItem(storageKey);
+      if (!raw || raw.length > 4 * 1024 * 1024) return;
+      const records = recordsSchema.parse(JSON.parse(raw));
+      for (const record of records)
+        if (!memory.has(record.source)) memory.set(record.source, record.models);
+    } catch {
+      /* Fall back to whatever is already in memory. */
+    }
+  };
   const read = (source: string): readonly string[] | undefined => {
     const cached = memory.get(source);
     if (cached) return cached;
-    try {
-      const raw = storage().getItem(storageKey);
-      if (!raw || raw.length > 4 * 1024 * 1024) return undefined;
-      const records = recordsSchema.parse(JSON.parse(raw));
-      for (const record of records) memory.set(record.source, record.models);
-      return memory.get(source);
-    } catch { return undefined; }
+    hydrate();
+    return memory.get(source);
   };
-  const load = (source: string, loader: () => Promise<readonly string[]>, refresh = false): Promise<readonly string[]> => {
+  const load = (
+    source: string,
+    loader: () => Promise<readonly string[]>,
+    refresh = false,
+  ): Promise<readonly string[]> => {
     const inflight = pending.get(source);
-    if (inflight) return inflight;
+    // An explicit refresh must not be answered by a request that started before
+    // the user asked for fresh data.
+    if (inflight && !refresh) return inflight;
     const cached = read(source);
     if (!refresh && cached) return Promise.resolve(cached);
     const request = Promise.resolve().then(loader).then(raw => {
@@ -43,13 +56,34 @@ export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" |
         if (oldest === undefined) break;
         memory.delete(oldest);
       }
-      try { storage().setItem(storageKey, JSON.stringify([...memory].map(([source, models]) => ({ source, models })))); } catch { /* Memory cache remains available if storage is blocked. */ }
+      persist();
       return models;
-    }).finally(() => pending.delete(source));
+    }).finally(() => {
+      // Only clear the entry this request installed; a newer refresh owns it.
+      if (pending.get(source) === request) pending.delete(source);
+    });
     pending.set(source, request);
     return request;
   };
-  return { read, load };
+  // A source whose endpoint changed keeps its old key in storage; drop entries
+  // that no longer correspond to a live source so stale catalogs cannot surface.
+  const retain = (live: readonly string[]) => {
+    hydrate();
+    const keep = new Set(live);
+    for (const key of [...memory.keys()]) if (!keep.has(key)) memory.delete(key);
+    persist();
+  };
+  const persist = () => {
+    try {
+      storage().setItem(
+        storageKey,
+        JSON.stringify([...memory].map(([source, models]) => ({ source, models }))),
+      );
+    } catch {
+      /* Memory cache remains available if storage is blocked. */
+    }
+  };
+  return { read, load, retain };
 }
 
 export const modelCatalogCache = createModelCatalogCache();

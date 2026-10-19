@@ -40,7 +40,7 @@ it("Android settings expose explicit connection editing and protect unsaved draf
         const C=createContext(null);export const useWorkbench=()=>useContext(C);
         export function TestProvider({children}){
           const [isSettingsOpen,openSettings]=useState(true);
-          return <C.Provider value={{state:{settings:defaultPublicSettings,isSettingsOpen},openSettings,updateSettings:async()=>true}}>{children}</C.Provider>
+          return <C.Provider value={{state:{settings:defaultPublicSettings,isSettingsOpen},openSettings,updateSettings:async()=>({ok:true})}}>{children}</C.Provider>
         }
       ` }));
     } }],

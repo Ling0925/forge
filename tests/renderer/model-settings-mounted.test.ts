@@ -52,10 +52,12 @@ it("model search requires selection and settings retain drafts and save once", a
           const [settings,setSettings]=useState({...defaultPublicSettings,baseUrl:'http://localhost:8080/v1',model:'provider/alpha'});
           const [isSettingsOpen,openSettings]=useState(false);
           const [saves,setSaves]=useState(0);
-          const updateSettings=async ({settings})=>{
+          const updateSettings=async ({settings:patch})=>{
             setSaves(n=>n+1);
             await new Promise(resolve=>setTimeout(resolve,150));
-            setSettings(old=>({...old,...settings})); return true;
+            const next={...settings,...patch};
+            setSettings(next);
+            return {ok:true,settings:next};
           };
           return <Context.Provider value={{state:{settings,isSettingsOpen},openSettings,updateSettings,saves}}>{children}</Context.Provider>;
         }

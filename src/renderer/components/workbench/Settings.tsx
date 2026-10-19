@@ -18,7 +18,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { defaultPublicSettings, publicSettingsSchema } from "../../../shared/schemas";
+import { defaultPublicSettings } from "../../../shared/schemas";
 import { isMobileAppHost } from "../../state/mobile-connection";
 import { buildSettingsUpdate, createSettingsDraft, type SettingsDraft } from "../../state/settings-draft";
 import { useWorkbench } from "../../state/workbench-context";
@@ -66,8 +66,6 @@ export function Settings() {
   const initial = state.settings ?? defaultPublicSettings;
   const [original, setOriginal] = useState(initial);
   const [draft, setDraft] = useState(() => createSettingsDraft(initial));
-  const [key, setKey] = useState("");
-  const [removeKey, setRemoveKey] = useState(false);
   const [section, setSection] = useState<Section>("connection");
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -79,7 +77,7 @@ export function Settings() {
   const locked = useRef(false);
   const alive = useRef(true);
   const heading = useRef<HTMLHeadingElement>(null);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(createSettingsDraft(original)) || !!key || removeKey;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(createSettingsDraft(original));
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
 
@@ -131,8 +129,6 @@ export function Settings() {
   const reset = () => {
     setOriginal(initial);
     setDraft(createSettingsDraft(initial));
-    setKey("");
-    setRemoveKey(false);
     setError("");
     setNotice("");
   };
@@ -142,26 +138,21 @@ export function Settings() {
     setError("");
     setNotice("");
     try {
-      const input = buildSettingsUpdate(draft, original, key, removeKey);
+      const input = buildSettingsUpdate(draft, original, "", false);
       if (!Object.keys(input).length) {
         setNotice("没有需要保存的修改。");
         return;
       }
       locked.current = true;
       setBusy(true);
-      if (!await updateSettings(input)) throw Error("保存失败，草稿已保留。请检查连接或稍后重试。");
+      const result = await updateSettings(input);
+      if (!result.ok) throw Error(result.error);
       if (!alive.current) return;
-      // Merge only our patch; unrelated externally updated settings stay intact.
-      const merged = { ...initial, ...input.settings };
-      const next = publicSettingsSchema.parse({
-        ...merged,
-        isConfigured: !!merged.baseUrl && !!merged.model,
-        hasApiKey: input.apiKey === undefined ? initial.hasApiKey : !!input.apiKey,
-      });
+      // Rebuild the draft from the authoritative settings the store returned so
+      // server-side normalization and concurrent edits are reflected exactly.
+      const next = result.settings;
       setOriginal(next);
       setDraft(createSettingsDraft(next));
-      setKey("");
-      setRemoveKey(false);
       setNotice("设置已保存。执行配置用于新的运行；当前运行不会被中断。");
     } catch (err) {
       if (alive.current) setError(err instanceof Error ? err.message : "保存失败，草稿已保留。");

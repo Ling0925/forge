@@ -28,6 +28,8 @@ export function ModelPicker(props: {
   readonly hideSearch?: boolean;
   readonly groups?: readonly ModelCatalogGroup[] | undefined;
   readonly sourceId?: string | undefined;
+  /** Human-readable label of the source the value belongs to. */
+  readonly sourceLabel?: string | undefined;
   readonly disabled?: boolean;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
@@ -105,7 +107,7 @@ export function ModelPicker(props: {
     >
       <summary
         className="composer-dropdown-trigger composer-model-summary"
-        title={`${props.value || "尚未选择模型"}${props.reasoning ? ` · 思考：${effortLabel}` : ""}`}
+        title={`${props.value || "尚未选择模型"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}${props.reasoning ? ` · 思考：${effortLabel}` : ""}`}
       >
         <Cpu size={16} aria-hidden="true" />
         <span className="composer-dropdown-label">

@@ -1,6 +1,5 @@
 import {
   ArrowUp,
-  CaretDown,
   Compass,
   Images,
   Lightning,
@@ -9,7 +8,7 @@ import {
   ShieldWarning,
   Stop,
 } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { permissionSchema, settingsFields } from "../../../shared/schemas";
 import type { SessionId } from "../../shared-types";
@@ -164,19 +163,28 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   useEffect(() => {
     if (isNew && !state.isSettingsOpen) promptRef.current?.focus();
   }, [isNew, state.isSettingsOpen]);
-  const [modelsByDraft, setModelsByDraft] = useState<Record<string, string>>(
-    {},
-  );
-  const [sourcesByDraft, setSourcesByDraft] = useState<Record<string, string>>({});
-  const providerSourceId = sourcesByDraft[draftId] ?? (!isNew ? state.activeSnapshot?.providerSourceId : undefined) ?? state.settings?.activeSourceId;
-  const providerSource = state.settings?.providerSources?.find(source => source.id === providerSourceId);
-  const model =
-    modelsByDraft[draftId] ??
-    (isNew ? state.settings?.model : state.activeSnapshot?.model) ??
-    state.settings?.model ??
-    "";
+  const [picks, setPicks] = useState<
+    Record<string, Readonly<{ sourceId?: string | undefined; model: string }>>
+  >({});
+  const sourceProfiles = state.settings?.providerSources ?? [];
+  const pick = picks[draftId];
+  const providerSourceId =
+    pick?.sourceId ??
+    (!isNew ? state.activeSnapshot?.providerSourceId : undefined) ??
+    state.settings?.activeSourceId;
+  const providerSource = sourceProfiles.find((source) => source.id === providerSourceId);
+  // A model only belongs to the source it was picked under. Keeping them in one
+  // record prevents "source B + model of A" from ever being submitted.
+  const pinnedModel =
+    pick && (pick.sourceId === undefined || pick.sourceId === providerSourceId)
+      ? pick.model
+      : undefined;
+  const defaultModel = !isNew
+    ? (state.activeSnapshot?.model ?? providerSource?.model)
+    : providerSource?.model;
+  const model = pinnedModel ?? defaultModel ?? state.settings?.model ?? "";
   const setModel = (value: string) =>
-    setModelsByDraft((old) => ({ ...old, [draftId]: value }));
+    setPicks((old) => ({ ...old, [draftId]: { sourceId: providerSourceId, model: value } }));
   const [catalogs, setCatalogs] = useState<Record<string, readonly string[]>>({});
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
@@ -185,7 +193,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     baseUrl: providerSource?.baseUrl ?? state.settings?.baseUrl ?? "",
     apiMode: providerSource?.apiMode ?? state.settings?.apiMode,
   }, state.settings?.environmentOverride ?? false);
-  const sourceProfiles = state.settings?.providerSources ?? [];
   const catalogSources = sourceProfiles.length
     ? sourceProfiles.map((source) => ({ id: source.id, label: source.label, key: modelCatalogKey(source) }))
     : [{ id: undefined, label: "当前来源", key: modelSource }];
@@ -193,18 +200,38 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   useEffect(() => {
     void listModels();
   }, [catalogSignature]);
-  const allKnownModels = [...new Set([model, state.settings?.model ?? "", ...(catalogs[modelSource] ?? modelCatalogCache.read(modelSource) ?? [])].filter(Boolean))];
+  const allKnownModels = [
+    ...new Set(
+      [
+        model,
+        ...(catalogs[modelSource] ?? modelCatalogCache.read(modelSource) ?? []),
+      ].filter(Boolean),
+    ),
+  ];
+  // Custom IDs stay allowed, but flag one this source never advertised.
+  const sourceCatalog = providerSource
+    ? (catalogs[modelCatalogKey(providerSource)] ??
+      modelCatalogCache.read(modelCatalogKey(providerSource)) ??
+      [])
+    : [];
+  const modelUnlisted =
+    Boolean(model && providerSource) &&
+    sourceCatalog.length > 0 &&
+    !sourceCatalog.includes(model) &&
+    model !== providerSource?.model;
   const modelGroups = sourceProfiles.length ? [
     ...sourceProfiles.map((source) => ({
       sourceId: source.id,
       label: source.label,
       models: [...new Set([
-        ...(source.id === providerSourceId ? [model] : []),
+        ...(source.id === providerSourceId && model ? [model] : []),
         source.model,
         ...(catalogs[modelCatalogKey(source)] ?? modelCatalogCache.read(modelCatalogKey(source)) ?? []),
       ].filter(Boolean))],
     })),
-    ...(!providerSource && providerSourceId ? [{ sourceId: providerSourceId, label: `${providerSourceId}（不可用）`, models: [model] }] : []),
+    ...(!providerSource && providerSourceId
+      ? [{ sourceId: providerSourceId, label: `${providerSourceId}（来源已删除）`, models: model ? [model] : [] }]
+      : []),
   ] : undefined;
   const [savingEffort, setSavingEffort] = useState(false);
   const effortSaving = useRef(false);
@@ -217,8 +244,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setSavingEffort(true);
     setError("");
     try {
-      const ok = await updateSettings({ settings: { reasoningEffort } });
-      if (!ok && alive.current) setError("思考等级保存失败，请重试。");
+      const result = await updateSettings({ settings: { reasoningEffort } });
+      if (!result.ok && alive.current) setError(result.error || "思考等级保存失败，请重试。");
     } catch {
       if (alive.current) setError("思考等级保存失败，请重试。");
     } finally {
@@ -353,9 +380,17 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const changeMode = (next: "build" | "plan") => {
     setMode(next);
   };
-  const isConfigured = !isNew && state.activeSnapshot?.providerSourceId
-    ? Boolean(providerSource?.baseUrl && model) : state.settings?.isConfigured === true;
-  const configurationHint = "连接模型后即可开始对话。";
+  const isConfigured =
+    providerSourceId && !providerSource
+      ? false
+      : providerSource
+        ? Boolean(providerSource.baseUrl && model)
+        : state.settings?.isConfigured === true;
+  const configurationHint = providerSourceId && !providerSource
+    ? "当前会话绑定的模型来源已被删除，请在设置中重新选择来源。"
+    : providerSource && !providerSource.model
+      ? "此来源尚未设置默认模型，请先在设置中选择模型。"
+      : "连接模型后即可开始对话。";
   const { dispatch, loadSessions } = useWorkbench();
   const slash = useSlashCommands({
     prompt,
@@ -402,14 +437,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       setModel,
       setMode: changeMode,
       setPermission: changePermission,
-      setReasoning: (value) =>
-        updateSettings({
+      setReasoning: async (value) => {
+        const result = await updateSettings({
           settings: {
             reasoningEffort: settingsFields.reasoningEffort
               .unwrap()
               .parse(value),
           },
-        }),
+        });
+        return result.ok;
+      },
       openModel: () => {
         const trigger = promptRef.current
           ?.closest("form")
@@ -424,9 +461,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             old[draftId] === prompt ? { ...old, [draftId]: "" } : old,
           );
           if (switchSession)
-            setModelsByDraft((old) => ({
+            setPicks((old) => ({
               ...old,
-              [snapshot.id]: snapshot.model,
+              [snapshot.id]: {
+                ...(snapshot.providerSourceId ? { sourceId: snapshot.providerSourceId } : {}),
+                model: snapshot.model,
+              },
             }));
           dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
           dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
@@ -481,6 +521,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       setError(configurationHint);
       return;
     }
+    // The pair is validated together: a model picked under one source must
+    // never be submitted with another source's endpoint and credential.
+    if (pick && pick.sourceId !== undefined && pick.sourceId !== providerSourceId) {
+      setError("所选模型属于其他来源，请重新选择模型。");
+      return;
+    }
+    if (providerSource && !providerSource.model && !model) {
+      setError("请先在设置中为此来源选择默认模型。");
+      return;
+    }
     const capturedDraftId = draftId;
     const capturedImages = images;
     const parsed = taskSchema.safeParse({
@@ -491,7 +541,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     });
     if (!parsed.success) {
       setError(parsed.error.issues.map((issue) => issue.message).join("；"));
-      if (!workspace && isNew) setWorkspaceOpen(true);
       return;
     }
     submitting.current = true;
@@ -557,7 +606,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       }
     }, 500);
   };
-  const handleSendPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const handleSendPointerUp = () => {
     if (!longPressing && !pressStartRef.current) return;
     const isSteer = steerReady || (Date.now() - pressStartRef.current >= 500);
     if (pressTimerRef.current) {
@@ -598,6 +647,13 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     if (!alive.current) return;
     const errors = results.flatMap((result, index) => result.status === "rejected"
       ? [`${catalogSources[index]?.label}: ${result.reason instanceof Error ? result.reason.message : "模型列表读取失败"}`] : []);
+    // A failed read must not leave stale models selectable under a source.
+    results.forEach((result, index) => {
+      if (result.status === "rejected") {
+        const key = catalogSources[index]?.key;
+        if (key) setCatalogs((old) => ({ ...old, [key]: [] }));
+      }
+    });
     setModelError(errors.join("；"));
     setListing(false);
   };
@@ -678,7 +734,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </span>
           </output>
         )}
-        {(!isConfigured || mode === "plan" || error || imageError) && (
+        {(!isConfigured || mode === "plan" || error || imageError || modelUnlisted) && (
           <div className="composer-status" aria-live="polite">
             {!isConfigured && (
               <span className="wb-muted">
@@ -691,6 +747,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                 >
                   配置模型
                 </Button>
+              </span>
+            )}
+            {modelUnlisted && (
+              <span className="wb-muted composer-plan-note">
+                当前模型 {model} 不在来源 {providerSource?.label} 的目录中，调用可能失败。
               </span>
             )}
             {mode === "plan" && (
@@ -1053,10 +1114,18 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               value={model}
               models={allKnownModels}
               hideSearch={true}
+              sourceLabel={providerSource?.label}
               onSelect={(model, sourceId) => {
                 if (busy || submission) return;
-                if (sourceId) setSourcesByDraft((old) => ({ ...old, [draftId]: sourceId }));
-                setModel(model);
+                // Picking a model records the source it came from in the same
+                // update, so the pair can never drift apart.
+                setPicks((old) => ({
+                  ...old,
+                  [draftId]: {
+                    ...(sourceId ? { sourceId } : providerSourceId ? { sourceId: providerSourceId } : {}),
+                    model,
+                  },
+                }));
               }}
               onOpen={() => void listModels()}
               onRefresh={() => void listModels(true)}

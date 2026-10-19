@@ -1,5 +1,11 @@
 import { X } from "@phosphor-icons/react";
-import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
+import { createPortal } from "react-dom";
 import { Button } from "../primitives/Button";
 
 export function Dialog({
@@ -35,7 +41,7 @@ export function Dialog({
       if (previous instanceof HTMLElement) previous.focus();
     };
   }, [open, initialFocus]);
-  return (
+  return createPortal(
     <dialog
       ref={ref}
       className="modal-card native-dialog"
@@ -62,6 +68,7 @@ export function Dialog({
         </Button>
       </header>
       {children}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }

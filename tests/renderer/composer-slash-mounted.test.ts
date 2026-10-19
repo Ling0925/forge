@@ -24,7 +24,7 @@ it("desktop uses the CLI catalog and executes arguments without sending prompts"
           state:{activeSessionId:'a',activeSnapshot:{model:'test/model',workspace:'/tmp'},sessions:[],
             settings:{...defaultPublicSettings,isConfigured:false},activeRuns:{}},
           startRun:async(prompt)=>{window.calls.push('PROMPT:'+prompt);return false;},
-          dispatch:()=>{},loadSessions:async()=>{},updateSettings:async()=>true
+          dispatch:()=>{},loadSessions:async()=>{},updateSettings:async()=>({ok:true})
         });
       ` }));
     } }],

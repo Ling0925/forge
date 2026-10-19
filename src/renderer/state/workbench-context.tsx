@@ -19,6 +19,7 @@ import type {
   ConfigureInput,
   CreateSessionInput,
   Permission,
+  PublicSettings,
   SessionId,
 } from "../shared-types";
 import { shouldRefreshTranscript } from "./refresh-events";
@@ -208,16 +209,27 @@ function useController() {
     media.addEventListener("change", apply);
     return () => media.removeEventListener("change", apply);
   }, [state.settings?.theme]);
-  const updateSettings = async (input: ConfigureInput) => {
+  // Returns the authoritative settings so callers rebuild drafts from stored
+  // state instead of assuming their local copy survived server-side normalizing.
+  const updateSettings = async (
+    input: ConfigureInput,
+  ): Promise<
+    | Readonly<{ ok: true; settings: PublicSettings }>
+    | Readonly<{ ok: false; error: string }>
+  > => {
     try {
       const settings = await window.forge.updateSettings(
         configureInputSchema.parse(input),
       );
       dispatch({ type: "SET_SETTINGS", settings });
-      return true;
+      return { ok: true, settings };
     } catch (err) {
-      fail(err);
-      return false;
+      // The caller renders this inline; only unexpected transport-level
+      // failures escalate to the global alert so the user never sees it twice.
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "设置保存失败，未自动重试。",
+      };
     }
   };
   const createSession = async (input: CreateSessionInput, select = true) => {

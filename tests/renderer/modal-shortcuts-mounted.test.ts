@@ -46,7 +46,7 @@ it("mounted global modal shortcuts never stack dialogs and keep toggle, handoff 
           state,
           openSettings,
           openNewSession,
-          updateSettings: async () => {},
+          updateSettings: async () => ({ ok: true }),
           selectSession: () => {},
           refreshActiveSession: async () => {},
         };

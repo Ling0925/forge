@@ -21,8 +21,10 @@ it("settings page saves real fields, retains failed drafts and fits desktop/mobi
       export function TestProvider({children}) {
         const [settings,setSettings]=useState({...defaultPublicSettings,hasApiKey:true});
         const [isSettingsOpen,openSettings]=useState(true);
-        const updateSettings=async input=>{window.calls.push(input); await new Promise(r=>setTimeout(r,50));if(window.fail)return false;
-          setSettings(old=>{const next={...old,...input.settings,hasApiKey:input.apiKey===undefined?old.hasApiKey:!!input.apiKey};return {...next,isConfigured:!!next.baseUrl&&!!next.model}});return true};
+        const updateSettings=async input=>{window.calls.push(input); await new Promise(r=>setTimeout(r,50));if(window.fail)return {ok:false,error:'保存失败，草稿已保留。请检查连接或稍后重试。'};
+          let next;
+          setSettings(old=>{next={...old,...input.settings,hasApiKey:input.apiKey===undefined?old.hasApiKey:!!input.apiKey};return {...next,isConfigured:!!next.baseUrl&&!!next.model}});
+          return {ok:true,settings:next}};
         return <C.Provider value={{state:{settings,isSettingsOpen},updateSettings,openSettings}}><button onClick={()=>openSettings(true)}>重开设置</button>{children}</C.Provider>
       }` }));
     } }] });

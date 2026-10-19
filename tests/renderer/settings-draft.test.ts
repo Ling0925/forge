@@ -7,6 +7,15 @@ it("sends only edited fields and allows appearance before provider setup", () =>
   draft.theme = "dark";
   expect(buildSettingsUpdate(draft, base, "", false)).toEqual({ settings: { theme: "dark" } });
 });
+it("never carries provider endpoint fields: those belong to a source", () => {
+  const draft = createSettingsDraft(base) as unknown as Record<string, unknown>;
+  expect(draft).not.toHaveProperty("baseUrl");
+  expect(draft).not.toHaveProperty("model");
+  expect(draft).not.toHaveProperty("apiMode");
+  const update = buildSettingsUpdate({ ...createSettingsDraft(base), theme: "light" }, base, "", false);
+  expect(update.settings).toEqual({ theme: "light" });
+  expect(update).not.toHaveProperty("apiKey");
+});
 it("preserves keys by default and clears only on explicit intent", () => {
   const draft = createSettingsDraft(base);
   expect(buildSettingsUpdate(draft, base, "", false).apiKey).toBeUndefined();
