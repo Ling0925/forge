@@ -12,8 +12,11 @@ import {
   FolderPlus,
   GitDiff,
   Globe,
+  HardDrive,
+  Lightning,
   ListBullets,
   ListChecks,
+  ListNumbers,
   MagnifyingGlass,
   PaperPlaneTilt,
   PencilSimple,
@@ -1060,6 +1063,130 @@ function CommandConsole({
   );
 }
 
+function formatBytes(bytes?: number): string | null {
+  if (typeof bytes !== "number" || Number.isNaN(bytes) || bytes < 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) {
+    const kb = bytes / 1024;
+    return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  }
+  const mb = bytes / (1024 * 1024);
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
+function formatLineRange(record: Record<string, unknown>): string | null {
+  const linesReturned =
+    typeof record.lines_returned === "number" ? record.lines_returned : undefined;
+  const totalLines =
+    typeof record.total_lines === "number" ? record.total_lines : undefined;
+  const offset = typeof record.offset === "number" ? record.offset : 0;
+  const endLine =
+    typeof record.end_line === "number" && record.end_line !== null
+      ? record.end_line
+      : undefined;
+
+  if (linesReturned === undefined && totalLines === undefined) return null;
+
+  if (
+    linesReturned !== undefined &&
+    totalLines !== undefined &&
+    totalLines > linesReturned
+  ) {
+    const start = linesReturned > 0 ? offset + 1 : 0;
+    const end = endLine ?? (offset + linesReturned);
+    return `第 ${start}–${end} 行 / 共 ${totalLines} 行`;
+  }
+
+  const count = totalLines ?? linesReturned;
+  return count !== undefined ? `共 ${count} 行` : null;
+}
+
+function ReadFileResultView({
+  record,
+  isWaiting,
+}: {
+  readonly record: Record<string, unknown>;
+  readonly isWaiting: boolean;
+}) {
+  const content =
+    typeof record.content === "string" ? record.content : undefined;
+  const unchanged = record.unchanged === true;
+  const lineText = formatLineRange(record);
+  const sizeText =
+    typeof record.size_bytes === "number"
+      ? formatBytes(record.size_bytes)
+      : null;
+  const cacheHit = record.cache_hit === true;
+  const truncated = record.truncated === true;
+
+  if (isWaiting && content === undefined && !unchanged) {
+    return (
+      <div className="tool-section">
+        <SectionHead title="文件内容" />
+        <span className="tool-section-empty">等待文件读取…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tool-section tool-read-section">
+      <SectionHead
+        title="文件内容"
+        action={
+          content ? (
+            <ToolCopyButton text={content} label="复制内容" />
+          ) : undefined
+        }
+      />
+      {(lineText || sizeText || cacheHit || truncated) && (
+        <div className="tool-read-meta">
+          {lineText && (
+            <span className="tool-read-badge" title="读取行数范围">
+              <ListNumbers size={12} weight="bold" aria-hidden="true" />
+              <span>{lineText}</span>
+            </span>
+          )}
+          {sizeText && (
+            <span className="tool-read-badge" title="文件大小">
+              <HardDrive size={12} weight="regular" aria-hidden="true" />
+              <span>{sizeText}</span>
+            </span>
+          )}
+          {cacheHit && (
+            <span
+              className="tool-read-badge tool-read-badge-cache"
+              title="已从本地缓存命中"
+            >
+              <Lightning size={12} weight="fill" aria-hidden="true" />
+              <span>缓存命中</span>
+            </span>
+          )}
+          {truncated && (
+            <span
+              className="tool-read-badge tool-read-badge-warn"
+              title="内容超出单次读取上限已截断"
+            >
+              <WarningCircle size={12} weight="fill" aria-hidden="true" />
+              <span>已截断</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {unchanged ? (
+        <div className="tool-read-unchanged">
+          <CheckCircle size={14} weight="fill" aria-hidden="true" />
+          <span>文件内容未变更（与当前缓存一致）</span>
+        </div>
+      ) : content !== undefined ? (
+        <pre className="tool-param-block">{content}</pre>
+      ) : (
+        <span className="tool-section-empty">文件无内容</span>
+      )}
+    </div>
+  );
+}
+
 export function ToolDisclosure({
   toolName,
   target,
@@ -1103,8 +1230,9 @@ export function ToolDisclosure({
     typeof parsedParams.path === "string"
       ? parsedParams.path
       : undefined;
+  const isReadFile = toolName === "read_file";
   const readPath =
-    toolName === "read_file" ? parameterPath || target : undefined;
+    isReadFile ? parameterPath || target : undefined;
   const consoleModel = isConsole
     ? decodeCommandConsole(output, toolName)
     : null;
@@ -1255,6 +1383,10 @@ export function ToolDisclosure({
   const resolvedExit = consoleModel
     ? (exitCode ?? consoleModel.exitCode)
     : (exitCode ?? null);
+  const canShowReadFile =
+    isReadFile &&
+    result?.kind === "object" &&
+    (status !== "failed" || !failureReason);
 
   return (
     <section
@@ -1490,6 +1622,11 @@ export function ToolDisclosure({
                     resolution={agentParamsRecord?.resolution as string}
                   />
                 </div>
+              ) : canShowReadFile && result?.kind === "object" ? (
+                <ReadFileResultView
+                  record={result.record}
+                  isWaiting={isWaiting}
+                />
               ) : (
                 (hasResult ||
                   (!result && !failureReason && !changes?.length)) && (

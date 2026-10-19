@@ -661,6 +661,83 @@
 }
 
 /* --------------------------------------------------------------------------
+   4a. Read file content view
+   -------------------------------------------------------------------------- */
+.tool-read-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-read-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-bottom: var(--space-2);
+}
+
+.tool-read-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  background-color: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: var(--leading-none);
+}
+
+.tool-read-badge svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.tool-read-badge-cache {
+  color: var(--success);
+  border-color: var(--success-border);
+  background-color: var(--success-bg);
+}
+
+.tool-read-badge-cache svg {
+  color: var(--success);
+}
+
+.tool-read-badge-warn {
+  color: var(--warning);
+  border-color: var(--warning-border);
+  background-color: var(--warning-bg);
+}
+
+.tool-read-badge-warn svg {
+  color: var(--warning);
+}
+
+.tool-read-section .tool-param-block {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-soft);
+  max-height: 360px;
+}
+
+.tool-read-unchanged {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-soft);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.tool-read-unchanged svg {
+  color: var(--success);
+}
+
+/* --------------------------------------------------------------------------
    5. File diff grouping
    -------------------------------------------------------------------------- */
 .tool-diffs {

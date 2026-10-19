@@ -673,4 +673,87 @@ describe("tool disclosure row", () => {
     expect(html).toContain("已完成并提交（commit 6b10a24）");
     expect(html).toContain("13.1M 入 / 80.0k 出");
   });
+
+  it("renders read_file with clean content, compact metadata badges, and copies, dropping raw param rows", () => {
+    const rawResult = {
+      path: "src/sample.ts",
+      content: "const msg = 'hello world';",
+      version: "cded94407e9e8d4d66730259d0e10266b95b44a2ec239621fc4bc482d37a225",
+      end_line: 171,
+      size_bytes: 5653,
+      lines_returned: 171,
+      offset: 0,
+      next_offset: null,
+      total_lines: 171,
+      truncated: false,
+      partial_line: false,
+      cache_hit: true,
+    };
+    const html = render({
+      toolName: "read_file",
+      status: "completed",
+      defaultExpanded: true,
+      parameters: { path: "src/sample.ts" },
+      output: JSON.stringify(rawResult),
+    });
+
+    // 主视图结构清晰：文件内容、复制按钮与紧凑图标 badge
+    expect(html).toContain("文件内容");
+    expect(html).toContain('aria-label="复制内容"');
+    expect(html).toContain("hello world");
+    expect(html).toContain("共 171 行");
+    expect(html).toContain("5.5 KB");
+    expect(html).toContain("缓存命中");
+
+    // 不再平铺展示冗长内部字段
+    expect(html).not.toContain('<dt class="tool-param-key">返回行数</dt>');
+    expect(html).not.toContain('<dt class="tool-param-key">末行不完整</dt>');
+    expect(html).not.toContain('<dt class="tool-param-key">下一页偏移</dt>');
+    expect(html).not.toContain("cded94407e9e8d4d66730259d0e10266b95b44a2ec239621fc4bc482d37a225");
+  });
+
+  it("renders partial read_file with line range badge and truncation warning", () => {
+    const rawResult = {
+      path: "src/big.ts",
+      content: "line 10\nline 11",
+      size_bytes: 12000,
+      lines_returned: 2,
+      offset: 9,
+      end_line: 11,
+      total_lines: 50,
+      truncated: true,
+      cache_hit: false,
+    };
+    const html = render({
+      toolName: "read_file",
+      status: "completed",
+      defaultExpanded: true,
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("第 10–11 行 / 共 50 行");
+    expect(html).toContain("12 KB");
+    expect(html).toContain("已截断");
+  });
+
+  it("renders read_file with unchanged message when cached unchanged is returned", () => {
+    const rawResult = {
+      path: "src/cached.ts",
+      unchanged: true,
+      size_bytes: 1024,
+      lines_returned: 0,
+      total_lines: 40,
+      cache_hit: true,
+    };
+    const html = render({
+      toolName: "read_file",
+      status: "completed",
+      defaultExpanded: true,
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("文件内容未变更（与当前缓存一致）");
+    expect(html).toContain("共 40 行");
+    expect(html).toContain("1.0 KB");
+  });
 });
