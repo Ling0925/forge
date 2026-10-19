@@ -1012,6 +1012,288 @@
   color: var(--text-muted);
 }
 
+/* --------------------------------------------------------------------------
+   Agent Tools: Sub-Agent Coordination Card Views
+   -------------------------------------------------------------------------- */
+.tool-agent-section {
+  width: 100%;
+}
+
+.agent-card-view,
+.agent-reports-view,
+.agent-message-view,
+.agent-resolve-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  margin-top: var(--space-1);
+}
+
+.agent-meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.agent-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: 500;
+  line-height: var(--leading-sm);
+}
+
+.agent-model-chip {
+  color: var(--accent);
+  background: var(--surface-elevated);
+  border-color: var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.agent-ownership-chip {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.agent-id-chip,
+.agent-budget-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agent-paths-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--surface-soft);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-subtle);
+}
+
+.agent-paths-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.agent-paths-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+}
+
+.agent-path-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 6px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+
+.agent-task-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.agent-task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.agent-section-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.agent-task-content {
+  margin: 0;
+  padding: var(--space-2-5) var(--space-3);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Sub-agent reports */
+.agent-reports-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.agent-report-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2-5) var(--space-3);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.agent-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.agent-report-status-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.agent-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.agent-status-tag.status-completed {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.agent-status-tag.status-running {
+  background: var(--surface-elevated);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.agent-status-tag.status-failed {
+  background: var(--surface-elevated);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.agent-status-tag.status-cancelled {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+.agent-model-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agent-short-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--surface-elevated);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+
+.agent-report-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.agent-usage-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agent-error-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--surface-soft);
+  border-left: 2px solid var(--danger);
+  border-radius: var(--radius-xs);
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.agent-summary-body {
+  margin-top: var(--space-1);
+}
+
+.agent-summary-content {
+  margin: 0;
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--canvas-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.agent-message-box,
+.agent-resolve-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  padding: var(--space-2-5) var(--space-3);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.agent-message-label,
+.agent-resolve-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.agent-message-content,
+.agent-resolve-content {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tool-disclosure,
   .tool-disclosure-body,

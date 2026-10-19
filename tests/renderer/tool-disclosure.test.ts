@@ -616,4 +616,61 @@ describe("tool disclosure row", () => {
     // 杜绝原始 JSON pre 块
     expect(html).not.toContain("tool-param-json");
   });
+
+  it("renders spawn_agent with structured model, ownership, writePaths, and readable task body", () => {
+    const params = {
+      model: "cbcn/deepseek-v4.1-flash",
+      ownership: "Backend estimation",
+      writePaths: ["src/shared/schemas.ts", "src/core/runtime.ts"],
+      task: "请在后端实现实时行数估算\n1. 修改 schemas\n2. 增加扫描器",
+    };
+    const html = render({
+      toolName: "spawn_agent",
+      status: "completed",
+      defaultExpanded: true,
+      parameters: params,
+      output: JSON.stringify({
+        childSessionId: "1202b3b5-1fea-48b8-8c14-aa39b90071c3",
+        model: "cbcn/deepseek-v4.1-flash",
+      }),
+    });
+
+    expect(html).toContain("委派子任务");
+    expect(html).toContain("Backend estimation");
+    expect(html).toContain('class="agent-card-view"');
+    expect(html).toContain("cbcn/deepseek-v4.1-flash");
+    expect(html).toContain("src/shared/schemas.ts");
+    expect(html).toContain("src/core/runtime.ts");
+    expect(html).toContain("请在后端实现实时行数估算");
+    expect(html).toContain("子会话 1202b3b5");
+    // 杜绝重复未折叠参数
+    expect(html).not.toContain('{"task":');
+  });
+
+  it("renders wait_agents with structured sub-agent report cards, status badges, and usage", () => {
+    const reports = [
+      {
+        id: "1202b3b5-1fea-48b8-8c14-aa39b90071c3",
+        status: "completed",
+        model: "cbcn/deepseek-v4.1-flash",
+        summary: "已完成并提交（commit 6b10a24）。全部测试通过。",
+        usage: { promptTokens: 13087478, completionTokens: 80040 },
+      },
+    ];
+    const html = render({
+      toolName: "wait_agents",
+      status: "completed",
+      defaultExpanded: true,
+      parameters: { ids: ["1202b3b5-1fea-48b8-8c14-aa39b90071c3"] },
+      output: JSON.stringify(reports),
+    });
+
+    expect(html).toContain("等待子任务");
+    expect(html).toContain('class="agent-reports-view"');
+    expect(html).toContain("已完成");
+    expect(html).toContain("cbcn/deepseek-v4.1-flash");
+    expect(html).toContain("1202b3b5");
+    expect(html).toContain("已完成并提交（commit 6b10a24）");
+    expect(html).toContain("13.1M 入 / 80.0k 出");
+  });
 });
