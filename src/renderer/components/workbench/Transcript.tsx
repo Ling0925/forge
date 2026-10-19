@@ -379,7 +379,12 @@ function ExecutionProcess({
         onClick={() => setExpanded((value) => !value)}
         title="本轮总耗时含工具执行与等待；速度 = 本轮输出 token ÷ 总耗时，不含子会话用量"
       >
-        {expanded ? <CaretDown size={13} aria-hidden="true" /> : <CaretRight size={13} aria-hidden="true" />}
+        <CaretRight
+          size={13}
+          weight="bold"
+          className={`transcript-execution-caret ${expanded ? "is-expanded" : ""}`}
+          aria-hidden="true"
+        />
         <Check size={13} aria-hidden="true" />
         <span>done</span>
         <span aria-hidden="true">·</span>

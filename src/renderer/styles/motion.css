@@ -82,28 +82,71 @@
   }
 }
 
-/* 3. Tool disclosure expansion & chevron rotation */
-.tool-disclosure {
-  transition: background-color var(--motion-duration-fast) ease;
-}
-
-.tool-disclosure-header {
-  transition: background-color var(--motion-duration-fast) ease;
-}
-
-.tool-disclosure-chevron {
-  transition: transform var(--motion-duration-sm) var(--motion-ease-out);
-}
-
-.tool-disclosure-chevron.is-expanded {
-  transform: rotate(90deg);
-}
-
+/* 3. Smooth expansion animations & chevron transitions */
 .tool-disclosure-body {
-  animation: tool-body-enter var(--motion-duration-sm) var(--motion-ease-out);
+  animation: tool-body-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes tool-body-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.transcript-execution-items {
+  animation: execution-items-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes execution-items-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tool-disclosure-chevron,
+.reasoning-caret,
+.transcript-execution-caret,
+.transcript-turn-collapsed-caret {
+  transition: transform var(--transition-fast) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tool-disclosure-chevron.is-expanded,
+.reasoning-caret.is-expanded,
+.transcript-execution-caret.is-expanded {
+  transform: rotate(90deg);
+}
+
+/* 4. Smooth arrival for dialogue entries in active turn */
+.transcript-turn:last-child .message-user {
+  animation: message-user-arrival 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes message-user-arrival {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.transcript-turn:last-child .message-assistant:not(.message-streaming) {
+  animation: message-assistant-arrival 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes message-assistant-arrival {
   from {
     opacity: 0;
   }
@@ -112,9 +155,20 @@
   }
 }
 
-/* 4. Streaming draft & persisted assistant handoff:
-   No mount translateY or opacity flash on .message-streaming or persisted
-   .message-assistant, so draft -> saved sync happens with zero visual jump. */
+.transcript-turn-collapsed-bar {
+  animation: turn-bar-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes turn-bar-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* 5. Interactive controls hover/pressed feedback & composer focus-within */
 .btn:not(:disabled),
@@ -296,6 +350,10 @@
   .tool-disclosure,
   .tool-disclosure-body,
   .tool-call-group,
+  .transcript-execution-items,
+  .transcript-turn-collapsed-bar,
+  .transcript-turn:last-child .message-user,
+  .transcript-turn:last-child .message-assistant,
   .reasoning,
   .reasoning-viewport,
   .reasoning-full,

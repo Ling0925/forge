@@ -334,6 +334,15 @@
   outline-offset: 1px;
 }
 
+.transcript-execution-caret {
+  flex-shrink: 0;
+  transition: transform var(--transition-fast);
+}
+
+.transcript-execution-caret.is-expanded {
+  transform: rotate(90deg);
+}
+
 .transcript-execution-items {
   display: flex;
   flex-direction: column;
