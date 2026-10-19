@@ -32,7 +32,7 @@ export async function installWebHost(): Promise<void> {
   const status = document.createElement("div");
   status.setAttribute("role", "status");
   status.style.cssText =
-    "padding:6px 16px;font:12px system-ui;background:#eee9d7;color:#333;flex-shrink:0;overflow-wrap:anywhere";
+    "display:none;padding:6px 16px;font:12px system-ui;background:#eee9d7;color:#333;flex-shrink:0;overflow-wrap:anywhere";
   document.body.prepend(status);
   const layout = document.createElement("style");
   layout.textContent =
@@ -59,6 +59,7 @@ export async function installWebHost(): Promise<void> {
     cleanupForeground();
     status.textContent = message;
     status.style.background = "#f7d4cf";
+    status.style.display = "";
   };
   async function post(path: string, input: unknown, timeout = 125_000, sessionId?: string): Promise<unknown> {
     if (stopped)
@@ -128,6 +129,7 @@ export async function installWebHost(): Promise<void> {
         status.title = "";
         status.textContent = "连接中断，正在自动重连…任务继续在后台运行。";
         status.style.background = "#eee9d7";
+        status.style.display = "";
         retryTimer = setTimeout(() => {
           retryTimer = undefined;
           void connect(true);
@@ -188,6 +190,7 @@ export async function installWebHost(): Promise<void> {
               status.title = connectedTitle;
               status.textContent = connectedStatus;
               status.style.background = "#eee9d7";
+              status.style.display = "none";
               ready();
             } catch { disconnect(); }
           };

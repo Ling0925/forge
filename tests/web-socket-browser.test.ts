@@ -190,7 +190,8 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await expect.poll(() => sockets.filter(url => url.includes("/api/events")).length).toBe(socketCount + 1);
-    await expect.poll(() => page.locator("body > [role=status]").innerText()).toContain("已连接");
+    await expect.poll(() => page.locator("body > [role=status]").textContent()).toContain("已连接");
+    expect(await page.locator("body > [role=status]").isHidden()).toBe(true);
     expect(events.filter(event => event.event.type === "text_delta")).toHaveLength(1);
     expect(events.some(event => event.event.type === "run_finished")).toBe(false);
     events.length = 0;
