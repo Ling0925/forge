@@ -183,8 +183,16 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     ? (state.activeSnapshot?.model ?? providerSource?.model)
     : providerSource?.model;
   const model = pinnedModel ?? defaultModel ?? state.settings?.model ?? "";
-  const setModel = (value: string) =>
-    setPicks((old) => ({ ...old, [draftId]: { sourceId: providerSourceId, model: value } }));
+  // `/model <id>` names only a model, so resolve its source the same way the
+  // picker does: the model carries its source instead of needing a switch.
+  const setModel = (value: string) => {
+    const owners = sourceProfiles.filter((source) => source.model === value);
+    const sourceId = owners.length === 1 ? owners[0]?.id : providerSourceId;
+    setPicks((old) => ({
+      ...old,
+      [draftId]: { ...(sourceId ? { sourceId } : {}), model: value },
+    }));
+  };
   const [catalogs, setCatalogs] = useState<Record<string, readonly string[]>>({});
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
@@ -387,9 +395,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         ? Boolean(providerSource.baseUrl && model)
         : state.settings?.isConfigured === true;
   const configurationHint = providerSourceId && !providerSource
-    ? "当前会话绑定的模型来源已被删除，请在设置中重新选择来源。"
+    ? "当前会话绑定的模型来源已被删除，请选择该会话的模型或新建会话。"
     : providerSource && !providerSource.model
-      ? "此来源尚未设置默认模型，请先在设置中选择模型。"
+      ? "选择一个模型即可开始对话；来源会随模型自动切换。"
       : "连接模型后即可开始对话。";
   const { dispatch, loadSessions } = useWorkbench();
   const slash = useSlashCommands({
@@ -528,7 +536,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       return;
     }
     if (providerSource && !providerSource.model && !model) {
-      setError("请先在设置中为此来源选择默认模型。");
+      setError("请选择一个模型；来源会随模型自动切换。");
       return;
     }
     const capturedDraftId = draftId;

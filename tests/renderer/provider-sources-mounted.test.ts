@@ -98,7 +98,7 @@ it("manages independent sources, fetches selected /models, saves model selection
     expect(await page.getByLabel('协议', { exact: true }).inputValue()).toBe('anthropic');
     await page.evaluate(() => Reflect.set(window, 'failSave', false));
     await page.getByRole('button', { name: '保存来源', exact: true }).click();
-    await page.getByText('来源已保存，可以从 /models 拉取模型。').waitFor();
+    await page.getByText('来源已保存。选择一个模型即可自动使用该来源。').waitFor();
     expect(await page.locator('#active').innerText()).toBe('a');
     const saved = await page.evaluate(() => Reflect.get(window, 'calls').at(-1));
     expect(saved.source.source).toMatchObject({ label: '源 B', apiMode: 'anthropic' });
@@ -107,7 +107,7 @@ it("manages independent sources, fetches selected /models, saves model selection
     const b = saved.source.source.id;
     expect(await page.locator('.provider-source-card').count()).toBe(2);
     const cards = await page.locator('.provider-source-card').allInnerTexts();
-    expect(cards[0]).toContain('当前');
+    expect(cards[0]).toContain('默认');
     expect(cards[1]).toContain('源 B');
     await page.getByRole('button', { name: '刷新源 B的模型' }).click();
     await expect.poll(() => page.evaluate(() => Reflect.get(window, 'reads'))).toContain(b);
@@ -146,13 +146,9 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.locator('.model-catalog-option').filter({ hasText: b + '/two' }).click();
     expect(await page.getByLabel('默认模型 ID').inputValue()).toBe(b + '/two');
     await page.getByRole('button', { name: '保存来源', exact: true }).click();
-    await page.getByText('来源已保存，可以从 /models 拉取模型。').waitFor();
+    await page.getByText('来源已保存。选择一个模型即可自动使用该来源。').waitFor();
     expect((await page.evaluate(() => Reflect.get(window, 'calls').at(-1))).source.apiKey).toBeUndefined();
-    await page.getByRole('button', { name: '编辑源 B', exact: true }).click();
-    await page.getByRole('button', { name: '设为当前来源' }).click();
-    await expect.poll(() => page.locator('#active').innerText()).toBe(b);
-    expect(await page.getByRole('button', { name: '删除来源', exact: true }).isDisabled()).toBe(true);
-    await page.getByRole('button', { name: '关闭', exact: true }).click();
+    expect(await page.getByRole('dialog').count()).toBe(0);
     await page.getByRole('button', { name: '编辑源 A', exact: true }).click();
     expect(await page.getByLabel('默认模型 ID').inputValue()).toBe('a/one');
     expect(await page.getByLabel('来源 API 密钥').inputValue()).toBe('');
@@ -165,7 +161,7 @@ it("manages independent sources, fetches selected /models, saves model selection
     await page.evaluate(() => Reflect.set(window, 'failModels', true));
     await page.getByRole('button', { name: '从 /models 拉取' }).click();
     expect(await page.getByRole('alert').innerText()).toBe('目录请求失败');
-    expect(await page.locator('#active').innerText()).toBe(b);
+    expect(await page.locator('#active').innerText()).toBe('a');
     await page.evaluate(() => {
       Reflect.set(window, 'failModels', false);
       Reflect.set(window, 'extraModels', Array.from({ length: 65 }, (_, index) => 'long-provider/'.repeat(12) + index));

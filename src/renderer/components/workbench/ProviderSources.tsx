@@ -372,15 +372,12 @@ export function ProviderSources({
             .map((issue) => `${issue.path.slice(2).join(".")}：${issue.message}`)
             .join("\n"),
         );
-      const wasActive = settings?.activeSourceId;
       const result = await updateSettings(parsed.data);
       if (!result.ok) throw Error(result.error);
       if (!alive.current) return "";
       adopt(result.settings.providerSources, draft.id);
       setEditorOpen(false);
-      return wasActive === undefined
-        ? "来源已保存，并自动设为当前来源。可以从 /models 拉取模型。"
-        : "来源已保存，可以从 /models 拉取模型。";
+      return "来源已保存。选择一个模型即可自动使用该来源。";
     });
 
   const fetchModels = () =>
@@ -399,16 +396,6 @@ export function ProviderSources({
       return unique.length
         ? `已从此来源 /models 拉取 ${unique.length} 个模型。选择后请保存来源。`
         : "此来源返回空模型目录，可手动输入精确模型 ID。";
-    });
-
-  const activate = (sourceId: string) =>
-    operation(async () => {
-      const candidate = sources.find((item) => item.id === sourceId);
-      if (!candidate) throw Error("来源不存在，可能已在别处删除。");
-      if (candidate.model === "") throw Error("请先选择或输入默认模型并保存。");
-      const result = await updateSettings({ source: { type: "activate", id: sourceId } });
-      if (!result.ok) throw Error(result.error);
-      return "已切换当前来源。后续请求使用该来源，当前运行不会切换。已有会话使用各自绑定的来源。";
     });
 
   /** Sessions known to the workbench that still pin this source. */
@@ -465,15 +452,19 @@ export function ProviderSources({
       {sources.length > 0 ? (
         <ul className="provider-source-list" aria-label="已保存的来源">
           {sources.map((item) => {
-            const current = settings?.activeSourceId === item.id;
+            const isDefault = settings?.activeSourceId === item.id;
             const key = catalogKey(item);
             const loading = catalogLoading[key] ?? false;
             return (
-              <li key={item.id} className={`provider-source-card${current ? " is-current" : ""}`}>
+              <li key={item.id} className={`provider-source-card${isDefault ? " is-current" : ""}`}>
                 <div className="provider-source-head">
                   <span className="provider-source-title">
                     <strong>{item.label}</strong>
-                    {current && <span className="provider-current">当前</span>}
+                    {isDefault && (
+                      <span className="provider-current" title="未指定来源时使用此来源">
+                        默认
+                      </span>
+                    )}
                     <span className={`provider-tag${item.hasApiKey ? "" : " is-muted"}`}>
                       {item.hasApiKey ? "已保存密钥" : "无密钥"}
                     </span>
@@ -521,17 +512,9 @@ export function ProviderSources({
                   <Button
                     size="sm"
                     variant="ghost"
-                    disabled={busy || current || item.model === ""}
-                    onClick={() => void activate(item.id)}
-                  >
-                    设为当前
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
                     className="provider-delete"
                     icon={<Trash size={14} />}
-                    disabled={busy || current}
+                    disabled={busy}
                     onClick={() => requestRemove(item.id)}
                   >
                     删除
@@ -850,35 +833,19 @@ export function ProviderSources({
               )}
               {source && (
                 <Button
-                  variant="secondary"
-                  disabled={
-                    busy || dirty || !source.model || settings?.activeSourceId === source.id
-                  }
-                  onClick={() => void activate(source.id)}
-                >
-                  设为当前来源
-                </Button>
-              )}
-              {source && (
-                <Button
                   className="provider-delete"
                   variant="ghost"
                   icon={<Trash size={15} />}
-                  disabled={busy || dirty || settings?.activeSourceId === source.id}
+                  disabled={busy || dirty}
                   onClick={() => requestRemove(source.id)}
                 >
                   删除来源
                 </Button>
               )}
             </div>
-            {source && settings?.activeSourceId === source.id && (
-              <p className="provider-hint">
-                当前来源用于后续请求。切换到其他来源后，才能删除此来源。
-              </p>
-            )}
             {editingNew && (
               <p className="provider-hint">
-                <Plugs size={14} aria-hidden="true" /> 保存后可在工作台选择该来源及其模型。
+                <Plugs size={14} aria-hidden="true" /> 保存后在输入框选择该来源的任意模型，来源会自动跟随。
               </p>
             )}
           </div>

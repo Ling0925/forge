@@ -961,6 +961,20 @@
   white-space: nowrap;
 }
 
+/* The source is bound to the model, so it reads as a qualifier, not a control. */
+.composer-model-source {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--text-xs, 11px);
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+}
+
 .composer-dropdown-caret {
   color: var(--text-muted);
   transition: transform var(--transition-fast);

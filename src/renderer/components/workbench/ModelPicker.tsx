@@ -113,6 +113,17 @@ export function ModelPicker(props: {
         <span className="composer-dropdown-label">
           {props.value.split("/").at(-1) || "选择模型"}
         </span>
+        {props.sourceLabel && (
+          // The source is not a separate choice: it always travels with the
+          // model, so it is shown as belonging to the model rather than as a
+          // control of its own.
+          <span
+            className="composer-model-source"
+            title={`来源：${props.sourceLabel}`}
+          >
+            {props.sourceLabel}
+          </span>
+        )}
         {props.reasoning && (
           <span
             className="model-effort-meter"
