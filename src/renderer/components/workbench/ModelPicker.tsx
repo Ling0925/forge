@@ -2,15 +2,7 @@ import { CaretDown, Cpu } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { ModelCatalog, type ModelCatalogGroup } from "./ModelCatalog";
 
-const efforts = [
-  ["default", "自动"],
-  ["none", "关闭"],
-  ["minimal", "极低"],
-  ["low", "低"],
-  ["medium", "中"],
-  ["high", "高"],
-  ["xhigh", "极高"],
-] as const;
+const efforts = ["default", "none", "minimal", "low", "medium", "high", "xhigh"] as const;
 
 export function ModelPicker(props: {
   readonly value: string;
@@ -36,9 +28,9 @@ export function ModelPicker(props: {
   const [open, setOpen] = useState(false);
   const initialized = useRef(false);
   const effortIndex = efforts.findIndex(
-    ([value]) => value === props.reasoning?.value,
+    (value) => value === props.reasoning?.value,
   );
-  const effortLabel = efforts[effortIndex]?.[1] ?? "自动";
+  const effortLabel = efforts[effortIndex] ?? "default";
   const [draftEffort, setDraftEffort] = useState(Math.max(0, effortIndex));
   const submittedEffort = useRef<number | null>(null);
   useEffect(() => {
@@ -57,7 +49,7 @@ export function ModelPicker(props: {
     )
       return;
     submittedEffort.current = index;
-    props.reasoning.onChange(choice[0]);
+    props.reasoning.onChange(choice);
   };
   const close = () => {
     if (ref.current) ref.current.open = false;
@@ -135,9 +127,7 @@ export function ModelPicker(props: {
                 className={level <= effortIndex - 1 ? "is-filled" : ""}
               />
             ))}
-            {effortIndex <= 1 && (
-              <small>{effortIndex === 1 ? "关" : "自"}</small>
-            )}
+            {effortIndex <= 1 && <small>{effortLabel}</small>}
           </span>
         )}
         <CaretDown size={16} aria-hidden="true" />
@@ -149,14 +139,9 @@ export function ModelPicker(props: {
               className="model-effort-options"
               disabled={props.reasoning.disabled}
             >
-              <legend>
-                思考等级 <span>全局保存 · 用于后续请求</span>
-              </legend>
+              <legend>思考等级</legend>
               <div className="effort-slider-heading">
-                <span>
-                  {props.reasoning.disabled ? "暂不可调整" : "拖动选择等级"}
-                </span>
-                <output>{efforts[draftEffort]?.[1]}</output>
+                <output>{efforts[draftEffort]}</output>
               </div>
               <div className="effort-slider" data-max={draftEffort === 6}>
                 <div className="effort-slider-track" aria-hidden="true">
@@ -172,7 +157,7 @@ export function ModelPicker(props: {
                   step={1}
                   value={draftEffort}
                   aria-label="思考等级"
-                  aria-valuetext={efforts[draftEffort]?.[1]}
+                  aria-valuetext={efforts[draftEffort]}
                   onChange={(event) =>
                     setDraftEffort(Number(event.currentTarget.value))
                   }
@@ -203,9 +188,9 @@ export function ModelPicker(props: {
                 />
               </div>
               <div className="effort-slider-labels" aria-hidden="true">
-                {efforts.map(([value, label], index) => (
+                {efforts.map((value, index) => (
                   <span key={value} data-active={draftEffort === index}>
-                    {label}
+                    {value}
                   </span>
                 ))}
               </div>

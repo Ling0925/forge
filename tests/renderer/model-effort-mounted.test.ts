@@ -44,15 +44,22 @@ it("combines model and effort with five readable levels on desktop and mobile", 
       await trigger.click();
       const search = page.getByLabel("搜索模型或输入精确 ID");
       await search.waitFor();
+      const labels = ["default", "none", "minimal", "low", "medium", "high", "xhigh"];
+      expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual(labels);
+      expect(await page.locator(".model-effort-options legend").textContent()).toBe("思考等级");
       if (width === 390) expect(await search.evaluate(node => node === document.activeElement)).toBe(false);
       const slider = page.getByRole("slider", { name: "思考等级", exact: true });
       await slider.press("Home");
-      for (const [index, label] of ["自动", "关闭", "极低", "低", "中", "高", "极高"].entries()) {
+      expect(await page.locator(".effort-slider-heading").textContent()).toBe("default");
+      for (const [index, label] of labels.entries()) {
         if (index) await slider.press("ArrowRight");
         expect(await slider.getAttribute("aria-valuetext")).toBe(label);
+        expect(await page.locator(".effort-slider-heading output").textContent()).toBe(label);
+        expect(await trigger.getAttribute("title")).toContain(`思考：${label}`);
         expect(await page.locator(".model-effort-meter > span").count()).toBe(5);
         expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(Math.max(0, index - 1));
         expect(await page.locator(".model-effort-meter").getAttribute("aria-label")).toContain(label);
+        if (index <= 1) expect(await page.locator(".model-effort-meter small").textContent()).toBe(label);
       }
       expect(await page.locator(".effort-slider-fill").evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("effort-shimmer");
       await page.emulateMedia({ reducedMotion: "reduce" });
@@ -70,7 +77,7 @@ it("combines model and effort with five readable levels on desktop and mobile", 
       await page.mouse.move(bounds.x + bounds.width - 7, bounds.y + bounds.height / 2);
       await page.mouse.down();
       await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, { steps: 8 });
-      expect(await slider.getAttribute("aria-valuetext")).toBe("低");
+      expect(await slider.getAttribute("aria-valuetext")).toBe("low");
       expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(5);
       await page.mouse.up();
       expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(2);
