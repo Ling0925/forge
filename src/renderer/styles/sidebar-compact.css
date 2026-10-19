@@ -10,6 +10,10 @@
 .wb-app .session-folder-header {
   padding-block: var(--space-1);
 }
+.wb-app .session-folder-more {
+  min-height: 22px;
+  padding: 2px var(--space-2);
+}
 .wb-app .session-item-main {
   flex-direction: row;
   align-items: center;

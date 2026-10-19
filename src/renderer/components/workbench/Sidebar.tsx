@@ -27,6 +27,9 @@ interface SessionGroup {
   readonly sessions: readonly SessionSummary[];
 }
 
+const DEFAULT_VISIBLE_COUNT = 10;
+const PAGE_SIZE = 10;
+
 export function Sidebar() {
   const { state, openNewSession, setMobileSidebar, openSettings } =
     useWorkbench();
@@ -35,6 +38,9 @@ export function Sidebar() {
   const [showArchived, setShowArchived] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<
     Readonly<Record<string, boolean>>
+  >({});
+  const [visibleLimits, setVisibleLimits] = useState<
+    Readonly<Record<string, number>>
   >({});
   const needle = query.trim().toLowerCase();
   const searching = needle.length > 0;
@@ -67,6 +73,13 @@ export function Sidebar() {
       ...previous,
       [workspace]: !previous[workspace],
     }));
+
+  const handleSeeMore = (workspace: string, currentEffectiveLimit: number) => {
+    setVisibleLimits((previous) => ({
+      ...previous,
+      [workspace]: currentEffectiveLimit + PAGE_SIZE,
+    }));
+  };
 
   return (
     <aside
@@ -155,6 +168,17 @@ export function Sidebar() {
             const isCollapsed =
               !searching && Boolean(collapsedFolders[group.workspace]);
             const bodyId = `sidebar-folder-${encodeURIComponent(group.workspace)}`;
+            const configuredLimit =
+              visibleLimits[group.workspace] ?? DEFAULT_VISIBLE_COUNT;
+            const activeIndex = group.sessions.findIndex(
+              (s) => s.id === state.activeSessionId,
+            );
+            const effectiveLimit =
+              activeIndex >= configuredLimit
+                ? Math.ceil((activeIndex + 1) / PAGE_SIZE) * PAGE_SIZE
+                : configuredLimit;
+            const visibleSessions = group.sessions.slice(0, effectiveLimit);
+            const hasMore = visibleSessions.length < group.sessions.length;
             return (
               <section className="session-folder" key={group.workspace}>
                 <button
@@ -194,13 +218,27 @@ export function Sidebar() {
                   </span>
                 </button>
                 <div
-                  className="session-folder-body"
+                  className={`session-folder-collapse${isCollapsed ? " is-collapsed" : ""}`}
                   id={bodyId}
-                  hidden={isCollapsed}
+                  aria-hidden={isCollapsed}
                 >
-                  {group.sessions.map((session) => (
-                    <SessionListItem key={session.id} session={session} />
-                  ))}
+                  <div className="session-folder-body">
+                    {visibleSessions.map((session) => (
+                      <SessionListItem key={session.id} session={session} />
+                    ))}
+                    {hasMore && (
+                      <button
+                        type="button"
+                        className="session-folder-more"
+                        onClick={() =>
+                          handleSeeMore(group.workspace, effectiveLimit)
+                        }
+                        aria-label={`查看更多会话（当前已显示 ${visibleSessions.length}/${group.sessions.length}）`}
+                      >
+                        <span>See more</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </section>
             );
