@@ -1,10 +1,11 @@
 import { fileChangeSchema } from "../../shared/schemas";
+import { executionTurns } from "../../shared/execution";
 import { webSearchDetails } from "../../shared/web-search-display";
 import type { ImageAttachment } from "../../shared/images";
 import { publishedFilesSchema } from "../../shared/published-files";
 import type { FileChange, PublishedFile, SessionSnapshot, ToolCall } from "../shared-types";
 
-export type TimelineItem =
+export type TimelineItem = { readonly turn?: number; readonly step?: number } & (
   | {
       readonly kind: "message";
       readonly id: string;
@@ -35,11 +36,7 @@ export type TimelineItem =
       readonly message: string;
       readonly timestamp: string;
       readonly historical?: boolean;
-    };
-
-function isHumanTurn(message: SessionSnapshot["messages"][number]): boolean {
-  return message.role === "user" && message.origin !== "agent_reconciliation";
-}
+    });
 
 /**
  * Measured duration for one tool occurrence. Only real recorded timestamps
@@ -67,12 +64,27 @@ export function reduceTimeline(
   const cached = timelineCache.get(snapshot);
   if (cached) return cached;
   const items: TimelineItem[] = [];
+  const turns = executionTurns(snapshot);
+  const positions = new Map<number, { readonly turn: number; readonly step?: number }>();
+  for (const turn of turns) {
+    const steps = turn.events.filter(event => event.type === "step_started");
+    let cursor = 0;
+    let step: number | undefined;
+    for (let index = turn.messageStart; index < turn.messageEnd; index++) {
+      while (cursor < steps.length) {
+        const start = steps[cursor];
+        if (!start || start.messageIndex > index) break;
+        step = start.step;
+        cursor++;
+      }
+      positions.set(index, { turn: turn.turn, ...(step === undefined ? {} : { step }) });
+    }
+  }
   const pending = new Map<string, number[]>();
   const runStarts = snapshot.events.flatMap((event, index) =>
     event.type === "run_started" ? [index] : [],
   );
-  const userCount = snapshot.messages.filter(isHumanTurn).length;
-  const alignedRuns = runStarts.length === userCount && userCount > 0;
+  const alignedRuns = turns.length > 0 && turns.every(turn => turn.events.length > 0);
   let turn = -1;
   const placedErrors = new Set<number>();
   const appendErrors = (from: number, to: number) => {
@@ -85,6 +97,8 @@ export function reduceTimeline(
         id: `error:${index}`,
         message: event.error.message,
         timestamp: event.timestamp,
+        ...(event.turn === undefined ? {} : { turn: event.turn }),
+        ...(event.step === undefined ? {} : { step: event.step }),
       });
     });
   };
@@ -101,7 +115,7 @@ export function reduceTimeline(
   // Tool messages below remain authoritative for completed exchanges.
 
   for (const [index, message] of snapshot.messages.entries()) {
-    if (isHumanTurn(message)) {
+    if (turns[turn + 1]?.messageStart === index) {
       if (alignedRuns && turn >= 0)
         appendErrors(
           runStarts[turn] ?? 0,
@@ -117,6 +131,7 @@ export function reduceTimeline(
         items.push({
           kind: "message",
           id: `message:${index}`,
+          ...positions.get(index),
           role: message.role,
           content: message.content ?? "",
           ...(message.role === "assistant" && (message.citations?.length || message.webSearches?.length)
@@ -139,8 +154,8 @@ export function reduceTimeline(
           const occurrence = occurrences.get(call.id) ?? 0;
           occurrences.set(call.id, occurrence + 1);
           const runEvents =
-            alignedRuns && turn >= 0
-              ? snapshot.events.slice(runStarts[turn], runStarts[turn + 1])
+            turns[turn]?.events.length
+              ? turns[turn]?.events
               : null;
           const scopedStarts =
             runEvents?.filter((e) => e.type === "tool_started") ?? starts;
@@ -155,15 +170,8 @@ export function reduceTimeline(
           const total = runEvents
             ? snapshot.messages
                 .slice(
-                  snapshot.messages
-                    .slice(0, index + 1)
-                    .findLastIndex(isHumanTurn),
-                  (() => {
-                    const next = snapshot.messages
-                      .slice(index + 1)
-                      .findIndex(isHumanTurn);
-                    return next < 0 ? undefined : index + 1 + next;
-                  })(),
+                  turns[turn]?.messageStart,
+                  turns[turn]?.messageEnd,
                 )
                 .reduce(
                   (count, m) =>
@@ -178,9 +186,7 @@ export function reduceTimeline(
           const localOccurrence = runEvents
             ? snapshot.messages
                 .slice(
-                  snapshot.messages
-                    .slice(0, index + 1)
-                    .findLastIndex(isHumanTurn),
+                  turns[turn]?.messageStart,
                   index,
                 )
                 .reduce(
@@ -213,6 +219,7 @@ export function reduceTimeline(
           items.push({
             kind: "tool",
             id: `tool:${call.id}:${occurrence}`,
+            ...positions.get(index),
             call,
             status: finish
               ? finish.result.isError
@@ -282,14 +289,16 @@ export function reduceTimeline(
     appendErrors(runStarts[turn] ?? 0, snapshot.events.length);
   // Old error events cannot be positioned against messages. Keep explicitly historical evidence.
   const historical: TimelineItem[] = [];
+  const anchoredErrors: TimelineItem[] = [];
   snapshot.events.forEach((event, index) => {
     if (event.type === "error" && !placedErrors.has(index))
-      historical.push({
+      (event.turn === undefined ? historical : anchoredErrors).push({
         kind: "error",
         id: `error:${index}`,
         message: event.error.message,
         timestamp: event.timestamp,
-        historical: true,
+        ...(event.turn === undefined ? { historical: true } : { turn: event.turn }),
+        ...(event.step === undefined ? {} : { step: event.step }),
       });
   });
   const result: TimelineItem[] = [...historical, ...items];
@@ -299,7 +308,7 @@ export function reduceTimeline(
   if (snapshot.status === "running" || snapshot.status === "awaiting_approval") {
     const from = runStarts.at(-1) ?? -1;
     const currentMessages = alignedRuns
-      ? snapshot.messages.slice(snapshot.messages.findLastIndex(isHumanTurn))
+      ? snapshot.messages.slice(turns.at(-1)?.messageStart)
       : snapshot.messages;
     const represented = new Map<string, number>();
     const key = (call: ToolCall) => JSON.stringify(call);
@@ -320,6 +329,8 @@ export function reduceTimeline(
           occurrences.set(event.call.id, occurrence + 1);
           position = result.length;
           result.push({ kind: "tool", id: `tool:${event.call.id}:${occurrence}`,
+            ...(event.turn === undefined ? {} : { turn: event.turn }),
+            ...(event.step === undefined ? {} : { step: event.step }),
             call: event.call, status: "running", output: "",
             ...toolTiming(event, undefined) });
         }
@@ -343,6 +354,10 @@ export function reduceTimeline(
             : {}) };
       }
     }
+  }
+  for (const error of anchoredErrors) {
+    const last = result.findLastIndex(item => item.turn === error.turn);
+    result.splice(last < 0 ? result.length : last + 1, 0, error);
   }
   timelineCache.set(snapshot, result);
   return result;

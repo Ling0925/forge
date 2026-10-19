@@ -2,6 +2,7 @@ import { CaretDown, CaretRight, Check, Copy } from "@phosphor-icons/react";
 import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Collapsible } from "../primitives/Collapsible";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
+import { executionLabel, executionTurns } from "../../../shared/execution";
 import { webSearchStatus } from "../../../shared/web-search-display";
 import type {
   ApprovalRequest,
@@ -282,19 +283,18 @@ function partitionTurns(timeline: readonly TimelineItem[]): readonly TranscriptT
     items: TurnEntry[];
   } | null = null;
 
-  for (let index = 0; index < timeline.length; index++) {
-    const item = timeline[index];
+  for (const [index, item] of timeline.entries()) {
     if (item.kind === "error" && item.historical) continue;
 
     const isHumanUser =
       item.kind === "message" && item.role === "user" && !item.origin;
 
-    if (isHumanUser) {
-      currentTurnNumber++;
+    if (isHumanUser && (item.turn === undefined || item.turn !== currentTurn?.turnNumber)) {
+      currentTurnNumber = item.turn ?? currentTurnNumber + 1;
       currentTurn = {
         id: item.id || `turn-${currentTurnNumber}`,
         turnNumber: currentTurnNumber,
-        userEntry: { item, index },
+        userEntry: { item: { ...item, role: "user" }, index },
         items: [],
       };
       turns.push(currentTurn);
@@ -337,7 +337,7 @@ function groupTurnEntries(
       currentTools = null;
       blocks.push({ kind: "single", entry });
     } else if (isTool && !hasHeader) {
-      if (!currentTools) {
+      if (!currentTools || currentTools.at(-1)?.item.step !== entry.item.step) {
         currentTools = [];
         blocks.push({
           kind: "tool_group",
@@ -569,6 +569,7 @@ export const StoredTranscript = memo(function StoredTranscript({
   );
   const turns = partitionTurns(timeline);
   const executions = completedTurnExecutions(snapshot);
+  const executionRecords = executionTurns(snapshot);
 
   return (
     <>
@@ -588,7 +589,9 @@ export const StoredTranscript = memo(function StoredTranscript({
       {turns.map((turn) => {
         const isCollapsed = Boolean(collapsedTurns[turn.id]);
         const userItem = turn.userEntry?.item;
-        const execution = executions[turn.turnNumber - 1];
+        const recordIndex = executionRecords.findIndex(record => record.turn === turn.turnNumber);
+        const record = executionRecords[recordIndex];
+        const execution = executions[recordIndex];
         const finalEntry = execution
           ? turn.items.find(({ item }) => item.id === execution.finalMessageId)
           : undefined;
@@ -596,7 +599,9 @@ export const StoredTranscript = memo(function StoredTranscript({
           ? turn.items.filter((entry) => entry !== finalEntry)
           : turn.items;
         const blocks = groupTurnEntries(processItems, headers);
-        const summaryText = computeTurnSummary(turn.items);
+        const counts = record ? executionLabel(record) : "";
+        const hasError = turn.items.some(({ item }) => item.kind === "error" || (item.kind === "tool" && item.status === "failed"));
+        const summaryText = counts ? `${counts}${hasError ? " · 含异常记录" : ""}` : computeTurnSummary(turn.items);
         const files = turn.items.flatMap(({ item }) => item.kind === "tool" && item.status === "completed" && item.call.function.name === "publish_file" ? item.files ?? [] : []);
 
         return (
@@ -639,6 +644,7 @@ export const StoredTranscript = memo(function StoredTranscript({
                 )}
               </article>
             )}
+            {counts && <div className="transcript-execution-counts">{counts}</div>}
             {turn.items.length > 0 && (
               isCollapsed ? (
                 <button
@@ -656,12 +662,19 @@ export const StoredTranscript = memo(function StoredTranscript({
               ) : (
                 <div className="transcript-turn-body">
                   <ExecutionProcess execution={finalEntry ? execution : undefined}>
-                    {blocks.map((block) => {
+                    {blocks.map((block, blockIndex) => {
+                      const first = block.kind === "single" ? block.entry : block.entries[0];
+                      const previous = blocks[blockIndex - 1];
+                      const priorStep = previous?.kind === "single" ? previous.entry.item.step : previous?.entries.at(-1)?.item.step;
+                      const step = first?.item.step;
+                      const heading = step !== undefined && step !== priorStep
+                        ? <div className="transcript-execution-counts" data-step={step}>执行第 {step} 步</div> : null;
                       if (block.kind === "single") {
-                        return renderTimelineEntry(block.entry, snapshot, headers, phases);
+                        return <Fragment key={block.entry.item.id}>{heading}{renderTimelineEntry(block.entry, snapshot, headers, phases)}</Fragment>;
                       }
                       return (
                         <div className="tool-call-group" key={block.id}>
+                          {heading}
                           {block.entries.map(({ item, index }) =>
                             item.kind === "tool"
                               ? renderToolCard(item, index, phases)
@@ -671,7 +684,12 @@ export const StoredTranscript = memo(function StoredTranscript({
                       );
                     })}
                   </ExecutionProcess>
-                  {finalEntry && renderTimelineEntry(finalEntry, snapshot, headers, phases)}
+                  {finalEntry && <>
+                    {finalEntry.item.step !== undefined && processItems.at(-1)?.item.step !== finalEntry.item.step && (
+                      <div className="transcript-execution-counts" data-step={finalEntry.item.step}>执行第 {finalEntry.item.step} 步</div>
+                    )}
+                    {renderTimelineEntry(finalEntry, snapshot, headers, phases)}
+                  </>}
                   <PublishedFiles sessionId={snapshot.id} files={files} />
                 </div>
               )

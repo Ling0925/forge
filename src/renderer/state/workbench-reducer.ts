@@ -650,7 +650,6 @@ export function workbenchReducer(
         event.type === "text_delta" ||
         event.type === "reasoning_delta" ||
         event.type === "retry_reset" ||
-        event.type === "provider_retry" ||
         event.type === "web_search" ||
         event.type === "web_search_result" ||
         // High-frequency ephemeral previews never touch the stored transcript.

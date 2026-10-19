@@ -307,8 +307,9 @@ export function Inspector({
                         )}
                         {finished?.type === "run_finished" && (
                           <div className="inspector-usage-footer">
-                            <span className="usage-footer-tag">{finished.turns} 轮</span>
+                            <span className="usage-footer-tag">{finished.steps ?? finished.turns} 步</span>
                             <span className="usage-footer-tag">{finished.toolCalls} 次工具调用</span>
+                            {Boolean(finished.retries) && <span className="usage-footer-tag">{finished.retries} 次请求重试</span>}
                           </div>
                         )}
                       </div>

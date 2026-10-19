@@ -36,7 +36,7 @@ it("supports optional token caps, exact model windows and clearing rows", () => 
 });
 it("validates numeric blanks, origin boundaries and LSP arguments", () => {
   let draft = createSettingsDraft(base);
-  draft.maxTurns = "";
+  draft.maxToolCalls = "";
   expect(() => buildSettingsUpdate(draft, base, "", false)).toThrow("整数");
   draft = createSettingsDraft(base);
   draft.browserAllowedOrigins = "https://example.test/path";

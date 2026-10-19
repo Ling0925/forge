@@ -15,8 +15,11 @@ export function transcriptStages(timeline: readonly TimelineItem[]) {
   let announced = false;
   const phases: number[] = [];
   const headers: (TranscriptStage | null)[] = [];
+  let turn: number | undefined;
   for (const item of timeline) {
-    if (item.kind === "message" && item.role === "user" && !item.origin) {
+    if (item.kind === "message" && item.role === "user" && !item.origin &&
+        (item.turn === undefined || item.turn !== turn)) {
+      turn = item.turn;
       current = { id: current.id + 1, title: null };
       announced = false;
     }

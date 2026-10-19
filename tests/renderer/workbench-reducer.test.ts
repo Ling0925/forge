@@ -39,7 +39,10 @@ describe("workbench authority", () => {
     expect(state.activeSnapshot).toBe(snapshot);
     state = workbenchReducer(state, { type: "RUN_EVENT_RECEIVED", event: { runId: runA, event: { type: "provider_retry", attempt: 2, maxAttempts: 5, reason: "protocol", sessionId: sessionA, timestamp } } });
     expect(state.activeRuns[sessionA]?.providerRetry).toBe(2);
-    expect(state.activeSnapshot).toBe(snapshot);
+    expect(state.activeSnapshot?.messages).toBe(snapshot.messages);
+    expect(state.activeSnapshot?.events).toEqual([
+      { type: "provider_retry", attempt: 2, maxAttempts: 5, reason: "protocol", sessionId: sessionA, timestamp },
+    ]);
   });
   it("restores cached history immediately when switching back and accepts background updates", () => {
     let state = workbenchReducer(initialWorkbenchState, { type: "SELECT_SESSION", sessionId: sessionA });
