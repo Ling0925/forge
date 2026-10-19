@@ -47,7 +47,7 @@ it("desktop uses the CLI catalog and executes arguments without sending prompts"
     await input.press('Escape');
     expect(await page.getByRole('listbox').count()).toBe(0);
     await input.press('Enter');
-    await expect.poll(output).toContain('尚未提供');
+    await expect.poll(output).toContain('需要活动运行');
     await input.fill('/he');
     await input.dispatchEvent('keydown', {key:'Enter',isComposing:true});
     expect(await input.inputValue()).toBe('/he');

@@ -13,9 +13,12 @@ export function useSlashCommands(options: {
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [selected, setSelected] = useState(0);
-  const [result, setResult] = useState<DesktopSlashResult>({});
-  const [executing, setExecuting] = useState(false);
-  const locked = useRef(false);
+  // The composer stays mounted across sessions; command state must follow its owner.
+  const [results, setResults] = useState<Readonly<Record<string, DesktopSlashResult>>>({});
+  const [executions, setExecutions] = useState<ReadonlySet<string>>(() => new Set());
+  const locked = useRef(new Set<string>());
+  const result = results[options.draftId] ?? {};
+  const executing = executions.has(options.draftId);
   const currentDraft = useRef(options.draftId);
   currentDraft.current = options.draftId;
   const text = options.prompt.trim();
@@ -25,28 +28,31 @@ export function useSlashCommands(options: {
   const index = Math.min(selected, Math.max(0, matches.length - 1));
   const menuId = `slash-${options.draftId}`;
   useEffect(() => { setDismissed(false); setSelected(0); }, [options.prompt, options.draftId]);
-  useEffect(() => { setResult({}); }, [options.draftId]);
   useEffect(() => {
     if (open) document.getElementById(`${menuId}-${index}`)?.scrollIntoView({ block: "nearest" });
   }, [open, index, menuId]);
 
   const execute = async (line = text) => {
     if (!isCommand) return false;
-    if (options.busy || locked.current) return true;
-    locked.current = true;
-    setExecuting(true);
+    const draftId = options.draftId;
+    if (options.busy || locked.current.has(draftId)) return true;
+    locked.current.add(draftId);
+    setExecutions(old => new Set(old).add(draftId));
+    setResults(old => ({ ...old, [draftId]: {} }));
     setDismissed(true);
     try {
       const next = await executeDesktopSlash(line, options.host);
-      if (currentDraft.current === options.draftId) {
-        setResult(next);
-        if (next.clearPrompt) options.setPrompt("");
-      }
+      setResults(old => ({ ...old, [draftId]: next }));
+      if (currentDraft.current === draftId && next.clearPrompt) options.setPrompt("");
     } catch (error) {
-      if (currentDraft.current === options.draftId) setResult({ text: error instanceof Error ? error.message : "命令执行失败，未自动重试。" });
+      setResults(old => ({ ...old, [draftId]: { text: error instanceof Error ? error.message : "命令执行失败，未自动重试。" } }));
     } finally {
-      locked.current = false;
-      setExecuting(false);
+      locked.current.delete(draftId);
+      setExecutions(old => {
+        const next = new Set(old);
+        next.delete(draftId);
+        return next;
+      });
     }
     return true;
   };

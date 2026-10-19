@@ -333,14 +333,18 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     run?.status === "running" || run?.status === "awaiting_approval";
   const [activityVisible, setActivityVisible] = useState(Boolean(running));
   const [activityClosing, setActivityClosing] = useState(false);
-  const lastActiveRun = useRef(run);
+  const lastActiveRun = useRef({ draftId, run });
   if (running) {
-    lastActiveRun.current = run;
+    lastActiveRun.current = { draftId, run };
   }
 
   useEffect(() => {
     if (running) {
       setActivityVisible(true);
+      setActivityClosing(false);
+    } else if (lastActiveRun.current.draftId !== draftId) {
+      // Switching sessions is not a run finishing; never animate another owner's status.
+      setActivityVisible(false);
       setActivityClosing(false);
     } else if (activityVisible) {
       setActivityClosing(true);
@@ -350,7 +354,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [running]);
+  }, [running, draftId]);
 
   const isDual = running && Boolean(prompt.trim() || images.length > 0);
   const wasDualRef = useRef(false);
@@ -366,8 +370,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     wasDualRef.current = isDual;
   }, [isDual, running]);
 
-  const displayRun = running ? run : lastActiveRun.current;
-  const showActivity = activityVisible || running;
+  const sameActivityOwner = lastActiveRun.current.draftId === draftId;
+  const displayRun = running ? run : sameActivityOwner ? lastActiveRun.current.run : undefined;
+  const showActivity = running || (sameActivityOwner && activityVisible);
   const [changingPermission, setChangingPermission] = useState(false);
   const changePermission = async (next: string) => {
     const selected = permissionSchema.parse(next);
