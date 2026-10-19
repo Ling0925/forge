@@ -37,12 +37,14 @@
   border-bottom: 1px solid var(--border-subtle, #333);
   background: var(--surface-card, #252526);
   flex-shrink: 0;
+  gap: var(--space-3);
 }
 
 .usage-dashboard-title-area {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
 }
 
 .usage-dashboard-icon-badge {
@@ -54,6 +56,11 @@
   border-radius: var(--radius-md, 8px);
   background: var(--primary-subtle, rgba(59, 130, 246, 0.15));
   color: var(--primary, #3b82f6);
+  flex-shrink: 0;
+}
+
+.usage-dashboard-title-text {
+  min-width: 0;
 }
 
 .usage-dashboard-title-text h2 {
@@ -61,15 +68,25 @@
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary, #fff);
+  white-space: nowrap;
 }
 
-.usage-dashboard-title-text p {
+.usage-dashboard-title-text p,
+.usage-dashboard-subtitle {
   margin: 2px 0 0 0;
   font-size: 12px;
   color: var(--text-secondary, #888);
+  white-space: nowrap;
 }
 
-.usage-dashboard-controls {
+.usage-dashboard-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.usage-dashboard-actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -213,6 +230,42 @@
   gap: var(--space-2);
 }
 
+/* Legend */
+.usage-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.usage-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+}
+
+.usage-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.usage-legend-completion,
+.usage-bar-completion {
+  background: #a855f7;
+}
+
+.usage-legend-cached,
+.usage-bar-cached {
+  background: #10b981;
+}
+
+.usage-legend-uncached,
+.usage-bar-uncached {
+  background: #3b82f6;
+}
+
 /* Two Column Split */
 .usage-charts-split {
   display: grid;
@@ -253,11 +306,19 @@
 .usage-bar-stack {
   width: 100%;
   border-radius: 4px 4px 0 0;
-  background: var(--primary, #3b82f6);
   min-height: 4px;
   transition: height 0.3s ease;
   position: relative;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.usage-bar-segment {
+  width: 100%;
+  transition: height 0.2s ease;
 }
 
 .usage-bar-stack:hover {
@@ -396,4 +457,133 @@
 @keyframes scaleUp {
   from { opacity: 0; transform: scale(0.97); }
   to { opacity: 1; transform: scale(1); }
+}
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+  .usage-dashboard-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .usage-dashboard-modal {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .usage-dashboard-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    row-gap: var(--space-3);
+    column-gap: var(--space-2);
+    padding: 12px 14px;
+  }
+
+  .usage-dashboard-title-area {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+  }
+
+  .usage-dashboard-subtitle {
+    display: none;
+  }
+
+  .usage-dashboard-actions {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    margin-left: 0;
+  }
+
+  .usage-dashboard-filters {
+    grid-column: 1 / -1;
+    grid-row: 2 / 2;
+    width: 100%;
+    margin-left: 0;
+    display: flex;
+    gap: 8px;
+  }
+
+  .usage-dashboard-filters .usage-filter-select {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    font-size: 13px;
+  }
+
+  .usage-dashboard-btn {
+    height: 36px;
+  }
+
+  .usage-dashboard-btn-icon {
+    width: 36px;
+  }
+
+  .usage-dashboard-body {
+    padding: 12px 14px;
+    gap: var(--space-3);
+  }
+
+  .usage-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .usage-kpi-card {
+    padding: 10px 12px;
+    gap: 4px;
+  }
+
+  .usage-kpi-value {
+    font-size: 20px;
+  }
+
+  .usage-kpi-sub {
+    font-size: 10px;
+    flex-wrap: wrap;
+    gap: 2px 4px;
+  }
+
+  .usage-dashboard-section {
+    padding: 12px;
+  }
+
+  .usage-section-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .usage-chart-legend {
+    gap: 8px;
+    font-size: 10px;
+  }
+
+  .usage-charts-split {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .usage-bar-col {
+    min-width: 28px;
+  }
+
+  .usage-table th,
+  .usage-table td {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .usage-session-link {
+    max-width: 160px;
+  }
+}
+
+@media (max-width: 380px) {
+  .usage-kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }

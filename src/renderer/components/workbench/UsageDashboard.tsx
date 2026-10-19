@@ -102,11 +102,13 @@ export function UsageDashboard() {
             </div>
             <div className="usage-dashboard-title-text">
               <h2>用量看板</h2>
-              <p>监控工作台 Token 消耗、缓存利用率与模型分布</p>
+              <p className="usage-dashboard-subtitle">
+                监控工作台 Token 消耗、缓存利用率与模型分布
+              </p>
             </div>
           </div>
 
-          <div className="usage-dashboard-controls">
+          <div className="usage-dashboard-filters">
             {/* Days Filter */}
             <select
               className="usage-filter-select"
@@ -137,7 +139,9 @@ export function UsageDashboard() {
                 </option>
               ))}
             </select>
+          </div>
 
+          <div className="usage-dashboard-actions">
             {/* Refresh */}
             <button
               type="button"
@@ -250,9 +254,20 @@ export function UsageDashboard() {
                       <Calendar size={15} />
                       每日 Token 消耗趋势
                     </span>
-                    <span className="usage-kpi-badge">
-                      {data.daily.length} 天记录
-                    </span>
+                    <div className="usage-chart-legend">
+                      <span className="usage-legend-item" title="模型生成输出 Tokens">
+                        <span className="usage-legend-dot usage-legend-completion" />
+                        <span>输出</span>
+                      </span>
+                      <span className="usage-legend-item" title="命中的 Prompt 缓存 Tokens">
+                        <span className="usage-legend-dot usage-legend-cached" />
+                        <span>缓存</span>
+                      </span>
+                      <span className="usage-legend-item" title="未命中缓存的普通输入 Tokens">
+                        <span className="usage-legend-dot usage-legend-uncached" />
+                        <span>输入</span>
+                      </span>
+                    </div>
                   </div>
 
                   {data.daily.length === 0 ? (
@@ -266,13 +281,46 @@ export function UsageDashboard() {
                           (d.totalTokens / maxDailyTokens) * 100,
                           4,
                         );
+                        const uncachedPrompt = Math.max(d.promptTokens - d.cachedTokens, 0);
+                        const cached = Math.min(d.cachedTokens, d.promptTokens);
+                        const completion = d.completionTokens;
+                        const dayTotal = uncachedPrompt + cached + completion;
+
+                        const completionPct = dayTotal > 0 ? (completion / dayTotal) * 100 : 0;
+                        const uncachedPct = dayTotal > 0 ? (uncachedPrompt / dayTotal) * 100 : 0;
+                        const cachedPct = dayTotal > 0 ? (cached / dayTotal) * 100 : 0;
+
+                        const tooltip = `${d.date}：总计 ${compactTokens(d.totalTokens)} tokens\n` +
+                          `• 输出：${compactTokens(completion)}\n` +
+                          `• 缓存读取：${compactTokens(cached)}\n` +
+                          `• 未缓存输入：${compactTokens(uncachedPrompt)}`;
+
                         return (
                           <div key={d.date} className="usage-bar-col">
                             <div
                               className="usage-bar-stack"
                               style={{ height: `${heightPercent}%` }}
-                              title={`${d.date}：${compactTokens(d.totalTokens)} tokens (输入 ${compactTokens(d.promptTokens)} / 输出 ${compactTokens(d.completionTokens)})`}
-                            />
+                              title={tooltip}
+                            >
+                              {completionPct > 0 && (
+                                <div
+                                  className="usage-bar-segment usage-bar-completion"
+                                  style={{ height: `${completionPct}%` }}
+                                />
+                              )}
+                              {uncachedPct > 0 && (
+                                <div
+                                  className="usage-bar-segment usage-bar-uncached"
+                                  style={{ height: `${uncachedPct}%` }}
+                                />
+                              )}
+                              {cachedPct > 0 && (
+                                <div
+                                  className="usage-bar-segment usage-bar-cached"
+                                  style={{ height: `${cachedPct}%` }}
+                                />
+                              )}
+                            </div>
                             <span className="usage-bar-date">
                               {d.date.slice(5)}
                             </span>
