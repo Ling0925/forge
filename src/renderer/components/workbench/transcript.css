@@ -30,6 +30,18 @@
   margin-bottom: var(--space-2);
   font-size: var(--text-xs);
   color: var(--text-secondary);
+  animation: reasoning-appear 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes reasoning-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .reasoning-head {
   display: flex;
@@ -70,6 +82,18 @@
   font-size: var(--text-xs);
   line-height: var(--leading-xs);
   color: var(--text-muted);
+  animation: reasoning-viewport-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes reasoning-viewport-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .reasoning-text {
   display: block;
@@ -108,6 +132,18 @@
 .reasoning-full {
   padding: var(--space-2) var(--space-2) 0;
   overflow-wrap: anywhere;
+  animation: reasoning-full-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes reasoning-full-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* The pulsing glyph signals activity without animating the whole block. */
@@ -337,6 +373,18 @@
   gap: 1px;
   width: 100%;
   margin: 1px 0;
+  animation: tool-group-appear 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes tool-group-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tool-call-group > .tool-disclosure {

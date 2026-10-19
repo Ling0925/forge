@@ -100,13 +100,13 @@
 }
 
 .tool-disclosure-body {
-  animation: tool-body-enter var(--motion-duration-sm) var(--motion-ease-out);
+  animation: tool-body-enter 0.24s var(--motion-ease-out);
 }
 
 @keyframes tool-body-enter {
   from {
     opacity: 0;
-    transform: translateY(calc(-1 * var(--motion-distance-xs)));
+    transform: translateY(-6px);
   }
   to {
     opacity: 1;
@@ -114,7 +114,22 @@
   }
 }
 
-/* 4. New arrival animation for last assistant message & last tool disclosure */
+/* 4. Smooth arrival animation for streaming drafts, assistant messages & tools */
+.message-streaming {
+  animation: message-streaming-appear 0.26s var(--motion-ease-out) both;
+}
+
+@keyframes message-streaming-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .conversation-inner > .message-assistant:last-child:not(.message-streaming),
 .conversation-inner > .tool-disclosure:last-child {
   animation: message-arrival var(--motion-duration-base) var(--motion-ease-out);
@@ -306,7 +321,13 @@
   .modal-card,
   .native-dialog::backdrop,
   .modal-backdrop,
+  .tool-disclosure,
   .tool-disclosure-body,
+  .tool-call-group,
+  .reasoning,
+  .reasoning-viewport,
+  .reasoning-full,
+  .message-streaming,
   .conversation-inner > .message-assistant:last-child:not(.message-streaming),
   .conversation-inner > .tool-disclosure:last-child,
   .composer-model-panel,
