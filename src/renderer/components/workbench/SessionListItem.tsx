@@ -69,8 +69,17 @@ export function SessionListItem({
     if (isMenuOpen) return;
     const box = anchor.current?.getBoundingClientRect();
     if (!box) return;
+    const sidebar = anchor.current?.closest(".workbench-sidebar");
+    const sidebarRect = sidebar?.getBoundingClientRect();
+    const anchorRight = sidebarRect ? sidebarRect.right : box.right;
+    const tooltipWidth = 280;
+    const gap = 8;
+    let left = anchorRight + gap;
+    if (left + tooltipWidth > window.innerWidth - gap) {
+      left = Math.max(gap, window.innerWidth - tooltipWidth - gap);
+    }
     setPosition({
-      left: Math.max(8, Math.min(box.right + 8, window.innerWidth - 288)),
+      left,
       top: Math.max(8, Math.min(box.top, window.innerHeight - 270)),
     });
     setOpen(true);
@@ -116,6 +125,7 @@ export function SessionListItem({
       </button>
       <SessionActions
         session={session}
+        onMouseEnter={() => setOpen(false)}
         onOpenChange={(menuActive) => {
           setIsMenuOpen(menuActive);
           if (menuActive) setOpen(false);

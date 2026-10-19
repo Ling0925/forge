@@ -12,11 +12,13 @@ import { Dialog } from "./Dialog";
 export interface SessionActionsProps {
   readonly session?: SessionSummary;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly onMouseEnter?: () => void;
 }
 
 export function SessionActions({
   session,
   onOpenChange,
+  onMouseEnter,
 }: SessionActionsProps = {}) {
   const { state, selectSession, loadSessions, refreshActiveSession } =
     useWorkbench();
@@ -151,6 +153,7 @@ export function SessionActions({
       className="session-actions wb-session-actions"
       aria-label="会话操作"
       onClick={(e) => e.stopPropagation()}
+      onMouseEnter={onMouseEnter}
     >
       <button
         ref={triggerRef}

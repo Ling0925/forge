@@ -77,6 +77,16 @@ it("sidebar hides completed dots and inline metadata, loads honest usage on hove
     expect(await page.getByRole("tooltip").innerText()).toContain(
       "provider/actual-model",
     );
+    // Tooltip stays to the right of the sidebar, never obstructing sidebar buttons
+    const tooltipBox = await page.getByRole("tooltip").boundingBox();
+    const sidebarBox = await page.locator(".workbench-sidebar").boundingBox();
+    expect(tooltipBox?.x).toBeGreaterThanOrEqual((sidebarBox?.x ?? 0) + (sidebarBox?.width ?? 0));
+
+    // Hovering the session action button closes the tooltip so it never blocks menu actions
+    const actionBtn = page.locator(".session-item").first().locator(".session-action-btn");
+    await actionBtn.hover();
+    expect(await page.getByRole("tooltip").count()).toBe(0);
+
     expect(await done.innerText()).toBe("完成的会话");
     const height = (await done.boundingBox())?.height;
     expect(height).toBeLessThanOrEqual(30);

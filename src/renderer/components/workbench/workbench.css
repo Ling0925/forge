@@ -418,8 +418,7 @@
 }
 
 /* Long titles fade out at the right edge instead of wrapping or adding an
-   ellipsis; the mask sits on the stretched flex item, so short titles are
-   untouched. */
+   ellipsis; idle rows use full width without reserving dead space for the action button. */
 .session-item-title {
   flex: 1;
   min-width: 0;
@@ -430,10 +429,22 @@
   white-space: nowrap;
   -webkit-mask-image: linear-gradient(
     to right,
-    #000 calc(100% - 24px),
+    #000 calc(100% - 8px),
     transparent
   );
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+  transition: -webkit-mask-image var(--transition-fast), mask-image var(--transition-fast);
+}
+
+.session-item:hover .session-item-title,
+.session-item.is-active .session-item-title,
+.session-item.is-menu-open .session-item-title {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 26px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
 }
 
 /* The selected conversation keeps primary ink at 500 and a sage marker rail so
@@ -452,51 +463,75 @@
 }
 
 .session-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .session-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
   padding: 0;
-  margin-right: 4px;
   border: none;
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: var(--surface-hover);
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--transition-fast), color var(--transition-fast),
     background-color var(--transition-fast);
+}
+
+.session-item:hover .session-actions,
+.session-item.is-active .session-actions,
+.session-item.is-menu-open .session-actions {
+  pointer-events: auto;
 }
 
 .session-item:hover .session-action-btn,
 .session-item.is-active .session-action-btn,
 .session-item.is-menu-open .session-action-btn {
-  opacity: 0.7;
+  opacity: 0.85;
+  pointer-events: auto;
 }
 
 .session-action-btn:hover,
 .session-action-btn.is-active {
   opacity: 1;
   color: var(--text-primary);
-  background-color: var(--surface-hover);
+  background-color: var(--surface-active);
 }
 
 @media (pointer: coarse) {
+  .session-actions {
+    pointer-events: auto;
+  }
   .session-action-btn {
     opacity: 0.75;
+    pointer-events: auto;
     width: 28px;
     height: 28px;
     min-width: 28px;
     min-height: 28px;
+  }
+  .session-item-title {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - 26px),
+      transparent
+    );
+    mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
   }
 }
 
