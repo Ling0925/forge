@@ -676,13 +676,37 @@ export function Transcript() {
           setHasNewContent(navigation.current.hasNewContent);
         }}
         onClickCapture={(event) => {
-          if (
-            event.target instanceof Element &&
-            event.target.closest(
-              ".tool-disclosure-header, summary, .transcript-turn-toggle, .transcript-turn-collapsed-bar, .transcript-execution-summary",
-            )
-          ) {
-            navigation.current.inspectDisclosure();
+          const target = event.target;
+          if (!(target instanceof Element)) return;
+          const trigger = target.closest<HTMLElement>(
+            ".tool-disclosure-header, .reasoning-head, summary, .transcript-turn-toggle, .transcript-turn-collapsed-bar, .transcript-execution-summary",
+          );
+          if (!trigger) return;
+
+          navigation.current.inspectDisclosure();
+
+          const isExpanding =
+            trigger.getAttribute("aria-expanded") === "false" ||
+            trigger.classList.contains("transcript-turn-collapsed-bar") ||
+            (trigger.tagName === "SUMMARY" && !trigger.parentElement?.hasAttribute("open"));
+
+          if (isExpanding) {
+            requestAnimationFrame(() => {
+              const scroll = scrollRef.current;
+              if (!scroll || !trigger.isConnected) return;
+              const scrollRect = scroll.getBoundingClientRect();
+              const triggerRect = trigger.getBoundingClientRect();
+              const offsetTop = triggerRect.top - scrollRect.top + scroll.scrollTop;
+              const top = Math.max(0, offsetTop - 12);
+              const reduced =
+                typeof window.matchMedia === "function" &&
+                window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+              if (reduced) {
+                scroll.scrollTop = top;
+              } else {
+                scroll.scrollTo({ top, behavior: "smooth" });
+              }
+            });
           }
         }}
       >
