@@ -1,37 +1,19 @@
-/* Live tool-argument generation rows: metadata only, never an execution row. */
+/* Live tool-argument generation rows: aligned seamlessly with ToolDisclosure. */
 .tool-live-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 0;
+  gap: 1px;
   width: 100%;
+  margin: 1px 0;
 }
 
 .tool-live-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-  padding: 5px var(--space-2);
-  border-radius: var(--radius-card);
-  border: 1px dashed var(--border-subtle);
-  background-color: var(--surface-soft, rgba(255, 255, 255, 0.02));
-  font-size: var(--text-xs);
-  line-height: var(--leading-sm);
-  color: var(--text-secondary);
-  animation: tool-live-card-appear 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  border: 1px solid transparent;
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
-@keyframes tool-live-card-appear {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.tool-live-item:hover {
+  background-color: var(--surface-soft);
 }
 
 .tool-live-header {

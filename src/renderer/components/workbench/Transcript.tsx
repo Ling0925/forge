@@ -40,7 +40,7 @@ function ToolPreviews({
   >;
 }) {
   return (
-    <div className="tool-live-list" role="status" aria-label="工具参数生成中">
+    <div className="tool-call-group tool-live-list" role="status" aria-label="工具参数生成中">
       {previews.map((preview) => {
         const toolName = preview.name || "";
         const label = friendlyLabel(toolName);
@@ -48,25 +48,37 @@ function ToolPreviews({
         const isCommand = toolName === "run_command" || toolName === "command_task";
         return (
           <div
-            className={`tool-live-item ${isCommand ? "is-command" : ""}`}
+            className={`tool-disclosure tool-live-item ${isCommand ? "is-command" : ""}`}
             key={preview.previewId}
+            data-status="generating"
             data-tool={toolName}
           >
-            <div className="tool-live-header">
-              <span className="tool-live-icon" aria-hidden="true">
-                {icon}
-              </span>
-              <span className="tool-live-name">{label}</span>
-              <span className="tool-live-sep" aria-hidden="true">·</span>
-              <span className="tool-live-status">生成参数中</span>
-              <span className="tool-live-sep" aria-hidden="true">·</span>
-              <span className="tool-live-chars">{preview.argumentsChars} 字符</span>
-              <span className="tool-live-spinner" aria-hidden="true" />
+            <div className="tool-disclosure-header tool-live-header">
+              <div className="tool-disclosure-header-main">
+                <span className="tool-disclosure-icon tool-live-icon" aria-hidden="true">
+                  {icon}
+                </span>
+                <span className="tool-disclosure-label tool-live-name">{label}</span>
+                <span className="tool-disclosure-target">
+                  <span className="tool-live-status">生成参数中</span>
+                  <span className="tool-live-sep" aria-hidden="true"> · </span>
+                  <span className="tool-live-chars">{preview.argumentsChars} 字符</span>
+                </span>
+              </div>
+              <div className="tool-disclosure-header-meta">
+                <span className="tool-disclosure-status" data-status="running">
+                  <span className="tool-live-spinner" aria-hidden="true" />
+                </span>
+              </div>
             </div>
             {isCommand && (
-              <div className="tool-live-command-hint" aria-hidden="true">
-                <span className="tool-live-sigil">$</span>
-                <span className="tool-live-skeleton" />
+              <div className="tool-disclosure-body">
+                <div className="tool-terminal-card tool-live-command-hint" aria-hidden="true">
+                  <div className="tool-terminal-header">
+                    <span className="tool-terminal-sigil tool-live-sigil">$</span>
+                    <span className="tool-live-skeleton" />
+                  </div>
+                </div>
               </div>
             )}
           </div>
