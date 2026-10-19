@@ -311,7 +311,8 @@ export function workbenchReducer(
               id: "live-reasoning",
               text: run.streamingReasoning,
               truncated: Boolean(run.reasoningTruncated),
-              afterMessage: run.streamStartMessage ?? 0,
+              afterMessage:
+                run.reasoningStartMessage ?? run.streamStartMessage ?? 0,
             },
             selectedSnapshot,
           );
@@ -482,13 +483,20 @@ export function workbenchReducer(
         next = { ...run, providerRetry: event.attempt };
       if (event.type === "context_usage")
         next = { ...run, providerRetry: undefined };
-      if (event.type === "run_started")
+      if (event.type === "run_started") {
+        const messageCount =
+          state.activeSnapshot?.id === event.sessionId
+            ? state.activeSnapshot.messages.length
+            : 0;
         next = {
           ...next,
           accepted: true,
           permission: event.permission,
           toolPreviews: [],
+          streamStartMessage: messageCount,
+          reasoningStartMessage: messageCount,
         };
+      }
       if (event.type === "permission_changed") {
         const queue = (
           run.approvalQueue ??

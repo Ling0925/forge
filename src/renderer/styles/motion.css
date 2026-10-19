@@ -100,49 +100,21 @@
 }
 
 .tool-disclosure-body {
-  animation: tool-body-enter 0.24s var(--motion-ease-out);
+  animation: tool-body-enter var(--motion-duration-sm) var(--motion-ease-out);
 }
 
 @keyframes tool-body-enter {
   from {
     opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 4. Smooth arrival animation for streaming drafts, assistant messages & tools */
-.message-streaming {
-  animation: message-streaming-appear 0.26s var(--motion-ease-out) both;
-}
-
-@keyframes message-streaming-appear {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.conversation-inner > .message-assistant:last-child:not(.message-streaming),
-.conversation-inner > .tool-disclosure:last-child {
-  animation: message-arrival var(--motion-duration-base) var(--motion-ease-out);
-}
-
-@keyframes message-arrival {
-  from {
-    opacity: 0;
   }
   to {
     opacity: 1;
   }
 }
+
+/* 4. Streaming draft & persisted assistant handoff:
+   No mount translateY or opacity flash on .message-streaming or persisted
+   .message-assistant, so draft -> saved sync happens with zero visual jump. */
 
 /* 5. Interactive controls hover/pressed feedback & composer focus-within */
 .btn:not(:disabled),

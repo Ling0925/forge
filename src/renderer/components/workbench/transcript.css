@@ -27,21 +27,9 @@
 
 /* Reasoning: bespoke workbench component, never a native disclosure. */
 .reasoning {
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  animation: reasoning-appear 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes reasoning-appear {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 .reasoning-head {
   display: flex;
@@ -59,7 +47,7 @@
 }
 .reasoning-glyph {
   flex-shrink: 0;
-  transition: color 0.3s ease, opacity 0.3s ease;
+  transition: color var(--transition-fast), opacity var(--transition-fast);
 }
 .reasoning-live .reasoning-glyph {
   color: var(--accent);
@@ -89,18 +77,6 @@
   font-size: var(--text-xs);
   line-height: var(--leading-xs);
   color: var(--text-muted);
-  animation: reasoning-viewport-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes reasoning-viewport-enter {
-  0% {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 .reasoning-text {
   display: block;
@@ -139,17 +115,15 @@
 .reasoning-full {
   padding: var(--space-2) var(--space-2) 0;
   overflow-wrap: anywhere;
-  animation: reasoning-full-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: reasoning-full-enter 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes reasoning-full-enter {
   0% {
     opacity: 0;
-    transform: translateY(-4px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -181,21 +155,23 @@
 .transcript-turn {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2-5);
+  gap: 12px;
   width: 100%;
   position: relative;
 }
 
-/* Inter-turn separation: calm hairline divider with breathing margin */
+/* Inter-turn separation: 12px parent gap + 16px margin = 28px phase boundary */
 .transcript-turn + .transcript-turn {
   margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px dashed var(--border-subtle);
 }
 
-/* Relative container for the user message and absolute actions */
+/* Relative container for the user message and right-aligned turn actions */
 .wb-app .message-user {
   position: relative;
+}
+
+.wb-app .transcript-turn .message-user .message-header {
+  padding-right: 136px;
 }
 
 .transcript-turn-actions {
@@ -204,21 +180,21 @@
   right: var(--space-3);
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   z-index: 1;
 }
 
 .transcript-turn-badge {
   display: inline-flex;
   align-items: center;
+  height: 20px;
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
   color: var(--text-muted);
-  background: var(--surface-subtle, rgba(0, 0, 0, 0.04));
-  border: 1px solid var(--border-subtle);
+  background: transparent;
   border-radius: var(--radius-sm);
-  padding: 2px 6px;
+  padding: 0 4px;
   user-select: none;
 }
 
@@ -228,23 +204,22 @@
   gap: 3px;
   height: 22px;
   padding: 0 7px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--surface-elevated);
-  color: var(--text-secondary);
+  background: transparent;
+  color: var(--text-muted);
   font: inherit;
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .transcript-turn-toggle:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--border-hover);
+  border-color: var(--border-subtle);
 }
 
 .transcript-turn-toggle:focus-visible {
@@ -256,7 +231,7 @@
 .transcript-turn-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -267,7 +242,7 @@
   gap: var(--space-2);
   width: 100%;
   padding: var(--space-2) var(--space-3);
-  border: 1px dashed var(--border-subtle);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
   background: var(--surface-soft);
   color: var(--text-secondary);
@@ -277,18 +252,6 @@
   cursor: pointer;
   user-select: none;
   transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-  animation: transcript-collapsed-bar-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes transcript-collapsed-bar-enter {
-  0% {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .transcript-turn-collapsed-bar:hover {
@@ -344,10 +307,11 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   width: fit-content;
   max-width: 100%;
-  padding: var(--space-2);
+  min-height: 28px;
+  padding: 2px var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -357,6 +321,7 @@
   font-variant-numeric: tabular-nums;
   text-align: left;
   cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .transcript-execution-summary:hover {
@@ -372,7 +337,7 @@
 .transcript-execution-items {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -381,19 +346,7 @@
   flex-direction: column;
   gap: 1px;
   width: 100%;
-  margin: 1px 0;
-  animation: tool-group-appear 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes tool-group-appear {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  margin: 0;
 }
 
 .tool-call-group > .tool-disclosure {
@@ -405,6 +358,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .reasoning-full,
   .transcript-turn-body,
   .transcript-turn-collapsed-bar {
     animation: none;

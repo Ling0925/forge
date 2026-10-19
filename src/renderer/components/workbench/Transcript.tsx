@@ -54,7 +54,7 @@ function ToolPreviews({
             data-tool={toolName}
           >
             <div className="tool-disclosure-header tool-live-header">
-              <div className="tool-disclosure-header-main">
+              <div className="tool-disclosure-summary">
                 <span className="tool-disclosure-icon tool-live-icon" aria-hidden="true">
                   {icon}
                 </span>
@@ -65,7 +65,7 @@ function ToolPreviews({
                   <span className="tool-live-chars">{preview.argumentsChars} 字符</span>
                 </span>
               </div>
-              <div className="tool-disclosure-header-meta">
+              <div className="tool-disclosure-meta">
                 <span className="tool-disclosure-status" data-status="running">
                   <span className="tool-live-spinner" aria-hidden="true" />
                 </span>
@@ -177,7 +177,7 @@ function partitionTurns(timeline: readonly TimelineItem[]): readonly TranscriptT
       currentTurn = {
         id: item.id || `turn-${currentTurnNumber}`,
         turnNumber: currentTurnNumber,
-        userEntry: { item, index } as any,
+        userEntry: { item, index },
         items: [],
       };
       turns.push(currentTurn);
@@ -255,6 +255,39 @@ function computeTurnSummary(items: readonly TurnEntry[]): string {
   return parts.length > 0 ? parts.join(" · ") : "本轮已完成";
 }
 
+function renderToolCard(
+  item: Extract<TimelineItem, { readonly kind: "tool" }>,
+  index: number,
+  phases: readonly number[],
+) {
+  const argvActivity =
+    item.call.function.name === "run_command"
+      ? commandActivity(item.call)
+      : undefined;
+  return (
+    <ToolDisclosure
+      key={item.id}
+      toolName={item.call.function.name}
+      target={toolActivity(item.call).target || undefined}
+      command={argvActivity?.command || undefined}
+      cwd={argvActivity?.cwd || undefined}
+      parameters={item.call.function.arguments.slice(0, 12000)}
+      output={item.output.slice(0, 24000)}
+      truncated={
+        item.output.length > 24000 ||
+        item.call.function.arguments.length > 12000
+      }
+      status={item.status}
+      {...(item.durationMs === undefined
+        ? {}
+        : { durationMs: item.durationMs })}
+      {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
+      changes={item.changes}
+      autoCollapsed={foldedTool(index, phases)}
+    />
+  );
+}
+
 function renderTimelineEntry(
   entry: TurnEntry,
   snapshot: SessionSnapshot,
@@ -319,32 +352,10 @@ function renderTimelineEntry(
         <code>{item.call.function.arguments.slice(0, 12000)}</code>
       </section>
     );
-  const argvActivity =
-    item.call.function.name === "run_command"
-      ? commandActivity(item.call)
-      : undefined;
   return (
     <Fragment key={item.id}>
       {headers[index] && <StageHeader stage={headers[index]} />}
-      <ToolDisclosure
-        toolName={item.call.function.name}
-        target={toolActivity(item.call).target || undefined}
-        command={argvActivity?.command || undefined}
-        cwd={argvActivity?.cwd || undefined}
-        parameters={item.call.function.arguments.slice(0, 12000)}
-        output={item.output.slice(0, 24000)}
-        truncated={
-          item.output.length > 24000 ||
-          item.call.function.arguments.length > 12000
-        }
-        status={item.status}
-        {...(item.durationMs === undefined
-          ? {}
-          : { durationMs: item.durationMs })}
-        {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
-        changes={item.changes}
-        autoCollapsed={foldedTool(index, phases)}
-      />
+      {renderToolCard(item, index, phases)}
     </Fragment>
   );
 }
@@ -489,36 +500,11 @@ export const StoredTranscript = memo(function StoredTranscript({
                       }
                       return (
                         <div className="tool-call-group" key={block.id}>
-                          {block.entries.map((entry) => {
-                            const { item, index } = entry;
-                            if (item.kind !== "tool") return null;
-                            const argvActivity =
-                              item.call.function.name === "run_command"
-                                ? commandActivity(item.call)
-                                : undefined;
-                            return (
-                              <ToolDisclosure
-                                key={item.id}
-                                toolName={item.call.function.name}
-                                target={toolActivity(item.call).target || undefined}
-                                command={argvActivity?.command || undefined}
-                                cwd={argvActivity?.cwd || undefined}
-                                parameters={item.call.function.arguments.slice(0, 12000)}
-                                output={item.output.slice(0, 24000)}
-                                truncated={
-                                  item.output.length > 24000 ||
-                                  item.call.function.arguments.length > 12000
-                                }
-                                status={item.status}
-                                {...(item.durationMs === undefined
-                                  ? {}
-                                  : { durationMs: item.durationMs })}
-                                {...(item.startedAt === undefined ? {} : { timestamp: item.startedAt })}
-                                changes={item.changes}
-                                autoCollapsed={foldedTool(index, phases)}
-                              />
-                            );
-                          })}
+                          {block.entries.map(({ item, index }) =>
+                            item.kind === "tool"
+                              ? renderToolCard(item, index, phases)
+                              : null,
+                          )}
                         </div>
                       );
                     })}
@@ -708,8 +694,8 @@ export function Transcript() {
           )}
           {run?.pendingOutputs?.map((output) => (
             <article className="message message-assistant" key={output.id}>
-              <div className="message-header message-author">
-                Forge · 待同步输出
+              <div className="message-header message-author message-author-row">
+                <span>Forge · 待同步输出</span>
               </div>
               <div className="message-body">
                 {output.truncated && (
@@ -741,8 +727,8 @@ export function Transcript() {
           )}
           {run?.streamingText && (
             <article className="message message-assistant message-streaming">
-              <div className="message-header message-author">
-                Forge · 实时草稿
+              <div className="message-header message-author message-author-row">
+                <span>Forge · 实时草稿</span>
               </div>
               <div className="message-body">
                 {run.streamingTruncated && (
