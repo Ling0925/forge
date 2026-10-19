@@ -184,6 +184,9 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         expect(await panel.innerText()).toContain("97.6%");
         expect(await panel.innerText()).toContain("压缩预留");
         for (const label of ["指令", "记忆", "对话", "工具"]) expect(await panel.innerText()).toContain(label);
+        const panelSegments = await page.locator(".usage-panel-segment").evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
+        expect(new Set(panelSegments).size).toBe(4);
+        expect(await page.locator(".usage-panel-reserve").count()).toBe(1);
         const rect = await panel.boundingBox();
         if (!rect) throw new Error("Missing usage panel");
         expect(rect.x).toBeGreaterThanOrEqual(0);

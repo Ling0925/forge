@@ -132,17 +132,45 @@ export function UsagePopover({
               <dt>本地上下文预估</dt><dd>≈{compactTokens(usage.projected.usedTokens)} tokens</dd>
             </>}
           </dl>
-          <p className="usage-caption">{usage.compacted
-            ? "上下文已压缩；当前是压缩后预估，等待下次请求实报。累计用量不清零。"
-            : context?.basis === "request"
-              ? "主数值为最近请求的输入实报（含缓存），不含输出或思考消耗。分项是估算；本地预估不会覆盖实报。"
-              : "暂无服务端输入实报，显示本地估算；不等同于模型分词器计数。"}</p>
+          {usage.compacted && (
+            <p className="usage-caption">
+              上下文已压缩；当前是压缩后预估，等待下次请求实报。累计用量不清零。
+            </p>
+          )}
           {ratio !== undefined && (
-            <progress
+            <div
+              role="progressbar"
               aria-label="上下文占用"
-              max={100}
-              value={Math.min(100, ratio * 100)}
-            />
+              aria-valuenow={Math.round(ratio * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="usage-panel-track"
+            >
+              {context &&
+                categories.map(([key, label]) => (
+                  <span
+                    key={key}
+                    className={`usage-panel-segment usage-${key}`}
+                    title={`${label}：≈${compactTokens(context.parts[key])} tokens`}
+                    style={{
+                      width: `${partsTotal ? (context.parts[key] / partsTotal) * Math.min(1, ratio) * 100 : 0}%`,
+                    }}
+                  />
+                ))}
+              {reserveRatio !== undefined && reserveTokens !== undefined && (
+                <span
+                  className="usage-panel-reserve"
+                  title={`压缩预留区：${compactTokens(reserveTokens)} tokens (${percent(reserveRatio)})；${
+                    remainingToCompact === undefined
+                      ? ""
+                      : remainingToCompact > 0
+                        ? `距自动压缩还剩约 ${compactTokens(remainingToCompact)} tokens`
+                        : `已达自动压缩阈值（超出约 ${compactTokens(-remainingToCompact)} tokens）`
+                  }`}
+                  style={{ width: `${reserveRatio * 100}%` }}
+                />
+              )}
+            </div>
           )}
           <p className="usage-caption">
             {context?.windowTokens
