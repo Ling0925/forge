@@ -76,7 +76,6 @@ function ToolPreviews({
               <div className="tool-disclosure-body">
                 <div className="tool-terminal-card tool-live-command-hint" aria-hidden="true">
                   <div className="tool-terminal-header">
-                    <span className="tool-terminal-sigil tool-live-sigil">$</span>
                     <span className="tool-live-skeleton" />
                   </div>
                 </div>

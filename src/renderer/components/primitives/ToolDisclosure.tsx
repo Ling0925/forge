@@ -699,12 +699,6 @@ function CommandConsole({
       {command && (
         <div className="tool-terminal-header tool-section">
           <div className="tool-terminal-prompt">
-            <span className="tool-section-title">
-              <span className="tool-terminal-sigil" aria-hidden="true">
-                $
-              </span>
-              命令
-            </span>
             <pre className="tool-section-content tool-command">{command}</pre>
           </div>
           <div className="tool-terminal-header-meta">

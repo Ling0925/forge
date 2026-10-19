@@ -345,7 +345,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
       '.tool-disclosure[data-status="failed"][data-tool="run_command"]',
     );
     const terminalPromptLeft = await failedConsoleCard
-      .locator(".tool-terminal-prompt .tool-section-title")
+      .locator(".tool-terminal-prompt")
       .evaluate((node) => node.getBoundingClientRect().left);
     const terminalOutputLeft = await failedConsoleCard
       .locator(".tool-terminal-output .tool-section-title")
