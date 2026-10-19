@@ -74,6 +74,22 @@ describe('shared slash semantics', () => {
     bridge.compactSession.mockRejectedValueOnce(new Error('provider unavailable'));
     await expect(executeDesktopSlash('/compact', host)).rejects.toThrow('provider unavailable');
   });
+  it('acknowledges queue and steering actions without persistent text, but keeps errors', async () => {
+    const {host} = fixture();
+    const queueCommand = vi.fn();
+    const steer = vi.fn(async () => true);
+    const runningHost = {...host, running:true, queueCommand, steer};
+    for (const value of ['', 'add follow up', 'run', 'clear']) {
+      expect(await executeDesktopSlash(`/queue ${value}`, runningHost)).toEqual({clearPrompt:true});
+      expect(queueCommand).toHaveBeenLastCalledWith(value);
+    }
+    expect(await executeDesktopSlash('/steer change direction', runningHost)).toEqual({clearPrompt:true});
+    expect(steer).toHaveBeenCalledWith('change direction');
+    steer.mockResolvedValueOnce(false);
+    await expect(executeDesktopSlash('/steer retry', runningHost)).rejects.toThrow('草稿已保留');
+    queueCommand.mockImplementationOnce(() => { throw new Error('加入待发队列失败'); });
+    await expect(executeDesktopSlash('/queue add retry', runningHost)).rejects.toThrow('加入待发队列失败');
+  });
   it('keeps no-argument mode/permission informational and accepts explicit values', async () => {
     const {host} = fixture();
     expect(await executeDesktopSlash('/mode',host)).toEqual({text:'Mode: build'});

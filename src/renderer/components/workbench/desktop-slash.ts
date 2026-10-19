@@ -23,7 +23,7 @@ export interface DesktopSlashHost {
   permission: string;
   running: boolean;
   steer?(text: string): Promise<boolean>;
-  queueCommand?(value: string): string;
+  queueCommand?(value: string): void;
   setModel(value: string): void;
   setMode(value: "plan" | "build"): void;
   setPermission(value: string): Promise<void>;
@@ -47,11 +47,12 @@ export async function executeDesktopSlash(line: string, host: DesktopSlashHost):
   if (command === "/steer") {
     if (!host.running || !value || !host.steer) throw Error("需要活动运行：/steer <消息>");
     if (!await host.steer(value)) throw Error("插话未确认写入，草稿已保留。");
-    return { text: "插话已写入当前会话。", clearPrompt: true };
+    return { clearPrompt: true };
   }
   if (command === "/queue") {
     if (!host.queueCommand) throw Error("当前宿主不支持待发队列。");
-    return { text: host.queueCommand(value), clearPrompt: true };
+    host.queueCommand(value);
+    return { clearPrompt: true };
   }
   // Do not silently race live work or apply a deferred command to a different session.
   if (host.running) throw Error("当前会话正在运行，请停止或等待完成后执行此命令（桌面不自动排队）。");

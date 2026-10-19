@@ -75,6 +75,13 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await expect.poll(() => input.inputValue()).toBe("");
     expect(await page.locator(".composer-cancel").count()).toBe(1);
     expect(await page.locator(".composer-submit").count()).toBe(0);
+    expect(await page.locator(".composer-live-hints").count()).toBe(0);
+    expect(await page.locator(".composer-queue").count()).toBe(0);
+    expect(await input.getAttribute("title")).toBe("Enter 排队，Alt+Enter 插话");
+    await input.fill("/queue"); await input.press("Enter");
+    await expect.poll(() => input.inputValue()).toBe("");
+    expect(await page.locator(".composer-slash-message").count()).toBe(0);
+    expect(await page.locator(".composer-queue").count()).toBe(0);
     await input.fill("change direction\nsecond line");
     expect(await page.locator(".composer-cancel").count()).toBe(1);
     expect(await page.locator(".composer-submit").count()).toBe(1);
@@ -119,6 +126,9 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     await input.fill("follow one");
     await page.locator(".composer-btn-steer-hold").click();
     await expect.poll(() => input.inputValue()).toBe("");
+    expect(await page.locator(".composer-queue").innerText()).toBe("待发 1 条：follow one");
+    expect(await page.locator(".composer-queue-hint").count()).toBe(0);
+    expect(await page.locator(".composer-slash-message").count()).toBe(0);
     await input.fill("follow two\nsecond line"); await input.press("Control+Enter");
     await expect.poll(() => input.inputValue()).toBe("");
     await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));

@@ -442,10 +442,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             ...(providerSourceId ? { providerSourceId } : {}),
           });
           if (!ok) throw new Error("加入待发队列失败。");
-          return "已加入待发队列。";
         }
         else if (value) throw new Error("用法：/queue [add <消息>|clear|run]");
-        return `待发 ${pendingInputs.length} 条${inputQueuePaused ? "（已暂停）" : ""}。可用 /queue add <消息> 排队。`;
       },
       setModel,
       setMode: changeMode,
@@ -728,22 +726,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               )}
             </output>
           )}
-          {showActivity && (
-            <div className="composer-live-hints" aria-label="快捷键提示">
-              <span className="composer-live-hint">Enter 排队</span>
-              <span className="composer-live-hint">Alt+Enter 插话</span>
-            </div>
-          )}
         </div>
         {pendingInputs.length > 0 && (
           <output className="composer-status composer-queue">
             <span className="composer-queue-text">
-              待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : " · 本轮完成后发送"}：{queuedSummary}
-            </span>
-            <span className="composer-queue-hint">
-              <span>/queue run 继续</span>
-              <span>·</span>
-              <span>/queue clear 清空</span>
+              待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : ""}：{queuedSummary}
             </span>
           </output>
         )}
@@ -823,7 +810,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             title={
               manualSend
                 ? "多行模式：Enter 换行，点击发送"
-                : "Enter 发送，Shift+Enter 换行"
+                : running
+                  ? "Enter 排队，Alt+Enter 插话"
+                  : "Enter 发送，Shift+Enter 换行"
             }
             onChange={(event) => {
               setDrafts((old) => ({ ...old, [draftId]: event.target.value }));
