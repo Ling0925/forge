@@ -32,10 +32,23 @@ export function UsagePopover({
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
   const context = usage.context;
-  const ratio = context?.windowTokens
-    ? context.usedTokens / context.windowTokens
+  const windowTokens = context?.windowTokens ?? undefined;
+  const ratio = windowTokens
+    ? context.usedTokens / windowTokens
     : undefined;
   const partsTotal = context ? categories.reduce((sum, [key]) => sum + context.parts[key], 0) : 0;
+  const budgetLimit = windowTokens
+    ? (context?.budgetTokens ?? Math.floor(windowTokens * 0.8))
+    : undefined;
+  const reserveTokens = windowTokens && budgetLimit !== undefined && budgetLimit < windowTokens
+    ? windowTokens - budgetLimit
+    : undefined;
+  const reserveRatio = windowTokens && reserveTokens !== undefined
+    ? reserveTokens / windowTokens
+    : undefined;
+  const remainingToCompact = budgetLimit !== undefined && context?.usedTokens !== undefined
+    ? budgetLimit - context.usedTokens
+    : undefined;
   useEffect(() => {
     if (!open) return;
     const dismiss = (event: PointerEvent) => {
@@ -78,6 +91,19 @@ export function UsagePopover({
               title={`${label}：≈${compactTokens(context.parts[key])} tokens`}
               style={{ width: `${partsTotal ? context.parts[key] / partsTotal * Math.min(1, ratio) * 100 : 0}%` }} />
           ))}
+          {reserveRatio !== undefined && reserveTokens !== undefined && (
+            <span
+              className="usage-reserve"
+              title={`压缩预留区：${compactTokens(reserveTokens)} tokens (${percent(reserveRatio)})；${
+                remainingToCompact === undefined
+                  ? ""
+                  : remainingToCompact > 0
+                    ? `距自动压缩还剩约 ${compactTokens(remainingToCompact)} tokens`
+                    : `已达自动压缩阈值（超出约 ${compactTokens(-remainingToCompact)} tokens）`
+              }`}
+              style={{ width: `${reserveRatio * 100}%` }}
+            />
+          )}
         </span>
         <span className="usage-footer-stats">
           <span className="usage-cache-chip" title="最近请求缓存命中率">CH {percent(usage.latestCache)}</span>
@@ -130,6 +156,12 @@ export function UsagePopover({
                 <dd>≈{compactTokens(context.parts[key])}</dd>
               </div>
             ))}
+            {reserveRatio !== undefined && (
+              <div>
+                <dt><span className="usage-legend-dot usage-legend-dot-reserve" />压缩预留</dt>
+                <dd>{percent(reserveRatio)}</dd>
+              </div>
+            )}
           </dl>}
           <h4>会话</h4>
           <dl>

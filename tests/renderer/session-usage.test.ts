@@ -174,10 +174,15 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
         const segments = await page.locator(".usage-segment").evaluateAll(nodes => nodes.map(node => ({ width: node.getBoundingClientRect().width, color: getComputedStyle(node).backgroundColor })));
         expect(new Set(segments.map(segment => segment.color)).size).toBe(4);
         expect(segments.reduce((sum, segment) => sum + segment.width, 0) / track.width).toBeCloseTo(486400 / 1048576, 2);
+        const reserve = await page.locator(".usage-reserve").boundingBox();
+        if (!reserve) throw new Error("Missing context reserve segment");
+        expect(reserve.width / track.width).toBeCloseTo(0.2, 1);
+        expect(await page.locator(".usage-reserve").getAttribute("title")).toContain("压缩预留区");
         await trigger.click();
         const panel = page.getByRole("region", { name: "用量详情" });
         expect(await panel.innerText()).toContain("46.4% / 486.3K");
         expect(await panel.innerText()).toContain("97.6%");
+        expect(await panel.innerText()).toContain("压缩预留");
         for (const label of ["指令", "记忆", "对话", "工具"]) expect(await panel.innerText()).toContain(label);
         const rect = await panel.boundingBox();
         if (!rect) throw new Error("Missing usage panel");

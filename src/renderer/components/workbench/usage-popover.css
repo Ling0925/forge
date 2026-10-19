@@ -3,6 +3,9 @@
   --context-memory: #d787ff;
   --context-conversation: #87d7af;
   --context-tools: #ffaf5f;
+  --context-reserve-border: var(--error, #f87171);
+  --context-reserve-stripe-1: rgba(248, 113, 113, 0.5);
+  --context-reserve-stripe-2: rgba(248, 113, 113, 0.15);
   position: relative;
   width: 100%;
   min-width: 0;
@@ -14,6 +17,9 @@
   --context-memory: #870087;
   --context-conversation: #005f5f;
   --context-tools: #875f00;
+  --context-reserve-border: var(--error, #b82420);
+  --context-reserve-stripe-1: rgba(184, 36, 32, 0.5);
+  --context-reserve-stripe-2: rgba(184, 36, 32, 0.15);
 }
 .usage-trigger {
   display: flex;
@@ -42,18 +48,60 @@
     min-height: var(--touch-min-target);
   }
 }
-.usage-track { display: flex; flex: 1; min-width: 24px; height: 3px; overflow: hidden; border-radius: 2px; background: var(--border-subtle); }
-.usage-segment { height: 100%; flex-shrink: 0; }
+.usage-track {
+  display: flex;
+  position: relative;
+  flex: 1;
+  min-width: 24px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border-subtle);
+}
+.usage-segment {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  flex-shrink: 0;
+}
 .usage-instructions { background: var(--context-instructions); }
 .usage-memory { background: var(--context-memory); }
 .usage-conversation { background: var(--context-conversation); }
 .usage-tools { background: var(--context-tools); }
+.usage-reserve {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  cursor: not-allowed;
+  pointer-events: auto;
+  border-left: 1.5px solid var(--context-reserve-border);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--context-reserve-stripe-1) 0,
+    var(--context-reserve-stripe-1) 2.5px,
+    var(--context-reserve-stripe-2) 2.5px,
+    var(--context-reserve-stripe-2) 5px
+  );
+}
 .usage-footer-stats { display: flex; align-items: center; gap: var(--space-2, 8px); white-space: nowrap; flex-shrink: 0; }
 .usage-footer-total { color: var(--text-primary); }
 .usage-panel .usage-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
 .usage-legend > div { display: flex; justify-content: space-between; gap: 8px; }
 .usage-legend dt { display: flex; align-items: center; gap: 6px; }
 .usage-legend-dot { width: 6px; height: 6px; border-radius: 2px; }
+.usage-legend-dot-reserve {
+  border: 1px solid var(--context-reserve-border);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--context-reserve-stripe-1) 0,
+    var(--context-reserve-stripe-1) 2px,
+    var(--context-reserve-stripe-2) 2px,
+    var(--context-reserve-stripe-2) 4px
+  );
+}
 .usage-trigger::-webkit-details-marker {
   display: none;
 }
