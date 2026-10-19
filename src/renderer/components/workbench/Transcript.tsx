@@ -2,6 +2,7 @@ import { CaretDown, CaretRight, Check, Copy } from "@phosphor-icons/react";
 import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Collapsible } from "../primitives/Collapsible";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
+import { webSearchStatus } from "../../../shared/web-search-display";
 import type {
   ApprovalRequest,
   SessionId,
@@ -446,6 +447,7 @@ function renderTimelineEntry(
             <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
           )}
           {item.content && <div className="message-body"><Markdown source={item.content} /></div>}
+          {item.webSearchDetails && <div className="message-body"><Markdown source={item.webSearchDetails} /></div>}
         </article>
       </Fragment>
     );
@@ -927,6 +929,7 @@ export function Transcript() {
               </div>
             </article>
           )}
+          {run?.webSearch && run.status === "running" && <p className="wb-muted" role="status">{webSearchStatus(run.webSearch)}</p>}
           {(run?.toolPreviews?.length ?? 0) > 0 && (
             <ToolPreviews previews={run?.toolPreviews ?? []} />
           )}

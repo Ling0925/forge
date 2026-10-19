@@ -42,6 +42,7 @@ export interface ActiveRunState {
    * `activeSnapshot.events` (high-frequency display state only).
    */
   readonly toolPreviews?: readonly ToolPreviewEntry[];
+  readonly webSearch?: import("../../shared/web-search").WebSearchProgress | undefined;
   readonly providerRetry?: number | undefined;
   readonly streamingReasoning?: string;
   readonly reasoningTruncated?: boolean;
@@ -635,6 +636,10 @@ export function workbenchReducer(
         };
       if (event.type === "error")
         next = { ...run, error: event.error, toolPreviews: [] };
+      if (event.type === "web_search") next = { ...next, webSearch: event.search };
+      if (["run_started", "run_finished", "error", "retry_reset", "web_search_result", "tool_started", "text_delta"].includes(event.type) ||
+        (event.type === "state_changed" && ["cancelled", "failed", "interrupted"].includes(event.status)))
+        next = { ...next, webSearch: undefined };
       if (event.type === "text_delta" || event.type === "reasoning_delta")
         next = { ...next, unreportedOutputTokens: (run.unreportedOutputTokens ?? 0) + estimateTokens(event.text) };
       if (event.type === "run_started" || event.type === "run_finished" || event.type === "retry_reset" ||
@@ -646,6 +651,8 @@ export function workbenchReducer(
         event.type === "reasoning_delta" ||
         event.type === "retry_reset" ||
         event.type === "provider_retry" ||
+        event.type === "web_search" ||
+        event.type === "web_search_result" ||
         // High-frequency ephemeral previews never touch the stored transcript.
         event.type === "tool_call_preview" ||
         event.type === "tool_preview_reset"

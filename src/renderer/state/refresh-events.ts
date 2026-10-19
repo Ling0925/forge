@@ -15,6 +15,7 @@ const REFRESH_EVENT_TYPES = new Set<AgentEvent["type"]>([
   "approval_requested",
   "tool_started",
   "tool_finished",
+  "web_search_result",
   "agent_update",
 ]);
 

@@ -1,4 +1,5 @@
 import { fileChangeSchema } from "../../shared/schemas";
+import { webSearchDetails } from "../../shared/web-search-display";
 import type { ImageAttachment } from "../../shared/images";
 import { publishedFilesSchema } from "../../shared/published-files";
 import type { FileChange, PublishedFile, SessionSnapshot, ToolCall } from "../shared-types";
@@ -9,6 +10,7 @@ export type TimelineItem =
       readonly id: string;
       readonly role: "user" | "assistant";
       readonly content: string;
+      readonly webSearchDetails?: string;
       readonly images?: readonly ImageAttachment[];
       readonly reasoning?: string;
       readonly reasoningTruncated?: boolean;
@@ -111,12 +113,14 @@ export function reduceTimeline(
       // Internal child joins do not start a human turn or break pending results.
       if (message.role !== "user" || message.origin !== "agent_reconciliation")
         pending.clear();
-      if (message.content || (message.role === "user" && message.images?.length) || (message.role === "assistant" && message.reasoning))
+      if (message.content || (message.role === "user" && message.images?.length) || (message.role === "assistant" && (message.reasoning || message.citations?.length || message.webSearches?.length)))
         items.push({
           kind: "message",
           id: `message:${index}`,
           role: message.role,
           content: message.content ?? "",
+          ...(message.role === "assistant" && (message.citations?.length || message.webSearches?.length)
+            ? { webSearchDetails: webSearchDetails(message) } : {}),
           ...(message.role === "user" && message.images?.length ? { images: message.images } : {}),
           ...(message.role === "assistant" && message.reasoning
             ? { reasoning: message.reasoning }
