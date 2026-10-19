@@ -9,20 +9,36 @@ export function useAutosizePrompt(
     if (!input || input.value !== value) return;
     const resize = () => {
       if (!input.value) {
-        input.style.height = "36px";
-        input.style.overflowY = "hidden";
+        if (input.style.height !== "36px") input.style.height = "36px";
+        if (input.style.overflowY !== "hidden") input.style.overflowY = "hidden";
         return;
       }
       const style = getComputedStyle(input);
       const padding =
         Number.parseFloat(style.paddingTop) +
         Number.parseFloat(style.paddingBottom);
-      const line = Number.parseFloat(style.lineHeight);
+      const line = Number.parseFloat(style.lineHeight) || 24;
       const limit = line * 6 + padding;
-      input.style.height = "0px";
-      const height = Math.max(36, Math.min(input.scrollHeight, limit));
-      input.style.height = `${height}px`;
-      input.style.overflowY = input.scrollHeight > height ? "auto" : "hidden";
+      const currentHeight = input.getBoundingClientRect().height;
+
+      let targetHeight: number;
+      if (input.scrollHeight > currentHeight) {
+        targetHeight = Math.max(36, Math.min(input.scrollHeight, limit));
+      } else {
+        const prevHeight = input.style.height;
+        input.style.height = "auto";
+        targetHeight = Math.max(36, Math.min(input.scrollHeight, limit));
+        input.style.height = prevHeight;
+      }
+
+      const nextHeightStr = `${targetHeight}px`;
+      if (input.style.height !== nextHeightStr) {
+        input.style.height = nextHeightStr;
+      }
+      const nextOverflow = input.scrollHeight > targetHeight ? "auto" : "hidden";
+      if (input.style.overflowY !== nextOverflow) {
+        input.style.overflowY = nextOverflow;
+      }
     };
     resize();
     let width = input.clientWidth;

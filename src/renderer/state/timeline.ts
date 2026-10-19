@@ -208,7 +208,7 @@ export function reduceTimeline(
           pending.set(call.id, [...(pending.get(call.id) ?? []), items.length]);
           items.push({
             kind: "tool",
-            id: `tool:${index}:${call.id}:${occurrence}`,
+            id: `tool:${call.id}:${occurrence}`,
             call,
             status: finish
               ? finish.result.isError
@@ -312,8 +312,10 @@ export function reduceTimeline(
         let position: number | undefined;
         if (count) represented.set(key(event.call), count - 1);
         else {
+          const occurrence = occurrences.get(event.call.id) ?? 0;
+          occurrences.set(event.call.id, occurrence + 1);
           position = result.length;
-          result.push({ kind: "tool", id: `live:${index}:${event.call.id}`,
+          result.push({ kind: "tool", id: `tool:${event.call.id}:${occurrence}`,
             call: event.call, status: "running", output: "",
             ...toolTiming(event, undefined) });
         }

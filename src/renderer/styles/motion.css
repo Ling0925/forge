@@ -123,11 +123,9 @@
 @keyframes message-arrival {
   from {
     opacity: 0;
-    transform: translateY(var(--motion-distance-sm));
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -176,17 +174,6 @@
   transform: scale(0.97);
 }
 
-/* Composer focus-within: soft shadow and accent transition (NO transform to protect fixed popover) */
-.composer-surface {
-  transition: border-color var(--motion-duration-base) ease, box-shadow
-    var(--motion-duration-base) ease;
-}
-
-.composer-surface:focus-within {
-  border-color: var(--accent-sage);
-  box-shadow: var(--shadow-composer), 0 0 0 1px var(--accent-sage);
-}
-
 /* Continuing model popover fade (pure opacity, preserving fixed bounding geometry) */
 .composer-model-panel {
   animation: popover-fade var(--motion-duration-sm) var(--motion-ease-out);
@@ -233,16 +220,17 @@
   vertical-align: -0.15em;
   border-radius: 2px;
   background: var(--accent-sage);
-  animation: wb-caret-blink 1s cubic-bezier(0.2, 0, 0, 1) infinite;
+  animation: wb-caret-blink 1s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes wb-caret-blink {
   0%,
   100% {
-    opacity: 1;
+    opacity: 0.95;
   }
   50% {
-    opacity: 0;
+    opacity: 0.2;
   }
 }
 

@@ -288,17 +288,11 @@ export function workbenchReducer(
         const pendingReasoning = (run.pendingReasoning ?? []).filter(
           (output) => !reasoningSaved(output, selectedSnapshot),
         );
-        // A snapshot that already contains this turn's streamed text is the
-        // authority for it. Keeping `streamingText` would render the same prose
-        // twice — once as the saved message and once as the live draft — until
-        // the run's terminal event clears the buffer. Only drop it when the
-        // saved content actually covers what is on screen (prefix match), so a
-        // lagging snapshot can never hide text the user is still watching.
-        //
-        // Reasoning is deliberately NOT cleared here: the live thought block
-        // and the persisted reasoning summary are separate surfaces by design
-        // (DESIGN.md §9), and clearing the buffer would remove the finished
-        // thought the reader is still looking at.
+        // A snapshot that already contains this turn's streamed text or reasoning
+        // is the authority for it. Keeping `streamingText` or `streamingReasoning`
+        // would render duplicate blocks — once as the saved message and once as the
+        // live draft — until the run's terminal event clears the buffer. Only drop
+        // them when the saved content actually covers what is on screen (prefix match).
         const liveSaved =
           run.streamingText.length > 0 &&
           (selectedSnapshot.messages.some(
@@ -315,12 +309,28 @@ export function workbenchReducer(
               },
               selectedSnapshot,
             ));
+        const reasoningSavedLive =
+          Boolean(run.streamingReasoning) &&
+          (selectedSnapshot.messages.some(
+            (message) =>
+              message.role === "assistant" &&
+              Boolean(message.reasoning?.startsWith(run.streamingReasoning)),
+          ) ||
+            reasoningSaved(
+              {
+                id: "live-reasoning",
+                text: run.streamingReasoning,
+                truncated: Boolean(run.reasoningTruncated),
+                afterMessage: run.streamStartMessage ?? 0,
+              },
+              selectedSnapshot,
+            ));
         if (
           !active(run.status) &&
           !pendingOutputs.length &&
           !pendingReasoning.length &&
           (!run.streamingText || liveSaved) &&
-          !run.streamingReasoning
+          (!run.streamingReasoning || reasoningSavedLive)
         )
           delete runs[snap.id];
         else
@@ -330,6 +340,9 @@ export function workbenchReducer(
             pendingReasoning,
             ...(liveSaved
               ? { streamingText: "", streamingTruncated: false }
+              : {}),
+            ...(reasoningSavedLive
+              ? { streamingReasoning: "", reasoningTruncated: false }
               : {}),
           };
       }

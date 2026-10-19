@@ -213,19 +213,6 @@
   flex-direction: column;
   gap: 10px;
   width: 100%;
-  animation: transcript-turn-expand 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
-  transform-origin: top;
-}
-
-@keyframes transcript-turn-expand {
-  0% {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* Collapsed summary banner */
@@ -335,6 +322,13 @@
 .transcript-execution-summary:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
+}
+
+.transcript-execution-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
 }
 
 .tool-call-group {

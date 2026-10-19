@@ -364,7 +364,7 @@ function ExecutionProcess({
         <span aria-hidden="true">·</span>
         <span>{execution.speed}</span>
       </button>
-      {expanded && <div className="transcript-turn-body">{children}</div>}
+      {expanded && <div className="transcript-execution-items">{children}</div>}
     </div>
   );
 }
@@ -608,7 +608,7 @@ export function Transcript() {
   // pulled into view like any new message.
   // Reasoning deltas grow the live tail too, so they must count as arriving
   // content or the follow-scroll would stall while the model is still thinking.
-  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning ?? ""}:${run?.streamingText ?? ""}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
+  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning?.length ?? 0}:${run?.streamingText?.length ?? 0}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
   // Has this turn produced answer prose yet? Either the live draft is still
   // streaming, or the snapshot already persisted it and the draft was cleared
   // on sync. Both mean the model has left its reasoning phase.
