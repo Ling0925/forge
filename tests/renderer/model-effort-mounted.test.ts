@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("offers low, medium, high, xhigh and MAX on desktop and mobile", async () => {
+it("keeps five effort levels in a compact panel and nests the model catalog on desktop and mobile", async () => {
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import {createRoot} from 'react-dom/client';
@@ -20,8 +20,9 @@ it("offers low, medium, high, xhigh and MAX on desktop and mobile", async () => 
         const [disabled,disable] = useState(false);
         return <div className="wb-app"><div style={{position:'absolute',bottom:40,right:24}}>
           <ModelPicker value={model} models={['provider/long-model-name','provider/beta']} onSelect={select}
-            onRefresh={()=>{}} loading={false} error="" reasoning={{value:effort,onChange:value=>setEffort(settingsFields.reasoningEffort.unwrap().parse(value)),disabled}} />
+            onRefresh={()=>{}} loading={false} error="" disabled={disabled} reasoning={{value:effort,onChange:value=>setEffort(settingsFields.reasoningEffort.unwrap().parse(value)),disabled}} />
           <button onClick={()=>disable(value=>!value)}>切换禁用</button>
+          <button onClick={()=>select('')}>清空模型</button>
           {['default','none','minimal'].map(value => <button key={value} onClick={()=>setEffort(value)}>{value}</button>)}
           <output id="saved-effort">{effort}</output>
         </div></div>;
@@ -59,11 +60,13 @@ it("offers low, medium, high, xhigh and MAX on desktop and mobile", async () => 
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
       await trigger.click();
-      const search = page.getByLabel("搜索模型或输入精确 ID");
-      await search.waitFor();
+      const currentModel = page.getByRole("button", { name: /^选择模型：/ });
+      await currentModel.waitFor();
+      expect(await page.locator(".model-catalog").count()).toBe(0);
+      expect(await currentModel.evaluate(node => node === document.activeElement)).toBe(true);
       expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual(labels);
       expect(await page.locator(".model-effort-options legend").textContent()).toBe("思考等级");
-      if (width === 390) expect(await search.evaluate(node => node === document.activeElement)).toBe(false);
+      expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
       const slider = page.getByRole("slider", { name: "思考等级", exact: true });
       expect(await slider.getAttribute("max")).toBe("4");
       await slider.press("Home");
@@ -85,8 +88,28 @@ it("offers low, medium, high, xhigh and MAX on desktop and mobile", async () => 
       await page.emulateMedia({ reducedMotion: "reduce" });
       expect(await page.locator(".effort-slider-fill").evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");
       await page.emulateMedia({ reducedMotion: "no-preference" });
+      await currentModel.click();
+      const search = page.getByLabel("搜索模型或输入精确 ID");
+      await search.waitFor();
+      expect(await slider.count()).toBe(0);
+      expect(await search.evaluate(node => node === document.activeElement)).toBe(width > 768);
+      expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
+      const catalogPanel = await page.locator(".composer-model-panel").boundingBox();
+      if (!catalogPanel) throw new Error("Missing catalog panel");
+      expect(catalogPanel.x).toBeGreaterThanOrEqual(0);
+      expect(catalogPanel.x + catalogPanel.width).toBeLessThanOrEqual(width);
+      await page.keyboard.press("Escape");
+      expect(await page.locator(".model-catalog").count()).toBe(0);
+      expect(await currentModel.evaluate(node => node === document.activeElement)).toBe(true);
+      await currentModel.press("Enter");
+      await page.getByRole("button", { name: "返回模型设置" }).click();
+      expect(await page.locator(".model-catalog").count()).toBe(0);
+      await currentModel.click();
       await page.getByRole("button", { name: /beta.*provider\/beta/ }).click();
       expect(await page.locator("details[open]").count()).toBe(1);
+      expect(await page.locator(".model-catalog").count()).toBe(0);
+      expect(await currentModel.textContent()).toContain("beta");
+      expect(await currentModel.evaluate(node => node === document.activeElement)).toBe(true);
       const panel = await page.locator(".composer-model-panel").boundingBox();
       if (!panel) throw new Error("Missing panel");
       expect(panel.x).toBeGreaterThanOrEqual(0);
@@ -107,5 +130,19 @@ it("offers low, medium, high, xhigh and MAX on desktop and mobile", async () => 
     await page.getByRole("button", { name: "切换禁用" }).click();
     await trigger.click();
     expect(await page.getByRole("slider", { name: "思考等级", exact: true }).isDisabled()).toBe(true);
+    await page.getByRole("button", { name: /^选择模型：/ }).click();
+    expect(await page.locator(".model-catalog-option[aria-pressed]").evaluateAll(nodes => nodes.every(node => (node as HTMLButtonElement).disabled))).toBe(true);
+    await page.getByRole("button", { name: "切换禁用" }).click();
+    expect(await page.locator("details[open]").count()).toBe(0);
+    await trigger.click();
+    expect(await page.locator(".model-catalog").count()).toBe(0);
+    await page.getByRole("button", { name: "清空模型" }).click();
+    await trigger.click();
+    expect(await page.getByRole("button", { name: "选择模型：尚未选择", exact: true }).textContent()).toBe("选择模型");
+    expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
+    await page.getByRole("button", { name: "选择模型：尚未选择", exact: true }).click();
+    expect(await page.locator(".model-catalog-option[aria-pressed='true']").count()).toBe(0);
+    expect(await page.locator(".model-catalog-option[aria-pressed]").count()).toBe(2);
+    expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
   } finally { await browser.close(); }
 }, 20000);

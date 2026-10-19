@@ -1,5 +1,5 @@
-import { CaretDown, Cpu } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { CaretDown, CaretLeft, CaretRight, Cpu } from "@phosphor-icons/react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ModelCatalog, type ModelCatalogGroup } from "./ModelCatalog";
 
 const efforts = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -27,6 +27,8 @@ export function ModelPicker(props: {
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const catalogId = useId();
   const initialized = useRef(false);
   const effortIndex = efforts.findIndex(
     (value) => value === props.reasoning?.value,
@@ -54,27 +56,42 @@ export function ModelPicker(props: {
   };
   const close = () => {
     if (ref.current) ref.current.open = false;
+    setOpen(false);
+    setModelsOpen(false);
   };
   useEffect(() => {
     if (!open) return;
-    if (
-      !props.hideSearch &&
-      window.matchMedia("(pointer: fine) and (min-width: 769px)").matches
-    )
-      ref.current
-        ?.querySelector<HTMLInputElement>("input:not([type=range])")
-        ?.focus();
+    if (modelsOpen) {
+      const search =
+        !props.hideSearch &&
+        window.matchMedia("(pointer: fine) and (min-width: 769px)").matches
+          ? ref.current?.querySelector<HTMLInputElement>("input:not([type=range])")
+          : null;
+      const option =
+        ref.current?.querySelector<HTMLButtonElement>(
+          '.model-catalog-option[aria-pressed="true"]:not(:disabled)',
+        ) ?? ref.current?.querySelector<HTMLButtonElement>(
+          ".model-catalog-option:not(:disabled)",
+        );
+      const back = ref.current?.querySelector<HTMLButtonElement>(".model-picker-back");
+      (search ?? option ?? back)?.focus();
+    } else {
+      ref.current?.querySelector<HTMLButtonElement>(".model-picker-current")?.focus();
+    }
+  }, [open, modelsOpen, props.hideSearch]);
+  useEffect(() => {
+    if (!open) return;
     const outside = (event: PointerEvent) => {
       if (
         event.target instanceof Node &&
         ref.current &&
         !ref.current.contains(event.target)
       )
-        ref.current.open = false;
+        close();
     };
     window.addEventListener("pointerdown", outside);
     return () => window.removeEventListener("pointerdown", outside);
-  }, [open, props.hideSearch]);
+  }, [open]);
   return (
     <details
       ref={ref}
@@ -85,6 +102,8 @@ export function ModelPicker(props: {
           if (props.onOpen) props.onOpen();
           else if (!initialized.current) props.onRefresh();
           initialized.current = true;
+        } else {
+          setModelsOpen(false);
         }
       }}
       onBlur={(event) => {
@@ -94,8 +113,12 @@ export function ModelPicker(props: {
         if (event.key !== "Escape" || !open) return;
         event.preventDefault();
         event.stopPropagation();
-        close();
-        ref.current?.querySelector("summary")?.focus();
+        if (modelsOpen) {
+          setModelsOpen(false);
+        } else {
+          close();
+          ref.current?.querySelector("summary")?.focus();
+        }
       }}
     >
       <summary
@@ -134,12 +157,28 @@ export function ModelPicker(props: {
       </summary>
       {open && (
         <div className="composer-model-panel">
-          {props.reasoning && (
+          {!modelsOpen && (
+            <div className="model-picker-heading">
+              <span>{props.reasoning ? "思考等级" : "模型"}</span>
+              <button
+                type="button"
+                className="model-picker-current"
+                title={`${props.value || "尚未选择模型"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}`}
+                aria-label={`选择模型：${props.value || "尚未选择"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}`}
+                onClick={() => setModelsOpen(true)}
+              >
+                <span>{props.value.split("/").at(-1) || "选择模型"}</span>
+                {props.sourceLabel && <small>{props.sourceLabel}</small>}
+                <CaretRight size={14} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+          {!modelsOpen && props.reasoning && (
             <fieldset
               className="model-effort-options"
               disabled={props.reasoning.disabled}
             >
-              <legend>思考等级</legend>
+              <legend className="visually-hidden">思考等级</legend>
               <div className="effort-slider-heading">
                 <output>{formatEffort(efforts[draftEffort])}</output>
               </div>
@@ -196,24 +235,47 @@ export function ModelPicker(props: {
               </div>
             </fieldset>
           )}
-          <ModelCatalog
-            value={props.value}
-            models={props.models}
-            onRefresh={props.onRefresh}
-            loading={props.loading}
-            error={props.error}
-            inputId="run-model"
-            {...(props.hideSearch !== undefined ? { hideSearch: props.hideSearch } : {})}
-            groups={props.groups}
-            sourceId={props.sourceId}
-            disabled={props.disabled}
-            onSelect={(model, sourceId) => {
-              props.onSelect(model, sourceId);
-              if (props.reasoning && !props.hideSearch) return;
-              close();
-              ref.current?.querySelector("summary")?.focus();
-            }}
-          />
+          {modelsOpen && (
+            <div
+              id={catalogId}
+              className="model-picker-subpanel"
+              role="region"
+              aria-label="选择模型"
+            >
+              <div className="model-picker-subheading">
+                <button
+                  type="button"
+                  className="model-picker-back"
+                  aria-label="返回模型设置"
+                  onClick={() => setModelsOpen(false)}
+                >
+                  <CaretLeft size={16} aria-hidden="true" />
+                </button>
+                <span>选择模型</span>
+              </div>
+              <ModelCatalog
+                value={props.value}
+                models={props.models}
+                onRefresh={props.onRefresh}
+                loading={props.loading}
+                error={props.error}
+                inputId={catalogId + "-search"}
+                {...(props.hideSearch !== undefined ? { hideSearch: props.hideSearch } : {})}
+                groups={props.groups}
+                sourceId={props.sourceId}
+                disabled={props.disabled}
+                onSelect={(model, sourceId) => {
+                  props.onSelect(model, sourceId);
+                  if (props.reasoning) {
+                    setModelsOpen(false);
+                  } else {
+                    close();
+                    ref.current?.querySelector("summary")?.focus();
+                  }
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
     </details>

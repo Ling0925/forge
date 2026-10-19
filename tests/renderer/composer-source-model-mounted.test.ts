@@ -64,12 +64,22 @@ it("keeps a picked model paired with the source it came from", async () => {
     // Picking a model under Source B moves the source with it: the summary now
     // reports B's model and B's group owns the selected option.
     await page.locator(".composer-model-summary").click();
+    expect(await page.locator(".model-catalog").count()).toBe(0);
+    const currentModel = page.getByRole("button", { name: /^选择模型：/ });
+    expect(await currentModel.textContent()).toContain("Source A");
+    await currentModel.click();
+    expect(await page.getByLabel("搜索模型或输入精确 ID").count()).toBe(0);
+    expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
     const sourceB = page.getByRole("group", { name: "Source B", exact: true });
     await sourceB.getByRole("button", { name: /b\/two/ }).click();
     await expect.poll(() => page.locator(".composer-model-summary").getAttribute("title")).toContain("b/two");
     await expect.poll(() => page.locator(".composer-model-summary").getAttribute("title")).toContain("Source B");
-    await page.locator(".composer-model-summary").click();
+    expect(await page.locator(".model-catalog").count()).toBe(0);
+    expect(await currentModel.textContent()).toContain("Source B");
+    expect(await currentModel.evaluate(node => node === document.activeElement)).toBe(true);
+    await currentModel.click();
     await expect.poll(() => sourceB.getByRole("button", { pressed: true }).count()).toBe(1);
+    await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
 
     // The submitted pair matches what the UI displays.

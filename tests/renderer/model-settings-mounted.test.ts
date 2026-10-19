@@ -82,7 +82,12 @@ it("model search requires selection and settings retain drafts and save once", a
     await page.setContent('<div id="root"></div>');
     await page.addScriptTag({ content: script });
     const trigger = page.locator(".composer-model-summary");
-    await trigger.click();
+    const openCatalog = async () => {
+      await trigger.click();
+      expect(await page.locator(".model-catalog").count()).toBe(0);
+      await page.getByRole("button", { name: /^选择模型：/ }).click();
+    };
+    await openCatalog();
     const search = page.getByLabel("搜索模型或输入精确 ID");
     await expect
       .poll(() => page.locator(".model-catalog-option[aria-pressed]").count())
@@ -107,7 +112,7 @@ it("model search requires selection and settings retain drafts and save once", a
     expect(
       await trigger.evaluate((node) => node === document.activeElement),
     ).toBe(true);
-    await trigger.click();
+    await openCatalog();
     expect(await search.inputValue()).toBe("");
     expect(await page.evaluate(() => Reflect.get(window, "modelReads"))).toBe(1);
     await page.getByRole("button", { name: "刷新模型目录" }).click();
@@ -120,8 +125,12 @@ it("model search requires selection and settings retain drafts and save once", a
     expect(await page.locator("#selected").innerText()).toBe(
       "custom/exact-model",
     );
-    await trigger.click();
+    await openCatalog();
     await search.press("Escape");
+    expect(await page.locator("details[open]").count()).toBe(1);
+    expect(await page.locator(".model-catalog").count()).toBe(0);
+    expect(await page.getByRole("button", { name: /^选择模型：/ }).evaluate(node => node === document.activeElement)).toBe(true);
+    await page.keyboard.press("Escape");
     expect(await page.locator("details[open]").count()).toBe(0);
     await page.getByRole("button", { name: "打开设置" }).click();
     await page.getByRole("button", { name: "执行与权限", exact: true }).click();
