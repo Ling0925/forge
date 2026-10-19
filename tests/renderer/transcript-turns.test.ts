@@ -7,6 +7,7 @@ import {
   partitionTurns,
   PlanStageDivider,
   StoredTranscript,
+  ToolPreviews,
 } from "../../src/renderer/components/workbench/Transcript";
 import type { TimelineItem } from "../../src/renderer/state/timeline";
 import { sessionSnapshotSchema } from "../../src/shared/schemas";
@@ -200,5 +201,28 @@ describe("Transcript Turn partitioning and grouping", () => {
     expect(blocks[1].kind).toBe("single");
     expect(blocks[1].entry.item.id).toBe("plan-tool-1");
     expect(blocks[2].kind).toBe("tool_group");
+  });
+
+  it("renders live tool previews with real-time diff badges (+added / -removed)", () => {
+    const html = renderToStaticMarkup(
+      createElement(ToolPreviews, {
+        previews: [
+          {
+            previewId: "write-1",
+            name: "write_file",
+            argumentsChars: 3878,
+            linesAdded: 123,
+            linesRemoved: 12,
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('class="tool-diff-stat tool-diff-added tool-live-diff"');
+    expect(html).toContain("+123");
+    expect(html).toContain('class="tool-diff-stat tool-diff-removed tool-live-diff"');
+    expect(html).toContain("-12");
+    expect(html).toContain("3878 字符");
+    expect(html).toContain("生成参数中");
   });
 });

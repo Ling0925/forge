@@ -272,4 +272,64 @@ describe("ephemeral tool previews", () => {
     expect(state.activeRuns[session]?.toolPreviews).toEqual([]);
     expect(state.activeRuns[session]?.status).toBe("failed");
   });
+
+  it("stores real-time linesAdded and linesRemoved on file writing tool previews", () => {
+    let state: WorkbenchState = {
+      ...initialWorkbenchState,
+      activeSessionId: session,
+      activeSnapshot: base,
+      activeRuns: {
+        [session]: { sessionId: session, runId: run, status: "running", streamingText: "" },
+      },
+    };
+
+    state = receive(state, {
+      type: "tool_call_preview",
+      sessionId: session,
+      timestamp: ts(1),
+      previewId: "write-preview-1",
+      name: "write_file",
+      argumentsChars: 120,
+      linesAdded: 15,
+    });
+
+    let previews = state.activeRuns[session]?.toolPreviews ?? [];
+    expect(previews).toHaveLength(1);
+    expect(previews[0].name).toBe("write_file");
+    expect(previews[0].linesAdded).toBe(15);
+    expect(previews[0].linesRemoved).toBeUndefined();
+
+    // Stream updates in place
+    state = receive(state, {
+      type: "tool_call_preview",
+      sessionId: session,
+      timestamp: ts(2),
+      previewId: "write-preview-1",
+      name: "write_file",
+      argumentsChars: 380,
+      linesAdded: 42,
+    });
+
+    previews = state.activeRuns[session]?.toolPreviews ?? [];
+    expect(previews).toHaveLength(1);
+    expect(previews[0].argumentsChars).toBe(380);
+    expect(previews[0].linesAdded).toBe(42);
+
+    // edit_file with both additions and removals
+    state = receive(state, {
+      type: "tool_call_preview",
+      sessionId: session,
+      timestamp: ts(3),
+      previewId: "edit-preview-2",
+      name: "edit_file",
+      argumentsChars: 240,
+      linesAdded: 123,
+      linesRemoved: 12,
+    });
+
+    previews = state.activeRuns[session]?.toolPreviews ?? [];
+    expect(previews).toHaveLength(2);
+    expect(previews[1].linesAdded).toBe(123);
+    expect(previews[1].linesRemoved).toBe(12);
+  });
 });

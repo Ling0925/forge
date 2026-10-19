@@ -29,6 +29,8 @@ export interface ToolPreviewEntry {
   readonly previewId: string;
   readonly name: string;
   readonly argumentsChars: number;
+  readonly linesAdded?: number;
+  readonly linesRemoved?: number;
 }
 
 export interface ActiveRunState {
@@ -457,6 +459,8 @@ export function workbenchReducer(
             previewId: event.previewId,
             name: event.name,
             argumentsChars: event.argumentsChars,
+            ...(event.linesAdded !== undefined ? { linesAdded: event.linesAdded } : {}),
+            ...(event.linesRemoved !== undefined ? { linesRemoved: event.linesRemoved } : {}),
           }),
         };
       if (event.type === "tool_preview_reset")

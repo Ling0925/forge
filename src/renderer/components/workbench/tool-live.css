@@ -41,6 +41,27 @@
   }
 }
 
+/* Live diff stats: dynamic badges matching finalized tool cards */
+.tool-live-diff {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 3px);
+  letter-spacing: -0.02em;
+  animation: tool-live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tool-live-pulse {
+  0%, 100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(1.15);
+  }
+}
+
 /* Command hint with terminal prefix and shimmer skeleton */
 .tool-live-command-hint {
   display: flex;

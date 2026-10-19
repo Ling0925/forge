@@ -40,7 +40,7 @@ export { partitionTurns, groupTurnEntries, computeTurnSummary };
  * card already exists as a validated tool call is filtered out by previewId in
  * the reducer, so these rows never duplicate a real tool row.
  */
-function ToolPreviews({
+export function ToolPreviews({
   previews,
 }: {
   readonly previews: NonNullable<
@@ -74,6 +74,22 @@ function ToolPreviews({
                 </span>
               </div>
               <div className="tool-disclosure-meta">
+                {preview.linesAdded !== undefined && preview.linesAdded > 0 && (
+                  <span
+                    className="tool-diff-stat tool-diff-added tool-live-diff"
+                    title={`实时写入约 ${preview.linesAdded} 行`}
+                  >
+                    +{preview.linesAdded}
+                  </span>
+                )}
+                {preview.linesRemoved !== undefined && preview.linesRemoved > 0 && (
+                  <span
+                    className="tool-diff-stat tool-diff-removed tool-live-diff"
+                    title={`实时删除约 ${preview.linesRemoved} 行`}
+                  >
+                    -{preview.linesRemoved}
+                  </span>
+                )}
                 <span className="tool-disclosure-status" data-status="running">
                   <span className="tool-live-spinner" aria-hidden="true" />
                 </span>
