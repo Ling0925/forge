@@ -270,6 +270,9 @@ export interface PlanStepItem {
 }
 
 export interface PlanItemData {
+  /** Optional in tool arguments written before independent plans existed. */
+  readonly id?: string;
+  readonly title?: string;
   readonly explanation?: string;
   readonly steps: readonly PlanStepItem[];
 }
@@ -302,7 +305,9 @@ export function extractPlanData(data: unknown): PlanItemData | null {
   if (!isPlanSteps(steps)) return null;
   const explanation =
     typeof record.explanation === "string" ? record.explanation : undefined;
-  return { explanation, steps };
+  const id = typeof record.id === "string" ? record.id : undefined;
+  const title = typeof record.title === "string" ? record.title : undefined;
+  return { id, title, explanation, steps };
 }
 
 function PlanStepsList({ steps }: { readonly steps: readonly PlanStepItem[] }) {
@@ -345,6 +350,7 @@ function PlanView({ plan }: { readonly plan: PlanItemData }) {
   return (
     <div className="tool-plan-view">
       <div className="tool-plan-header">
+        {plan.title && <strong title={plan.id}>{plan.title}</strong>}
         <div className="tool-plan-progress-info">
           <span className="tool-plan-progress-tag">
             计划进度 {completed} / {total} 项完成

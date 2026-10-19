@@ -81,6 +81,8 @@ export function mergeTranscript(
       : incoming.events,
     updatedAt: newerLocal ? current.updatedAt : incoming.updatedAt,
     status: newerLocal ? current.status : incoming.status,
+    // A stale read must not drop plans this client already synchronized.
     ...(newerLocal && current.plan ? { plan: current.plan } : {}),
+    ...(newerLocal && current.plans ? { plans: current.plans } : {}),
   };
 }

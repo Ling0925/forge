@@ -11,9 +11,117 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { OperationScope } from "../../state/operation-scope";
 import { useWorkbench } from "../../state/workbench-context";
+import type { SessionSnapshot, TaskPlan } from "../../../shared/schemas";
+import { sessionPlans } from "../../../shared/plans";
 import { Button } from "../primitives/Button";
 import { StatusBadge } from "../primitives/StatusBadge";
 import { Markdown } from "./Markdown";
+
+function planProgress(plan: TaskPlan) {
+  const completed = plan.steps.filter((step) => step.status === "completed").length;
+  const total = plan.steps.length;
+  const label =
+    total > 0 && completed === total
+      ? "已完成"
+      : plan.steps.some((step) => step.status === "in_progress")
+        ? "进行中"
+        : "待处理";
+  return { completed, total, label };
+}
+
+function PlanSteps({ plan }: { readonly plan: TaskPlan }) {
+  return (
+    <ol className="wb-plan-progress">
+      {plan.steps.map((step, position) => (
+        <li key={`${step.step}:${position}`}>
+          <span className={`plan-status plan-${step.status}`}>
+            {step.status === "completed"
+              ? "✓"
+              : step.status === "in_progress"
+                ? "●"
+                : "○"}
+          </span>{" "}
+          <span className="plan-step-text">{step.step}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * Plans are independent records: the current one stays expanded, while earlier
+ * plans remain reachable as compact disclosures with their own numbering.
+ */
+export function PlanSection({
+  snapshot,
+}: {
+  readonly snapshot: Pick<SessionSnapshot, "plan" | "plans">;
+}) {
+  const plans = sessionPlans(snapshot);
+  const currentId = snapshot.plan ? (snapshot.plan.id ?? "legacy") : null;
+  const current = currentId ? (plans.find((plan) => plan.id === currentId) ?? null) : null;
+  const historical = currentId
+    ? plans.filter((plan) => plan.id !== currentId)
+    : plans.slice(0, -1);
+  const currentPlan =
+    current ?? (currentId === null && plans.length ? (plans.at(-1) ?? null) : null);
+  const currentProgress = currentPlan ? planProgress(currentPlan) : null;
+  return (
+    <section className="wb-stack inspector-section">
+      <h3>计划</h3>
+      {currentPlan && currentProgress ? (
+        <>
+          {/* Plan progress stays visible (live status); only the long-form
+              explanation collapses. */}
+          <p className="wb-plan-current-title">
+            <strong>{currentPlan.title ?? "原有计划"}</strong>{" "}
+            <span className="wb-muted">
+              {currentProgress.completed}/{currentProgress.total} ·{" "}
+              {currentProgress.label}
+            </span>
+          </p>
+          <PlanSteps plan={currentPlan} />
+          <details className="wb-disclosure inspector-disclosure-card">
+            <summary>
+              查看计划说明（{currentPlan.steps.length} 项）
+            </summary>
+            <div className="wb-disclosure-body">
+              <Markdown source={currentPlan.explanation} />
+            </div>
+          </details>
+        </>
+      ) : (
+        <p className="wb-muted">
+          尚无已保存计划。使用 Plan 模式请求只读规划。
+        </p>
+      )}
+      {historical.length > 0 && (
+        <div className="wb-stack">
+          <p className="wb-muted">历史计划 {historical.length}</p>
+          {historical.map((plan) => {
+            const index = plans.indexOf(plan) + 1;
+            const progress = planProgress(plan);
+            return (
+              <details
+                key={`${plan.id}:${index}`}
+                className="wb-disclosure inspector-disclosure-card"
+              >
+                <summary>
+                  计划 {index} · {plan.title ?? "原有计划"} ·{" "}
+                  {progress.completed}/{progress.total} {progress.label}
+                </summary>
+                <div className="wb-disclosure-body">
+                  <PlanSteps plan={plan} />
+                  <Markdown source={plan.explanation} />
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function RuntimePanels() {
   const { state, selectSession, refreshActiveSession } = useWorkbench();
@@ -281,39 +389,7 @@ export function RuntimePanels() {
           </p>
         )}
       </section>
-      <section className="wb-stack inspector-section">
-        <h3>计划</h3>
-        {snapshot.plan ? (
-          <>
-            {/* Plan progress stays visible (live status); only the long-form
-                explanation collapses. */}
-            <ol className="wb-plan-progress">
-              {snapshot.plan.steps.map((step, position) => (
-                <li key={`${step.step}:${position}`}>
-                  <span className={`plan-status plan-${step.status}`}>
-                    {step.status === "completed"
-                      ? "✓"
-                      : step.status === "in_progress"
-                        ? "●"
-                        : "○"}
-                  </span>{" "}
-                  <span className="plan-step-text">{step.step}</span>
-                </li>
-              ))}
-            </ol>
-            <details className="wb-disclosure inspector-disclosure-card">
-              <summary>查看计划说明（{snapshot.plan.steps.length} 项）</summary>
-              <div className="wb-disclosure-body">
-                <Markdown source={snapshot.plan.explanation} />
-              </div>
-            </details>
-          </>
-        ) : (
-          <p className="wb-muted">
-            尚无已保存计划。使用 Plan 模式请求只读规划。
-          </p>
-        )}
-      </section>
+      <PlanSection snapshot={snapshot} />
     </>
   );
 }

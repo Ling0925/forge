@@ -102,7 +102,7 @@ export async function executeDesktopSlash(line: string, host: DesktopSlashHost):
         ? `投影上下文：${result.beforeChars} → ${result.afterChars} 字符。` : "";
       return { text: `${summary.fallback ? "已生成降级摘要（模型摘要未成功），内容可能不完整。" : "上下文压缩完成。"}${size}原始聊天记录保留，后续请求使用摘要；累计 token 用量不会清零。` };
     }
-    case "/plan": return data(await actions.plan(id()));
+    case "/plan": return data(await actions.plans(id()));
     case "/diagnostics": return data(await actions.diagnostics(id()));
     case "/context": return data(await actions.context(id()));
     case "/skills": return data(await actions.skills(id()));

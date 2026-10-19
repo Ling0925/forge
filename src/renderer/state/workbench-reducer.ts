@@ -13,6 +13,7 @@ import type {
 } from "../shared-types";
 import { appendSessionEvent } from "./session-usage";
 import { estimateTokens } from "../../shared/context-usage";
+import { recordPlan } from "../../shared/plans";
 import {
   type PendingOutput,
   mergeTranscript,
@@ -644,6 +645,12 @@ export function workbenchReducer(
       )
         return result; // transient text never copies the stored transcript
       const snapshot = state.activeSnapshot;
+      // Plans are independent records: update by id and keep the others, while
+      // `plan` remains the current-plan projection for older surfaces.
+      const updatedPlans =
+        snapshot?.id === event.sessionId && event.type === "plan_updated"
+          ? recordPlan(snapshot, event.plan)
+          : null;
       return {
         ...result,
         sessions: state.sessions.map((s) =>
@@ -656,8 +663,9 @@ export function workbenchReducer(
             ? {
                 ...snapshot,
                 status: next.status,
-                plan:
-                  event.type === "plan_updated" ? event.plan : snapshot.plan,
+                ...(updatedPlans
+                  ? { plan: updatedPlans.plan, plans: updatedPlans.plans }
+                  : {}),
                 updatedAt: event.timestamp,
                 events: appendSessionEvent(snapshot.events, event),
               }
