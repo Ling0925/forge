@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("combines model and effort with five readable levels on desktop and mobile", async () => {
+it("offers only low, medium, high and xhigh on desktop and mobile", async () => {
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import {createRoot} from 'react-dom/client';
@@ -21,6 +21,8 @@ it("combines model and effort with five readable levels on desktop and mobile", 
           <ModelPicker value={model} models={['provider/long-model-name','provider/beta']} onSelect={select}
             onRefresh={()=>{}} loading={false} error="" reasoning={{value:effort,onChange:setEffort,disabled}} />
           <button onClick={()=>disable(value=>!value)}>切换禁用</button>
+          {['default','none','minimal'].map(value => <button key={value} onClick={()=>setEffort(value)}>{value}</button>)}
+          <output id="saved-effort">{effort}</output>
         </div></div>;
       }
       createRoot(document.getElementById('root')).render(<App/>);
@@ -37,30 +39,47 @@ it("combines model and effort with five readable levels on desktop and mobile", 
     page.setDefaultTimeout(4000);
     await page.setContent(`<style>${css}</style><div id="root"></div>`);
     await page.addScriptTag({ content: js });
+    const labels = ["low", "medium", "high", "xhigh"];
+    const trigger = page.locator(".composer-model-summary");
+    for (const removed of ["default", "none", "minimal"]) {
+      await page.getByRole("button", { name: removed, exact: true }).click();
+      await trigger.click();
+      const slider = page.getByRole("slider", { name: "思考等级", exact: true });
+      await slider.waitFor();
+      expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual(labels);
+      expect(await page.locator("#saved-effort").textContent()).toBe(removed);
+      expect(await trigger.getAttribute("title")).not.toContain(removed);
+      expect(await page.locator(".model-effort-meter").count()).toBe(0);
+      await slider.press("Home");
+      expect(await page.locator("#saved-effort").textContent()).toBe("low");
+      await page.keyboard.press("Escape");
+    }
     for (const width of [1440, 390]) for (const theme of ["dark", "light"]) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
-      const trigger = page.locator(".composer-model-summary");
       await trigger.click();
       const search = page.getByLabel("搜索模型或输入精确 ID");
       await search.waitFor();
-      const labels = ["default", "none", "minimal", "low", "medium", "high", "xhigh"];
       expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual(labels);
       expect(await page.locator(".model-effort-options legend").textContent()).toBe("思考等级");
       if (width === 390) expect(await search.evaluate(node => node === document.activeElement)).toBe(false);
       const slider = page.getByRole("slider", { name: "思考等级", exact: true });
+      expect(await slider.getAttribute("max")).toBe("3");
       await slider.press("Home");
-      expect(await page.locator(".effort-slider-heading").textContent()).toBe("default");
+      expect(await page.locator(".effort-slider-heading").textContent()).toBe("low");
       for (const [index, label] of labels.entries()) {
         if (index) await slider.press("ArrowRight");
         expect(await slider.getAttribute("aria-valuetext")).toBe(label);
+        expect(await page.locator("#saved-effort").textContent()).toBe(label);
         expect(await page.locator(".effort-slider-heading output").textContent()).toBe(label);
         expect(await trigger.getAttribute("title")).toContain(`思考：${label}`);
-        expect(await page.locator(".model-effort-meter > span").count()).toBe(5);
-        expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(Math.max(0, index - 1));
-        expect(await page.locator(".model-effort-meter").getAttribute("aria-label")).toContain(label);
-        if (index <= 1) expect(await page.locator(".model-effort-meter small").textContent()).toBe(label);
+        expect(await page.locator(".model-effort-meter > span").count()).toBe(4);
+        expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(index + 1);
+        expect(await page.locator(".model-effort-meter").getAttribute("aria-label")).toBe(`思考等级：${label}，${index + 1}/4`);
       }
+      await slider.press("ArrowRight");
+      expect(await slider.getAttribute("aria-valuetext")).toBe("xhigh");
+      expect(await page.locator(".effort-slider").getAttribute("data-max")).toBe("true");
       expect(await page.locator(".effort-slider-fill").evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("effort-shimmer");
       await page.emulateMedia({ reducedMotion: "reduce" });
       expect(await page.locator(".effort-slider-fill").evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");
@@ -76,16 +95,16 @@ it("combines model and effort with five readable levels on desktop and mobile", 
       if (!bounds) throw new Error("Missing slider");
       await page.mouse.move(bounds.x + bounds.width - 7, bounds.y + bounds.height / 2);
       await page.mouse.down();
-      await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, { steps: 8 });
-      expect(await slider.getAttribute("aria-valuetext")).toBe("low");
-      expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(5);
+      await page.mouse.move(bounds.x + bounds.width / 3, bounds.y + bounds.height / 2, { steps: 8 });
+      expect(await slider.getAttribute("aria-valuetext")).toBe("medium");
+      expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(4);
       await page.mouse.up();
       expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(2);
       await page.keyboard.press("Escape");
       expect(await trigger.evaluate(node => node === document.activeElement)).toBe(true);
     }
     await page.getByRole("button", { name: "切换禁用" }).click();
-    await page.locator(".composer-model-summary").click();
+    await trigger.click();
     expect(await page.getByRole("slider", { name: "思考等级", exact: true }).isDisabled()).toBe(true);
   } finally { await browser.close(); }
 }, 20000);

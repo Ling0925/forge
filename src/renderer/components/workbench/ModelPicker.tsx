@@ -2,7 +2,7 @@ import { CaretDown, Cpu } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { ModelCatalog, type ModelCatalogGroup } from "./ModelCatalog";
 
-const efforts = ["default", "none", "minimal", "low", "medium", "high", "xhigh"] as const;
+const efforts = ["low", "medium", "high", "xhigh"] as const;
 
 export function ModelPicker(props: {
   readonly value: string;
@@ -30,7 +30,7 @@ export function ModelPicker(props: {
   const effortIndex = efforts.findIndex(
     (value) => value === props.reasoning?.value,
   );
-  const effortLabel = efforts[effortIndex] ?? "default";
+  const effortLabel = efforts[effortIndex];
   const [draftEffort, setDraftEffort] = useState(Math.max(0, effortIndex));
   const submittedEffort = useRef<number | null>(null);
   useEffect(() => {
@@ -99,7 +99,7 @@ export function ModelPicker(props: {
     >
       <summary
         className="composer-dropdown-trigger composer-model-summary"
-        title={`${props.value || "尚未选择模型"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}${props.reasoning ? ` · 思考：${effortLabel}` : ""}`}
+        title={`${props.value || "尚未选择模型"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}${effortLabel ? ` · 思考：${effortLabel}` : ""}`}
       >
         <Cpu size={16} aria-hidden="true" />
         <span className="composer-dropdown-label">
@@ -116,18 +116,17 @@ export function ModelPicker(props: {
             {props.sourceLabel}
           </span>
         )}
-        {props.reasoning && (
+        {effortLabel && (
           <span
             className="model-effort-meter"
-            aria-label={`思考等级：${effortLabel}${effortIndex > 1 ? `，${effortIndex - 1}/5` : ""}`}
+            aria-label={`思考等级：${effortLabel}，${effortIndex + 1}/${efforts.length}`}
           >
-            {[1, 2, 3, 4, 5].map((level) => (
+            {efforts.map((value, index) => (
               <span
-                key={level}
-                className={level <= effortIndex - 1 ? "is-filled" : ""}
+                key={value}
+                className={index <= effortIndex ? "is-filled" : ""}
               />
             ))}
-            {effortIndex <= 1 && <small>{effortLabel}</small>}
           </span>
         )}
         <CaretDown size={16} aria-hidden="true" />
@@ -143,17 +142,17 @@ export function ModelPicker(props: {
               <div className="effort-slider-heading">
                 <output>{efforts[draftEffort]}</output>
               </div>
-              <div className="effort-slider" data-max={draftEffort === 6}>
+              <div className="effort-slider" data-max={draftEffort === efforts.length - 1}>
                 <div className="effort-slider-track" aria-hidden="true">
                   <span
                     className="effort-slider-fill"
-                    style={{ width: `${(draftEffort / 6) * 100}%` }}
+                    style={{ width: `${(draftEffort / (efforts.length - 1)) * 100}%` }}
                   />
                 </div>
                 <input
                   type="range"
                   min={0}
-                  max={6}
+                  max={efforts.length - 1}
                   step={1}
                   value={draftEffort}
                   aria-label="思考等级"
