@@ -804,10 +804,13 @@ export function ToolDisclosure({
   const isRunCommand = toolName === "run_command";
   const isConsole = isRunCommand || toolName === "command_task";
   const isWaiting = status === "running";
+  // File modifications and failed tools open by default. Read-only queries and
+  // terminal commands default to collapsed quiet rows from start to finish,
+  // preventing jarring momentary expand/collapse jitter as fast tools complete.
   const initialExpanded =
     defaultExpanded !== undefined
       ? defaultExpanded
-      : isWaiting || writesFiles || status === "failed";
+      : writesFiles || status === "failed";
   const [expanded, setExpanded] = useState(initialExpanded);
   const manuallyToggled = useRef(false);
   const detailsId = useId();
@@ -855,8 +858,12 @@ export function ToolDisclosure({
       autoCollapsed
     )
       return;
-    setExpanded(status !== "completed" || writesFiles);
-  }, [status, writesFiles, defaultExpanded, autoCollapsed]);
+    // Auto-reveal on failure so errors are prominently displayed. Never
+    // auto-collapse tools upon completion (which caused sudden collapse jumps).
+    if (status === "failed") {
+      setExpanded(true);
+    }
+  }, [status, defaultExpanded, autoCollapsed]);
 
   // Phases fold once when they pass into history. Remember which phase already
   // folded so a manual reopen is respected until the item enters a new phase.

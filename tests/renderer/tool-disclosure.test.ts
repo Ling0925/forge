@@ -91,15 +91,24 @@ describe("tool disclosure row", () => {
     expect(html).toContain("/tmp/project");
   });
 
-  it("opens a command by default so its command and result read as one unit", () => {
-    const html = render({
+  it("keeps a running command collapsed by default to avoid completion jitter, and opens when defaultExpanded", () => {
+    const collapsed = render({
       toolName: "run_command",
       command: "rm -rf /",
       status: "running",
     });
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("rm -rf /");
-    expect(html).toContain("结果");
+    expect(collapsed).toContain('aria-expanded="false"');
+    expect(collapsed).toContain("rm -rf /");
+
+    const expanded = render({
+      toolName: "run_command",
+      command: "rm -rf /",
+      status: "running",
+      defaultExpanded: true,
+    });
+    expect(expanded).toContain('aria-expanded="true"');
+    expect(expanded).toContain("rm -rf /");
+    expect(expanded).toContain("结果");
   });
 
   it("renders parsed parameter rows instead of a raw JSON blob", () => {

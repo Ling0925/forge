@@ -171,6 +171,7 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     expect(
       await page.locator(".live-tool .tool-disclosure-target").innerText(),
     ).toBe("ToolDisclosure.tsx");
+    await page.locator(".live-tool .tool-disclosure-header").click();
     expect(await page.locator(".live-tool .tool-read-path").innerText()).toBe(
       "src/renderer/components/primitives/ToolDisclosure.tsx",
     );
@@ -418,30 +419,31 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
           ),
       );
       await desktopPage.waitForFunction(
-        ({ status, history }) => {
+        ({ status }) => {
           const live = document.querySelector(".live-tool");
-          return (
-            live?.getAttribute("data-status") === status &&
-            (history ||
-              live.getAttribute("data-expanded") ===
-                (status === "completed" ? "false" : "true"))
-          );
+          return live?.getAttribute("data-status") === status;
         },
-        { status, history },
+        { status },
       );
     };
-    expect(await live.getAttribute("data-expanded")).toBe("true");
-    await updateTool("completed");
+    // Live read-only tool starts collapsed as a quiet row (prevents expand/collapse pop jitter)
     expect(await live.getAttribute("data-expanded")).toBe("false");
+    await updateTool("completed");
+    // Completed read-only tool stays collapsed
+    expect(await live.getAttribute("data-expanded")).toBe("false");
+    // Errors automatically pop open to expose reasons
     await updateTool("failed");
-    expect(await live.innerText()).toContain("Access denied");
-    await updateTool("completed");
-    await live.locator(".tool-disclosure-header").click();
-    await updateTool("completed", true);
     expect(await live.getAttribute("data-expanded")).toBe("true");
+    expect(await live.innerText()).toContain("Access denied");
+    // Completed after failure keeps details visible
+    await updateTool("completed");
+    expect(await live.getAttribute("data-expanded")).toBe("true");
+    // User can manually collapse it
     await live.locator(".tool-disclosure-header").click();
-    await updateTool("running", true);
     expect(await live.getAttribute("data-expanded")).toBe("false");
+    // User can manually re-expand it
+    await live.locator(".tool-disclosure-header").click();
+    expect(await live.getAttribute("data-expanded")).toBe("true");
     await desktop.close();
   } finally {
     await browser.close();
