@@ -2,7 +2,6 @@ import {
   ArrowUp,
   CaretDown,
   Compass,
-  FolderOpen,
   Images,
   Lightning,
   Lock,
@@ -23,8 +22,7 @@ import { modelCatalogCache, modelCatalogKey } from "../../state/model-catalog-ca
 import { useWorkbench } from "../../state/workbench-context";
 import { hostCapabilities } from "../../web-host";
 import { Button } from "../primitives/Button";
-import { Field } from "../primitives/Field";
-import { Input } from "../primitives/Input";
+import { WorkspacePicker } from "./WorkspacePicker";
 import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
 import { UsagePopover } from "./UsagePopover";
@@ -127,7 +125,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const selectedDraft = useRef(draftId);
   selectedDraft.current = draftId;
   const [workspace, setWorkspace] = useState("");
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   useAutosizePrompt(promptRef, prompt);
   const [longPressing, setLongPressing] = useState(false);
@@ -624,70 +621,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       }}
     >
       {isNew && (
-        <div className="composer-project">
-          <button
-            type="button"
-            className="composer-project-trigger"
-            title={workspace || "选择项目目录"}
-            onClick={() => setWorkspaceOpen(!workspaceOpen)}
-            aria-expanded={workspaceOpen}
-          >
-            <FolderOpen size={15} aria-hidden="true" />
-            <span>
-              {workspace
-                ? workspace.split(/[\\/]/).filter(Boolean).at(-1)
-                : "选择工作区"}
-            </span>
-            <CaretDown size={12} aria-hidden="true" />
-          </button>
-          {workspaceOpen && (
-            <div className="composer-project-panel">
-              <Field
-                id="workspace-path"
-                label={hostCapabilities.web ? "服务器工作区" : "工作区"}
-                helper={
-                  workspaceRestricted
-                    ? "此 Web 服务固定使用这个项目。"
-                    : hostCapabilities.web
-                      ? "输入服务器上的项目绝对路径，不是浏览器所在机器的目录。"
-                      : "默认沿用当前项目，也可以输入其他绝对路径。"
-                }
-              >
-                <div className="composer-workspace-row">
-                  <Input
-                    id="workspace-path"
-                    value={workspace}
-                    readOnly={workspaceRestricted}
-                    onChange={(event) => setWorkspace(event.target.value)}
-                  />
-                  {!hostCapabilities.web && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={async () => {
-                        const path = await chooseWorkspace();
-                        if (path && alive.current) setWorkspace(path);
-                      }}
-                    >
-                      选择目录
-                    </Button>
-                  )}
-                </div>
-              </Field>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setWorkspaceOpen(false);
-                  promptRef.current?.focus();
-                }}
-              >
-                完成
-              </Button>
-            </div>
-          )}
-        </div>
+        <WorkspacePicker
+          workspace={workspace}
+          chooseWorkspace={chooseWorkspace}
+          onChange={setWorkspace}
+          onDone={() => promptRef.current?.focus()}
+        />
       )}
       <div className="composer-inner composer-split">
         <div

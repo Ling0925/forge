@@ -8,6 +8,7 @@ import {
   runEventSchema,
 } from "../shared/ipc";
 import type { SessionSnapshot } from "../shared/schemas";
+import { workspaceBrowseRequestSchema, workspaceDirectoryPageSchema } from "../shared/workspaces";
 import { applySessionDelta, sessionDeltaSchema } from "../shared/session-delta";
 
 const handshakeSchema = z.object({
@@ -252,6 +253,11 @@ export async function installWebHost(): Promise<void> {
         ...bridge,
         restrictWorkspace: handshake.restrictWorkspace,
         chooseWorkspace: async () => handshake.workspace,
+        ...(!handshake.restrictWorkspace ? {
+          browseWorkspaces: async (path?: string) => workspaceDirectoryPageSchema.parse(
+            await post("/api/workspaces/browse", workspaceBrowseRequestSchema.parse({ path }), 10_000),
+          ),
+        } : {}),
         openExternal: async (value: string) => {
           window.open(
             externalUrlSchema.parse(value),
