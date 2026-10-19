@@ -543,7 +543,9 @@ function WaitAgentsView({ reports }: { readonly reports: readonly ChildAgentRepo
         const isCompleted = report.status === "completed";
         const isRunning = report.status === "running";
         const isFailed = report.status === "failed";
-        const text = report.summary || report.content;
+        const rawText = report.summary || report.content;
+        const isPlaceholder = isRunning && rawText === "No terminal snapshot";
+        const text = isPlaceholder ? "子任务正在后台自主执行中，等待完成交付…" : rawText;
         return (
           <div key={report.id} className={`agent-report-card status-${report.status}`}>
             <div className="agent-report-header">
@@ -574,7 +576,7 @@ function WaitAgentsView({ reports }: { readonly reports: readonly ChildAgentRepo
                     </span>
                   </span>
                 )}
-                {text && <ToolCopyButton text={text} label="复制报告" />}
+                {text && !isPlaceholder && <ToolCopyButton text={text} label="复制报告" />}
               </div>
             </div>
 
@@ -587,7 +589,7 @@ function WaitAgentsView({ reports }: { readonly reports: readonly ChildAgentRepo
 
             {text && (
               <div className="agent-summary-body">
-                <pre className="agent-summary-content">{text}</pre>
+                <pre className={`agent-summary-content ${isPlaceholder ? "is-placeholder" : ""}`}>{text}</pre>
               </div>
             )}
           </div>

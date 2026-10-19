@@ -1262,6 +1262,13 @@
   overflow-y: auto;
 }
 
+.agent-summary-content.is-placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+  background: var(--surface-soft);
+  border-style: dashed;
+}
+
 .agent-message-box,
 .agent-resolve-box {
   display: flex;
