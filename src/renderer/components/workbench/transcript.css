@@ -59,12 +59,19 @@
 }
 .reasoning-glyph {
   flex-shrink: 0;
+  transition: color 0.3s ease, opacity 0.3s ease;
 }
 .reasoning-live .reasoning-glyph {
   color: var(--accent);
 }
 .reasoning-done .reasoning-glyph {
   color: var(--text-muted);
+}
+.reasoning-live .reasoning-head {
+  cursor: default;
+}
+.reasoning-head:disabled {
+  opacity: 1;
 }
 .reasoning-label {
   font-weight: 500;
@@ -151,13 +158,15 @@
   0%,
   100% {
     opacity: 0.55;
+    color: var(--accent);
   }
   50% {
     opacity: 1;
+    color: var(--accent-hover, #c86343);
   }
 }
 .reasoning-live .reasoning-glyph {
-  animation: reasoning-pulse 1.4s ease-in-out infinite;
+  animation: reasoning-pulse 1.6s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .reasoning-live .reasoning-glyph {

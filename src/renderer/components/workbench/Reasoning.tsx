@@ -44,53 +44,56 @@ export function Reasoning({
     }
   });
   if (!text) return null;
-  if (live) {
-    const tail = text.split("\n").slice(-LIVE_TAIL_LINES).join("\n");
-    return (
-      <section className="reasoning reasoning-live" aria-label="思考中">
-        <div className="reasoning-head">
-          <Brain
-            size={14}
-            weight="fill"
-            className="reasoning-glyph"
-            aria-hidden="true"
-          />
-          <span className="reasoning-label">思考中</span>
-        </div>
-        <div className="reasoning-viewport" ref={viewport}>
-          <span className="reasoning-text">{tail}</span>
-        </div>
-      </section>
-    );
-  }
   const last = lastReasoningLine(text);
-  if (!last) return null;
+  if (!live && !last) return null;
+
+  const tail = live
+    ? text.split("\n").slice(-LIVE_TAIL_LINES).join("\n")
+    : "";
+
   return (
-    <section className="reasoning reasoning-done">
+    <section
+      className={`reasoning ${live ? "reasoning-live" : "reasoning-done"}`}
+      aria-label={live ? "思考中" : `思考过程：${last}`}
+    >
       <button
         type="button"
         className="reasoning-head"
-        onClick={() => setExpanded((open) => !open)}
-        aria-expanded={expanded}
-        aria-label={`思考过程：${last}`}
+        disabled={live}
+        onClick={live ? undefined : () => setExpanded((open) => !open)}
+        aria-expanded={live ? undefined : expanded}
+        aria-label={live ? "思考中" : `思考过程：${last}`}
       >
         <Brain
           size={14}
-          weight="regular"
+          weight={live ? "fill" : "regular"}
           className="reasoning-glyph"
           aria-hidden="true"
         />
-        <span className="reasoning-summary" title={last}>
-          {last}
-        </span>
-        <CaretRight
-          size={12}
-          weight="bold"
-          className={`reasoning-caret${expanded ? " is-expanded" : ""}`}
-          aria-hidden="true"
-        />
+        {live ? (
+          <span className="reasoning-label">思考中</span>
+        ) : (
+          <span className="reasoning-summary" title={last}>
+            {last}
+          </span>
+        )}
+        {!live && (
+          <CaretRight
+            size={12}
+            weight="bold"
+            className={`reasoning-caret${expanded ? " is-expanded" : ""}`}
+            aria-hidden="true"
+          />
+        )}
       </button>
-      {expanded && (
+
+      {live && (
+        <div className="reasoning-viewport" ref={viewport}>
+          <span className="reasoning-text">{tail}</span>
+        </div>
+      )}
+
+      {!live && expanded && (
         <div className="reasoning-full">
           {truncated && (
             <p className="wb-muted">思考预览已达显示上限，内容可能不完整。</p>
