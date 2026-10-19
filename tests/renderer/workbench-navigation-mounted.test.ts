@@ -99,9 +99,11 @@ it("unifies navigation and opens recent tasks without loading their histories up
         await page.evaluate((value) => {
           document.documentElement.dataset.theme = value;
         }, theme);
-        expect(
-          await page.getByRole("button", { name: "设置", exact: true }).count(),
-        ).toBe(1);
+        if (width > 1000) {
+          expect(
+            await page.getByRole("button", { name: "设置", exact: true }).count(),
+          ).toBe(1);
+        }
         expect(await header.count()).toBe(1);
         expect(await page.locator(".wb-mobile-nav").count()).toBe(0);
         const headerBox = await header.boundingBox();
@@ -161,13 +163,14 @@ it("unifies navigation and opens recent tasks without loading their histories up
     expect(
       await page.evaluate(() => Reflect.get(window, "fixture").reads.length),
     ).toBe(readCount + 1);
-    await details.click();
     expect(await page.locator(".workbench-main").isVisible()).toBe(true);
     await page.getByRole("button", { name: "收起详情", exact: true }).click();
     expect(await details.evaluate(el => el === document.activeElement)).toBe(true);
     await page.setViewportSize({ width: 320, height: 900 });
     expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    expect(await page.locator(".wb-session-actions").isVisible()).toBe(true);
+    await page.getByRole("button", { name: "打开会话列表" }).click();
+    expect(await page.locator(".wb-session-actions").first().isVisible()).toBe(true);
+    await page.getByRole("button", { name: "关闭侧边栏" }).click();
     await page.locator(".composer-textarea").fill("保留尚未发送的草稿");
     await details.click();
     expect(await page.locator(".workbench-main").isVisible()).toBe(false);
@@ -204,6 +207,7 @@ it("unifies navigation and opens recent tasks without loading their histories up
     expect(await page.locator(".workbench-main").isVisible()).toBe(true);
     expect(await page.locator(".approval-description").isVisible()).toBe(true);
     await page.screenshot({ path: `${evidence}/approval-320-dark.png` });
+    await page.getByRole("button", { name: "打开会话列表" }).click();
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await page.getByRole("region", { name: "设置工作区" }).waitFor();
     await page.getByRole("button", { name: "返回工作台" }).click();

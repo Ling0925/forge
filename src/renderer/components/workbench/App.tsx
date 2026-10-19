@@ -42,7 +42,13 @@ function Workbench() {
   const backgroundPending = Object.values(state.activeRuns).filter(
     (run) => run.pendingApproval && run.sessionId !== state.activeSessionId,
   ).length;
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(true);
+  const isWideScreen = () => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(min-width: 1001px)").matches;
+  };
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(
+    () => !isWideScreen(),
+  );
   const [focusToken, setFocusToken] = useState(0);
   const previousBackgroundPending = useRef(0);
   const detailsToggleRef = useRef<HTMLButtonElement | null>(null);
@@ -52,6 +58,20 @@ function Workbench() {
     }
     previousBackgroundPending.current = backgroundPending;
   }, [backgroundPending]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const media = window.matchMedia("(min-width: 1001px)");
+    const update = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        setInspectorCollapsed(false);
+      } else {
+        setInspectorCollapsed(true);
+        setMobileTab("task");
+      }
+    };
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [setMobileTab]);
   const revealInspector = () => {
     setInspectorCollapsed(false);
     setMobileTab("inspector");

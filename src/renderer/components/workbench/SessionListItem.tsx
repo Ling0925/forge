@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { SessionSummary } from "../../shared-types";
 import { readSessionInfo } from "../../state/session-info-cache";
 import { useWorkbench } from "../../state/workbench-context";
+import { SessionActions } from "./SessionActions";
 
 const labels: Readonly<Record<string, string>> = {
   running: "执行中",
@@ -26,6 +27,7 @@ export function SessionListItem({
   const active =
     !state.isNewSessionOpen && session.id === state.activeSessionId;
   const [open, setOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [info, setInfo] = useState({ tokens: "读取中…", model: session.model });
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const anchor = useRef<HTMLButtonElement>(null);
@@ -64,6 +66,7 @@ export function SessionListItem({
     };
   }, [open, session.id, session.model, session.updatedAt, session.status]);
   const reveal = () => {
+    if (isMenuOpen) return;
     const box = anchor.current?.getBoundingClientRect();
     if (!box) return;
     setPosition({
@@ -74,7 +77,7 @@ export function SessionListItem({
   };
   return (
     <div
-      className={`session-item ${active ? "is-active" : ""}`}
+      className={`session-item ${active ? "is-active" : ""}${isMenuOpen ? " is-menu-open" : ""}`}
       onMouseEnter={reveal}
       onMouseLeave={() => setOpen(false)}
     >
@@ -111,7 +114,14 @@ export function SessionListItem({
           {session.title}
         </span>
       </button>
-      {open &&
+      <SessionActions
+        session={session}
+        onOpenChange={(menuActive) => {
+          setIsMenuOpen(menuActive);
+          if (menuActive) setOpen(false);
+        }}
+      />
+      {open && !isMenuOpen &&
         createPortal(
           <div
             id={tooltipId}

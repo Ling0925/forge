@@ -316,7 +316,8 @@
   position: relative;
   flex-shrink: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background-color: transparent;
@@ -335,11 +336,12 @@
 
 /* One quiet row: status dot, left-aligned title, right-aligned timestamp. */
 .session-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-width: 0;
   padding: 6px 8px;
   border: none;
   border-radius: var(--radius-sm);
@@ -384,6 +386,100 @@
   white-space: nowrap;
 }
 
+.session-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.session-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  margin-right: 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.session-item:hover .session-action-btn,
+.session-item.is-active .session-action-btn,
+.session-item.is-menu-open .session-action-btn {
+  opacity: 0.7;
+}
+
+.session-action-btn:hover,
+.session-action-btn.is-active {
+  opacity: 1;
+  color: var(--text-primary);
+  background-color: var(--surface-hover);
+}
+
+@media (pointer: coarse) {
+  .session-action-btn {
+    opacity: 0.75;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+}
+
+.session-actions-menu-dropdown {
+  width: 160px;
+  padding: var(--space-1);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-actions-menu-dropdown .wb-menu-item {
+  width: 100%;
+  padding: 6px var(--space-2);
+  font-size: var(--text-xs);
+  text-align: left;
+  justify-content: flex-start;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  transition: background-color var(--transition-fast);
+}
+
+.session-actions-menu-dropdown .wb-menu-item:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.session-actions-menu-dropdown .wb-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.session-actions-menu-dropdown .wb-menu-item.is-danger {
+  color: var(--error);
+}
+
+.session-actions-menu-dropdown .wb-menu-item.is-danger:hover:not(:disabled) {
+  background-color: var(--error-bg);
+}
+
 /* Footer */
 .sidebar-footer {
   padding: var(--space-2) var(--space-3);
@@ -392,6 +488,30 @@
   align-items: center;
   justify-content: space-between;
   background: var(--sidebar-bg);
+}
+
+.sidebar-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-settings-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-hover);
+}
+
+.sidebar-settings-btn:active {
+  background-color: var(--surface-selected);
 }
 
 .sidebar-footer-status {

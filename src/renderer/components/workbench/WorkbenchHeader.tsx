@@ -1,9 +1,7 @@
-import { ChatText, Gear, Info, SidebarSimple } from "@phosphor-icons/react";
+import { ChatText, Info, SidebarSimple } from "@phosphor-icons/react";
 import { type Ref, useEffect, useState } from "react";
 import { useWorkbench } from "../../state/workbench-context";
-import { IconButton } from "../primitives/IconButton";
 import { CommandPalette } from "./CommandPalette";
-import { SessionActions } from "./SessionActions";
 
 interface WorkbenchHeaderProps {
   readonly isNew: boolean;
@@ -21,7 +19,7 @@ export function WorkbenchHeader({
   pending,
   inspector,
 }: WorkbenchHeaderProps) {
-  const { state, setMobileSidebar, openSettings } = useWorkbench();
+  const { state, setMobileSidebar } = useWorkbench();
   const [compact, setCompact] = useState(
     () => window.matchMedia("(max-width: 1000px)").matches,
   );
@@ -90,16 +88,6 @@ export function WorkbenchHeader({
             </span>
           )}
         </button>
-        {!isNew && <SessionActions key={state.activeSessionId ?? "none"} />}
-        <IconButton
-          icon={<Gear size={18} />}
-          size="sm"
-          label="设置"
-          onClick={() => {
-            setMobileSidebar(false);
-            openSettings(true);
-          }}
-        />
       </div>
     </header>
   );
