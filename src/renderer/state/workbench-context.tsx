@@ -166,7 +166,7 @@ function useController() {
         if (event.event.type === "agent_update") {
           void loadSessions();
           void refreshSession(event.event.childSessionId);
-        } else if (event.event.type === "run_started") void loadSessions();
+        } else if (event.event.type === "run_started" || event.event.type === "title_changed") void loadSessions();
       }
       if (event.event.type === "run_finished") {
         terminalSessions.current.add(id);

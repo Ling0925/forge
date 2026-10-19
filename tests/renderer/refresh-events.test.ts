@@ -5,6 +5,7 @@ it("refreshes the transcript as soon as the accepted user turn is persisted", ()
   // The runtime saves the user message and then emits run_started; without this
   // the sent message stays invisible until the first tool or run_finished.
   expect(shouldRefreshTranscript("run_started")).toBe(true);
+  expect(shouldRefreshTranscript("title_changed")).toBe(true);
 });
 
 it("also refreshes when a tool, agent or approval changes the stored transcript", () => {

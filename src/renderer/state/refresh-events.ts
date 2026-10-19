@@ -11,6 +11,7 @@ import type { AgentEvent } from "../../shared/schemas";
  */
 const REFRESH_EVENT_TYPES = new Set<AgentEvent["type"]>([
   "run_started",
+  "title_changed",
   "approval_requested",
   "tool_started",
   "tool_finished",
