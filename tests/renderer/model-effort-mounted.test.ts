@@ -3,12 +3,13 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("offers only low, medium, high and xhigh on desktop and mobile", async () => {
+it("offers low, medium, high, xhigh and MAX on desktop and mobile", async () => {
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import {createRoot} from 'react-dom/client';
       import {useState} from 'react';
       import {ModelPicker} from './src/renderer/components/workbench/ModelPicker';
+      import {settingsFields} from './src/shared/schemas';
       import './src/renderer/styles/global.css';
       import './src/renderer/components/workbench/app.css';
       import './src/renderer/styles/workspace-theme.css';
@@ -19,7 +20,7 @@ it("offers only low, medium, high and xhigh on desktop and mobile", async () => 
         const [disabled,disable] = useState(false);
         return <div className="wb-app"><div style={{position:'absolute',bottom:40,right:24}}>
           <ModelPicker value={model} models={['provider/long-model-name','provider/beta']} onSelect={select}
-            onRefresh={()=>{}} loading={false} error="" reasoning={{value:effort,onChange:setEffort,disabled}} />
+            onRefresh={()=>{}} loading={false} error="" reasoning={{value:effort,onChange:value=>setEffort(settingsFields.reasoningEffort.unwrap().parse(value)),disabled}} />
           <button onClick={()=>disable(value=>!value)}>切换禁用</button>
           {['default','none','minimal'].map(value => <button key={value} onClick={()=>setEffort(value)}>{value}</button>)}
           <output id="saved-effort">{effort}</output>
@@ -39,7 +40,7 @@ it("offers only low, medium, high and xhigh on desktop and mobile", async () => 
     page.setDefaultTimeout(4000);
     await page.setContent(`<style>${css}</style><div id="root"></div>`);
     await page.addScriptTag({ content: js });
-    const labels = ["low", "medium", "high", "xhigh"];
+    const labels = ["low", "medium", "high", "xhigh", "MAX"];
     const trigger = page.locator(".composer-model-summary");
     for (const removed of ["default", "none", "minimal"]) {
       await page.getByRole("button", { name: removed, exact: true }).click();
@@ -64,22 +65,22 @@ it("offers only low, medium, high and xhigh on desktop and mobile", async () => 
       expect(await page.locator(".model-effort-options legend").textContent()).toBe("思考等级");
       if (width === 390) expect(await search.evaluate(node => node === document.activeElement)).toBe(false);
       const slider = page.getByRole("slider", { name: "思考等级", exact: true });
-      expect(await slider.getAttribute("max")).toBe("3");
+      expect(await slider.getAttribute("max")).toBe("4");
       await slider.press("Home");
       expect(await page.locator(".effort-slider-heading").textContent()).toBe("low");
       for (const [index, label] of labels.entries()) {
         if (index) await slider.press("ArrowRight");
         expect(await slider.getAttribute("aria-valuetext")).toBe(label);
-        expect(await page.locator("#saved-effort").textContent()).toBe(label);
+        expect(await page.locator("#saved-effort").textContent()).toBe(label.toLowerCase());
         expect(await page.locator(".effort-slider-heading output").textContent()).toBe(label);
         expect(await trigger.getAttribute("title")).toContain(`思考：${label}`);
-        expect(await page.locator(".model-effort-meter > span").count()).toBe(4);
+        expect(await page.locator(".model-effort-meter > span").count()).toBe(5);
         expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(index + 1);
-        expect(await page.locator(".model-effort-meter").getAttribute("aria-label")).toBe(`思考等级：${label}，${index + 1}/4`);
+        expect(await page.locator(".model-effort-meter").getAttribute("aria-label")).toBe(`思考等级：${label}，${index + 1}/5`);
+        expect(await page.locator(".effort-slider").getAttribute("data-max")).toBe(String(label === "MAX"));
       }
       await slider.press("ArrowRight");
-      expect(await slider.getAttribute("aria-valuetext")).toBe("xhigh");
-      expect(await page.locator(".effort-slider").getAttribute("data-max")).toBe("true");
+      expect(await slider.getAttribute("aria-valuetext")).toBe("MAX");
       expect(await page.locator(".effort-slider-fill").evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("effort-shimmer");
       await page.emulateMedia({ reducedMotion: "reduce" });
       expect(await page.locator(".effort-slider-fill").evaluate(node => getComputedStyle(node, "::after").animationName)).toBe("none");
@@ -95,9 +96,9 @@ it("offers only low, medium, high and xhigh on desktop and mobile", async () => 
       if (!bounds) throw new Error("Missing slider");
       await page.mouse.move(bounds.x + bounds.width - 7, bounds.y + bounds.height / 2);
       await page.mouse.down();
-      await page.mouse.move(bounds.x + bounds.width / 3, bounds.y + bounds.height / 2, { steps: 8 });
+      await page.mouse.move(bounds.x + bounds.width / 4, bounds.y + bounds.height / 2, { steps: 8 });
       expect(await slider.getAttribute("aria-valuetext")).toBe("medium");
-      expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(4);
+      expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(5);
       await page.mouse.up();
       expect(await page.locator(".model-effort-meter .is-filled").count()).toBe(2);
       await page.keyboard.press("Escape");

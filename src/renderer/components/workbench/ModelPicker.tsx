@@ -2,7 +2,8 @@ import { CaretDown, Cpu } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { ModelCatalog, type ModelCatalogGroup } from "./ModelCatalog";
 
-const efforts = ["low", "medium", "high", "xhigh"] as const;
+const efforts = ["low", "medium", "high", "xhigh", "max"] as const;
+const formatEffort = (value: string | undefined) => value === "max" ? "MAX" : value;
 
 export function ModelPicker(props: {
   readonly value: string;
@@ -30,7 +31,7 @@ export function ModelPicker(props: {
   const effortIndex = efforts.findIndex(
     (value) => value === props.reasoning?.value,
   );
-  const effortLabel = efforts[effortIndex];
+  const effortLabel = formatEffort(efforts[effortIndex]);
   const [draftEffort, setDraftEffort] = useState(Math.max(0, effortIndex));
   const submittedEffort = useRef<number | null>(null);
   useEffect(() => {
@@ -140,7 +141,7 @@ export function ModelPicker(props: {
             >
               <legend>思考等级</legend>
               <div className="effort-slider-heading">
-                <output>{efforts[draftEffort]}</output>
+                <output>{formatEffort(efforts[draftEffort])}</output>
               </div>
               <div className="effort-slider" data-max={draftEffort === efforts.length - 1}>
                 <div className="effort-slider-track" aria-hidden="true">
@@ -156,7 +157,7 @@ export function ModelPicker(props: {
                   step={1}
                   value={draftEffort}
                   aria-label="思考等级"
-                  aria-valuetext={efforts[draftEffort]}
+                  aria-valuetext={formatEffort(efforts[draftEffort])}
                   onChange={(event) =>
                     setDraftEffort(Number(event.currentTarget.value))
                   }
@@ -189,7 +190,7 @@ export function ModelPicker(props: {
               <div className="effort-slider-labels" aria-hidden="true">
                 {efforts.map((value, index) => (
                   <span key={value} data-active={draftEffort === index}>
-                    {value}
+                    {formatEffort(value)}
                   </span>
                 ))}
               </div>
