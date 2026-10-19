@@ -1,4 +1,13 @@
-import { ArrowUp, CaretDown, FolderOpen } from "@phosphor-icons/react";
+import {
+  ArrowUp,
+  CaretDown,
+  CaretRight,
+  FolderDashed,
+  FolderOpen,
+  House,
+  SpinnerGap,
+  X,
+} from "@phosphor-icons/react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { WorkspaceDirectoryPage } from "../../../shared/workspaces";
 import { hostCapabilities } from "../../web-host";
@@ -81,6 +90,7 @@ export function WorkspacePicker({
     setOpen(false);
     triggerRef.current?.focus();
   };
+
   const selectNative = async () => {
     if (nativePending.current) return;
     nativePending.current = true;
@@ -116,9 +126,11 @@ export function WorkspacePicker({
           close();
         }
         if (event.key === "Tab" && open) {
-          const items = Array.from(panelRef.current?.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), input:not(:disabled), summary',
-          ) ?? []).filter((item) => item.getClientRects().length > 0);
+          const items = Array.from(
+            panelRef.current?.querySelectorAll<HTMLElement>(
+              'button:not(:disabled), input:not(:disabled), summary',
+            ) ?? [],
+          ).filter((item) => item.getClientRects().length > 0);
           const first = items[0];
           const last = items.at(-1);
           if (event.shiftKey && (document.activeElement === first || document.activeElement === panelRef.current)) {
@@ -150,77 +162,234 @@ export function WorkspacePicker({
         <span>{workspace ? workspace.split(/[\\/]/).filter(Boolean).at(-1) || workspace : "选择工作区"}</span>
         <CaretDown size={12} aria-hidden="true" />
       </button>
+
       {open && (
-        <div
-          ref={panelRef}
-          id={panelId}
-          className="composer-project-panel workspace-picker-panel"
-          role="dialog"
-          aria-label={hostCapabilities.web ? "选择服务器工作区" : "选择工作区"}
-          tabIndex={-1}
-        >
-          <div className="workspace-picker-heading">{hostCapabilities.web ? "服务器工作区" : "工作区"}</div>
-          <p className="workspace-picker-helper">
-            {restricted ? "此 Web 服务固定使用这个项目，不能切换目录。" : hostCapabilities.web
-              ? "浏览 Forge 所在电脑上的文件夹，进入后点击“选择此目录”。"
-              : "使用系统目录选择器选择项目文件夹。"}
-          </p>
-          {canBrowse ? (
-            <>
-              <div className="workspace-picker-toolbar">
-                <Button type="button" size="sm" variant="ghost" disabled={loading || !page?.parent}
-                  onClick={() => { if (page?.parent) void browse(page.parent); }}>
-                  <ArrowUp size={14} aria-hidden="true" /> 上一级
-                </Button>
-                <Button type="button" size="sm" variant="ghost" disabled={loading} onClick={() => void browse()}>
-                  默认目录
-                </Button>
-              </div>
-              <output className="workspace-picker-path" aria-label="当前浏览目录">{page?.path ?? workspace}</output>
-              <div className="workspace-picker-directories" aria-label="子目录" aria-busy={loading}>
-                {loading && <p role="status">正在读取目录…</p>}
-                {!loading && page?.directories.map((directory) => (
-                  <button type="button" className="workspace-picker-directory" key={directory.path}
-                    onClick={() => void browse(directory.path)}>
-                    <FolderOpen size={16} aria-hidden="true" /><span>{directory.name}</span>
-                  </button>
-                ))}
-                {!loading && page && page.directories.length === 0 && <p>没有可浏览的子目录，可直接选择此目录。</p>}
-              </div>
-              {page?.truncated && <p className="workspace-picker-helper">目录较多，仅显示部分结果；可使用下方路径跳转。</p>}
-              <details className="workspace-picker-jump">
-                <summary>通过路径跳转（可选）</summary>
-                <label htmlFor={jumpId}>跳转到目录</label>
-                <div className="composer-workspace-row">
-                  <Input id={jumpId} value={jumpPath} onChange={(event) => setJumpPath(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        if (!loading && jumpPath.trim()) void browse(jumpPath.trim());
-                      }
-                    }} />
-                  <Button type="button" size="sm" variant="ghost" disabled={loading || !jumpPath.trim()}
-                    onClick={() => void browse(jumpPath.trim())}>跳转</Button>
+        <>
+          <div
+            className="workspace-picker-backdrop"
+            onClick={close}
+            aria-hidden="true"
+          />
+          <div
+            ref={panelRef}
+            id={panelId}
+            className="composer-project-panel workspace-picker-panel"
+            role="dialog"
+            aria-label={hostCapabilities.web ? "选择服务器工作区" : "选择工作区"}
+            tabIndex={-1}
+          >
+            <div className="workspace-picker-header">
+              <div className="workspace-picker-header-title">
+                <div className="workspace-picker-icon-badge" aria-hidden="true">
+                  <FolderOpen size={18} weight="duotone" />
                 </div>
-              </details>
-            </>
-          ) : <output className="workspace-picker-path">{workspace || "尚未选择目录"}</output>}
-          {hostCapabilities.web && !restricted && !canBrowse && (
-            <p role="alert">目录浏览不可用，请重启 Forge 服务并刷新页面。</p>
-          )}
-          {error && <p className="workspace-picker-error" role="alert">{error}</p>}
-          <div className="workspace-picker-actions">
-            <Button type="button" size="sm" variant="ghost" onClick={close}>{restricted ? "关闭" : "取消"}</Button>
-            {canBrowse && <Button type="button" size="sm" disabled={loading || !page}
-              onClick={() => {
-                if (!page) return;
-                onChange(page.path);
-                setOpen(false);
-                onDone();
-              }}>选择此目录</Button>}
-            {!hostCapabilities.web && <Button type="button" size="sm" disabled={loading} onClick={() => void selectNative()}>选择目录</Button>}
+                <div className="workspace-picker-title-group">
+                  <div className="workspace-picker-heading">
+                    {hostCapabilities.web ? "服务器工作区" : "工作区"}
+                  </div>
+                  <p className="workspace-picker-helper">
+                    {restricted
+                      ? "此 Web 服务固定使用这个项目，不能切换目录。"
+                      : hostCapabilities.web
+                        ? "浏览 Forge 所在电脑上的文件夹，进入后点击“选择此目录”。"
+                        : "使用系统目录选择器选择项目文件夹。"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="workspace-picker-close-btn"
+                onClick={close}
+                aria-label="关闭面板"
+                title="关闭"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="workspace-picker-body">
+              {canBrowse ? (
+                <>
+                  <div className="workspace-picker-nav">
+                    <div className="workspace-picker-toolbar">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={loading || !page?.parent}
+                        onClick={() => {
+                          if (page?.parent) void browse(page.parent);
+                        }}
+                      >
+                        <ArrowUp size={14} aria-hidden="true" /> 上一级
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={loading}
+                        onClick={() => void browse()}
+                      >
+                        <House size={14} aria-hidden="true" /> 默认目录
+                      </Button>
+                    </div>
+
+                    <div className="workspace-picker-path-box">
+                      <FolderOpen size={14} className="workspace-picker-path-icon" aria-hidden="true" />
+                      <output
+                        className="workspace-picker-path"
+                        aria-label="当前浏览目录"
+                        title={page?.path ?? workspace}
+                      >
+                        {page?.path ?? workspace}
+                      </output>
+                    </div>
+                  </div>
+
+                  <div className="workspace-picker-directories-wrapper">
+                    <div className="workspace-picker-directories-header">
+                      <span>子文件夹</span>
+                      {page && !loading && (
+                        <span className="workspace-picker-dir-count">
+                          {page.directories.length} 项
+                        </span>
+                      )}
+                    </div>
+                    <div className="workspace-picker-directories" aria-label="子目录" aria-busy={loading}>
+                      {loading && (
+                        <div className="workspace-picker-loading" role="status">
+                          <SpinnerGap size={20} className="workspace-picker-spinner" aria-hidden="true" />
+                          <span>正在读取目录…</span>
+                        </div>
+                      )}
+                      {!loading &&
+                        page?.directories.map((directory) => (
+                          <button
+                            type="button"
+                            className="workspace-picker-directory"
+                            key={directory.path}
+                            onClick={() => void browse(directory.path)}
+                            title={directory.path}
+                          >
+                            <div className="workspace-picker-dir-icon" aria-hidden="true">
+                              <FolderOpen size={15} />
+                            </div>
+                            <span className="workspace-picker-dir-name">{directory.name}</span>
+                            <CaretRight size={13} className="workspace-picker-dir-arrow" aria-hidden="true" />
+                          </button>
+                        ))}
+                      {!loading && page && page.directories.length === 0 && (
+                        <div className="workspace-picker-empty">
+                          <div className="workspace-picker-empty-icon" aria-hidden="true">
+                            <FolderDashed size={26} />
+                          </div>
+                          <p className="workspace-picker-empty-text">当前目录下无子文件夹</p>
+                          <p className="workspace-picker-empty-hint">没有可浏览的子目录，可直接选择此目录。</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {page?.truncated && (
+                    <div className="workspace-picker-truncated-notice">
+                      <p className="workspace-picker-helper">目录较多，仅显示部分结果；可使用下方路径跳转。</p>
+                    </div>
+                  )}
+
+                  <details className="workspace-picker-jump">
+                    <summary>
+                      <div className="workspace-picker-jump-summary-content">
+                        <CaretRight size={12} className="workspace-picker-jump-caret" aria-hidden="true" />
+                        <span>通过路径跳转（可选）</span>
+                      </div>
+                    </summary>
+                    <div className="workspace-picker-jump-body">
+                      <label htmlFor={jumpId} className="workspace-picker-jump-label">跳转到指定目录路径：</label>
+                      <div className="workspace-picker-jump-row">
+                        <Input
+                          id={jumpId}
+                          value={jumpPath}
+                          placeholder="/path/to/project"
+                          onChange={(event) => setJumpPath(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              if (!loading && jumpPath.trim()) void browse(jumpPath.trim());
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={loading || !jumpPath.trim()}
+                          onClick={() => void browse(jumpPath.trim())}
+                        >
+                          跳转
+                        </Button>
+                      </div>
+                    </div>
+                  </details>
+                </>
+              ) : (
+                <div className="workspace-picker-path-box">
+                  <FolderOpen size={14} className="workspace-picker-path-icon" aria-hidden="true" />
+                  <output className="workspace-picker-path">{workspace || "尚未选择目录"}</output>
+                </div>
+              )}
+
+              {hostCapabilities.web && !restricted && !canBrowse && (
+                <div className="workspace-picker-error-box" role="alert">
+                  <p>目录浏览不可用，请重启 Forge 服务并刷新页面。</p>
+                </div>
+              )}
+
+              {error && (
+                <div className="workspace-picker-error-box" role="alert">
+                  <p className="workspace-picker-error">{error}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="workspace-picker-actions">
+              <div className="workspace-picker-status-hint">
+                {canBrowse && page?.path ? "将在选定目录中执行会话与指令" : ""}
+              </div>
+              <div className="workspace-picker-buttons">
+                <Button type="button" size="sm" variant="ghost" onClick={close}>
+                  {restricted ? "关闭" : "取消"}
+                </Button>
+                {canBrowse && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    disabled={loading || !page}
+                    onClick={() => {
+                      if (!page) return;
+                      onChange(page.path);
+                      setOpen(false);
+                      onDone();
+                    }}
+                  >
+                    选择此目录
+                  </Button>
+                )}
+                {!hostCapabilities.web && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    disabled={loading}
+                    onClick={() => void selectNative()}
+                  >
+                    选择目录
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
