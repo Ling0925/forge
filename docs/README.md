@@ -26,6 +26,7 @@
 | [架构契约](ARCHITECTURE.md) | 模块边界、运行时、存储与宿主协议 |
 | [视觉设计](../DESIGN.md) | 共享界面的视觉与交互契约 |
 | [模型协议](PROVIDERS.md) | Chat Completions 与 Responses 适配 |
+| [提示词](PROMPTS.md) | 按角色与工具组织指导、压缩记忆与参考取舍 |
 | [项目上下文](CONTEXT.md) | 项目指令与技能发现 |
 | [MCP](MCP.md) | stdio、HTTP/SSE 扩展与工具调用 |
 | [生命周期 hooks](TOOL_HOOKS.md) | 按需执行工具与收尾脚本 |
