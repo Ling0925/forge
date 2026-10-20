@@ -9,6 +9,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.HttpAuthHandler;
+import android.webkit.WebResourceResponse;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebChromeClient.FileChooserParams;
@@ -33,8 +35,8 @@ import androidx.appcompat.app.AppCompatActivity;
  * only renders the Web UI, keeps its WebView DOM storage/cookies so the workbench keeps its own
  * client-side state across a restart, and forwards image picking to the system chooser.
  *
- * <p>Deliberately absent: any JavaScript interface/bridge, TLS error overrides, account or token
- * handling.
+ * <p>HTTP authentication challenges from tunnels/reverse proxies use a native prompt. There is
+ * no Forge account/token system, JavaScript interface/bridge, or TLS error override.
  *
  * <p>The Web UI targets a modern Chromium, so this Activity needs a reasonably new Android
  * System WebView; see docs/BUILD.md.
@@ -54,6 +56,7 @@ public class WebAppActivity extends AppCompatActivity {
     private boolean connectionSettingsOpen;
     private ValueCallback<Uri[]> fileCallback;
     private PageSystemBars pageSystemBars;
+    private HttpAuthPrompt httpAuthPrompt;
 
     private final ActivityResultLauncher<Intent> connectionSettingsLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -123,6 +126,8 @@ public class WebAppActivity extends AppCompatActivity {
         webView.setBackgroundColor(surface);
         SystemBars.apply(this, surface, surface, false);
         pageSystemBars = new PageSystemBars(this, webView, errorPanel);
+        httpAuthPrompt = new HttpAuthPrompt(this,
+                () -> showError(getString(R.string.error_http_auth_cancelled)));
         webView.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
             if (pageSystemBars != null) pageSystemBars.scheduleQuickSample(40);
         });
@@ -161,6 +166,7 @@ public class WebAppActivity extends AppCompatActivity {
 
     private void openConnectionSettings() {
         if (connectionSettingsOpen) return;
+        httpAuthPrompt.cancel();
         connectionSettingsOpen = true;
         Intent intent = new Intent(this, MainActivity.class);
         intent.putExtra(MainActivity.EXTRA_EDIT_CONNECTION, true);
@@ -199,7 +205,8 @@ public class WebAppActivity extends AppCompatActivity {
         }
 
         // Local WebView storage is kept so the Web UI keeps its own client-side state between
-        // launches. This client has no account system and stores no credentials itself.
+        // launches. HTTP passwords are only handed to WebView's challenge handler, never saved
+        // with setHttpAuthUsernamePassword(), preferences, URLs or Activity state.
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, false);
@@ -209,6 +216,26 @@ public class WebAppActivity extends AppCompatActivity {
         }
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onReceivedHttpAuthRequest(
+                    WebView view, HttpAuthHandler handler, String host, String realm) {
+                if (connectionSettingsOpen || isFinishing() || isDestroyed()) {
+                    handler.cancel();
+                    return;
+                }
+                hideError();
+                httpAuthPrompt.show(handler, host);
+            }
+
+            @Override
+            public void onReceivedHttpError(
+                    WebView view, WebResourceRequest request, WebResourceResponse response) {
+                if (request.isForMainFrame() && response.getStatusCode() == 401
+                        && !httpAuthPrompt.isShowing()) {
+                    showError(getString(R.string.error_http_auth_required));
+                }
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri target = request.getUrl();
@@ -239,6 +266,7 @@ public class WebAppActivity extends AppCompatActivity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                httpAuthPrompt.cancel();
                 setLoadingProgress(15);
                 if (pageSystemBars != null) {
                     pageSystemBars.scheduleQuickSample(0);
@@ -266,6 +294,7 @@ public class WebAppActivity extends AppCompatActivity {
                     android.webkit.WebResourceError error) {
                 super.onReceivedError(view, request, error);
                 if (request.isForMainFrame()) {
+                    httpAuthPrompt.cancel();
                     setLoadingProgress(100);
                     showError(getString(R.string.error_load_failed, request.getUrl().toString()));
                 }
@@ -311,6 +340,7 @@ public class WebAppActivity extends AppCompatActivity {
     }
 
     private void loadWorkbench() {
+        httpAuthPrompt.cancel();
         hideError();
         if (currentUrl != null) {
             webView.loadUrl(currentUrl);
@@ -318,6 +348,7 @@ public class WebAppActivity extends AppCompatActivity {
     }
 
     private void reload() {
+        httpAuthPrompt.cancel();
         if (webView.getUrl() == null) {
             loadWorkbench();
         } else {
@@ -460,6 +491,7 @@ public class WebAppActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (httpAuthPrompt != null) httpAuthPrompt.cancel();
         if (pageSystemBars != null) pageSystemBars.stop();
         if (fileCallback != null) {
             fileCallback.onReceiveValue(null);

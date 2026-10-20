@@ -24,7 +24,15 @@
     <string name="cancel_connection_button">取消，返回工作台</string>
     <string name="retry_button">重试</string>
     <string name="error_title">页面加载失败</string>
-    <string name="error_detail">请确认服务器仍在运行，且手机与电脑在同一局域网。</string>
+    <string name="error_detail">请确认服务器仍在运行，且局域网或内网穿透地址可从手机访问。</string>
+    <string name="http_auth_title">HTTP 身份验证</string>
+    <string name="http_auth_host">请求认证的服务器：%1$s</string>
+    <string name="http_auth_description">请输入内网穿透或反向代理设置的 HTTP 账号密码，不是 Forge 账号。若再次出现此窗口，请检查账号密码。密码不保存到连接记录，公网连接请使用 HTTPS。</string>
+    <string name="http_auth_username">HTTP 用户名</string>
+    <string name="http_auth_password">HTTP 密码</string>
+    <string name="http_auth_sign_in">登录</string>
+    <string name="error_http_auth_cancelled">已取消 HTTP 身份验证。点击“重试”可重新输入内网穿透的账号密码，或进入“连接设置”更换地址。</string>
+    <string name="error_http_auth_required">服务器需要 HTTP 身份验证（401）。请点击“重试”并检查内网穿透的账号密码。</string>
     <string name="error_load_failed">无法加载 %1$s</string>
     <string name="error_empty_address">请输入地址</string>
     <string name="error_invalid_address">地址无效</string>
