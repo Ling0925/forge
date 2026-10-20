@@ -125,14 +125,23 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     } else {
       events.at(-1).usage.parts = { instructions: 20000, memory: 40000, conversation: 100000, tools: 326400 };
     }
-    const snapshot = {version:1,id:events[0].sessionId,title:'test',workspace:'/tmp',model:'model',createdAt:events[0].timestamp,updatedAt:events.at(-1).timestamp,status:'completed',messages:[],changes:[],events};
+    let snapshot = {version:1,id:events[0].sessionId,title:'test',workspace:'/tmp',model:'model',createdAt:events[0].timestamp,updatedAt:events.at(-1).timestamp,status:'completed',messages:[],changes:[],events:[...events]};
     if (location.search === '?unknown-window') snapshot.status = 'running';
     const root = createRoot(document.getElementById('root'));
     const render = () => root.render(<div className="wb-app"><UsagePopover events={[...events]} snapshot={snapshot} /></div>);
-    window.appendUsage = event => { events.push(event); snapshot.status = 'running'; render(); };
+    window.setContextSettings = value => { window.contextSettings = value; render(); };
+    window.finishUsage = () => { snapshot = { ...snapshot, status: 'completed' }; render(); };
+    window.usageEvents = () => JSON.stringify(events);
+    window.appendUsage = event => { events.push(event); snapshot = { ...snapshot, events: [...events], status: 'running' }; render(); };
     render();
   `,
     },
+    plugins: [{ name: "workbench-settings-fixture", setup(plugin) {
+      plugin.onLoad({ filter: /[/\\]state[/\\]workbench-context\.tsx$/ }, () => ({
+        contents: "export const useWorkbench = () => ({ state: { settings: window.contextSettings } });",
+        loader: "ts",
+      }));
+    } }],
     bundle: true,
     write: false,
     format: "iife",
@@ -224,6 +233,25 @@ it("usage popover stays readable and dismissible on desktop/mobile in both theme
     await expect.poll(() => page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('1M');
     expect(await detail.innerText()).toContain('压缩后预估（待实报）');
     expect(await detail.innerText()).toContain('累计用量不清零');
+    // Active runs use the captured budget, while idle history uses current settings.
+    const settings = { contextBudgetChars: 100000, contextBudgetTokens: null, modelContextWindows: { model: 64000 } };
+    const oldEvents = await page.evaluate(() => Reflect.get(window, 'usageEvents')());
+    await page.evaluate(value => Reflect.get(window, 'setContextSettings')(value), settings);
+    await expect.poll(() => page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('1M');
+    expect(await page.evaluate(() => localStorage.getItem('forge-session-usage-v2'))).toBe(saved);
+    await page.evaluate(() => Reflect.get(window, 'finishUsage')());
+    await expect.poll(() => page.getByLabel('上下文与用量', { exact: true }).innerText()).toContain('64K');
+    const completedCache = await page.evaluate(() => localStorage.getItem('forge-session-usage-v2'));
+    expect(await detail.innerText()).toContain('187.5% / 120K');
+    expect(await page.locator('.usage-reserve').getAttribute('title')).toContain('下一次请求前自动压缩');
+    await page.evaluate(value => Reflect.get(window, 'setContextSettings')(value), {
+      ...settings, modelContextWindows: { model: 1000000 }, contextBudgetTokens: 500000,
+    });
+    await expect.poll(() => detail.innerText()).toContain('窗口 1M tokens');
+    expect(await detail.innerText()).toContain('12.0% / 120K');
+    expect(await page.locator('.usage-reserve').getAttribute('title')).toContain('500K tokens (50.0%)');
+    expect(await page.evaluate(() => localStorage.getItem('forge-session-usage-v2'))).toBe(completedCache);
+    expect(await page.evaluate(() => Reflect.get(window, 'usageEvents')())).toBe(oldEvents);
     await page.goto("http://usage.test/?unknown-window");
     await page.getByText("61.6K tokens", { exact: true }).click();
     const unknownPanel = page.getByRole("region", { name: "用量详情" });

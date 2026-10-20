@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { contextDisplayLabel } from "../../../shared/context-display";
+import { budgetUsage, resolveContextBudget, resolveContextWindow } from "../../../shared/context-usage";
 import type { AgentEvent, SessionSnapshot } from "../../shared-types";
+import { useWorkbench } from "../../state/workbench-context";
 import { persistentUsageCache } from "../../state/persistent-usage-cache";
 import { compactTokens, sessionUsage } from "../../state/session-usage";
 import "./usage-popover.css";
@@ -19,6 +21,7 @@ export function UsagePopover({
   readonly events: readonly AgentEvent[];
   readonly snapshot?: SessionSnapshot | undefined;
 }) {
+  const { state: { settings } } = useWorkbench();
   const usage = useMemo(
     () =>
       snapshot &&
@@ -31,7 +34,16 @@ export function UsagePopover({
   );
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
-  const context = usage.context;
+  // Historical events/cache contain the window at request time. Apply current
+  // settings to an idle view only; an active run still uses its captured budget.
+  // Never rewrite persisted usage or billing totals.
+  const active = snapshot?.status === "running" || snapshot?.status === "awaiting_approval";
+  const resolvedWindow = snapshot && !active && settings && usage.context
+    ? resolveContextWindow(snapshot.model, settings, usage.context.windowTokens)
+    : undefined;
+  const context = resolvedWindow !== undefined && settings && usage.context
+    ? { ...usage.context, windowTokens: resolvedWindow, ...budgetUsage(resolveContextBudget(resolvedWindow, settings)) }
+    : usage.context;
   const windowTokens = context?.windowTokens ?? undefined;
   const ratio = windowTokens
     ? context.usedTokens / windowTokens
@@ -99,7 +111,7 @@ export function UsagePopover({
                   ? ""
                   : remainingToCompact > 0
                     ? `距自动压缩还剩约 ${compactTokens(remainingToCompact)} tokens`
-                    : `已达自动压缩阈值（超出约 ${compactTokens(-remainingToCompact)} tokens）`
+                    : `已达阈值，下一次请求前自动压缩（超出约 ${compactTokens(-remainingToCompact)} tokens）`
               }`}
               style={{ width: `${reserveRatio * 100}%` }}
             />
@@ -165,7 +177,7 @@ export function UsagePopover({
                       ? ""
                       : remainingToCompact > 0
                         ? `距自动压缩还剩约 ${compactTokens(remainingToCompact)} tokens`
-                        : `已达自动压缩阈值（超出约 ${compactTokens(-remainingToCompact)} tokens）`
+                        : `已达阈值，下一次请求前自动压缩（超出约 ${compactTokens(-remainingToCompact)} tokens）`
                   }`}
                   style={{ width: `${reserveRatio * 100}%` }}
                 />
