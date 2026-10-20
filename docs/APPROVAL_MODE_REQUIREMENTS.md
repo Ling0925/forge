@@ -1,5 +1,7 @@
 # Forge 命令审核模式（Full access / Auto / Manual）需求
 
+> 历史需求记录：除末尾“最终决策与实施（2026-10-14）”外，上文“现状”、默认拒绝、ask 默认、阻塞及行号描述均是当时实施前的基线，不代表当前行为。2026-10-14 决策已经取代冲突要求；当前默认权限为 workspace，交互审批默认为 full-access。现行权限／模式／审批边界统一见 [ARCHITECTURE](ARCHITECTURE.md#permission-run-mode-and-cli-approval)，其中也说明如今 resume 是交互入口，单次续跑使用 run --session。下文验证数字仅是当时记录。
+
 本文是**命令审核模式**的需求文档，覆盖 CLI 与非交互入口的审批行为。
 它描述目标模型、现行实现、与既有安全契约的冲突点及验收标准，**不是**已通过验收的声明。
 
@@ -13,7 +15,7 @@
 现有权威约定：
 
 - `docs/CLI.md`：**"审批默认拒绝。"**（approval defaults to deny）
-- `ARCHITECTURE.md`：默认权限 `readonly`；`workspace` 对高风险操作**必须请求审批**。
+- 历史 `ARCHITECTURE.md` 曾误写默认权限 `readonly`（现已更正为 `workspace`）；工具发出审批请求与 CLI 自动应答是两个步骤。
 - `src/shared/schemas.ts:117`：`defaultPermission: "workspace"`。
 - 现有 CLI 的 `auto` 是**显式 opt-in**（`--approval auto` 或 `/approval auto`），且**仅限本会话**，默认始终是 `ask`（`src/cli/cli.ts:283`）。
 - `COMMAND_APPROVAL_WARNING`（`src/cli/approval-policy.ts:12`）明确警告：命令**不是沙箱**，可访问工作区外文件与网络。

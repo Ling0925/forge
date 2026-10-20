@@ -778,12 +778,12 @@ Node <b>worker_threads</b> · dist/desktop/worker.cjs     <em>只有 worker 执�
 <!-- 13 -->
 <section id="drift">
   <h2><span class="idx">13</span>勘查发现：文档 / 代码偏差与风险</h2>
-  <p class="lede">下列均为本次读码实测，供决定改文档还是改代码时取舍。<b>本图只报告，未修改任何源码或文档。</b></p>
+  <p class="lede">下列为原勘查记录，供决定改文档还是改代码时取舍。<b>第 1 项已于 2026-10-20 更新文档结论；其余保留原记录，未据此修改源码。</b></p>
   <div class="scroll-x">
   <table>
     <thead><tr><th>#</th><th>位置</th><th>宣称</th><th>实测</th><th>性质</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td class="src">docs/ARCHITECTURE.md:106</td><td>defaultPublicSettings 提供 “<b>readonly</b> permission”</td><td><code>src/shared/schemas.ts:168</code> → <code>defaultPermission: "workspace"</code></td><td><span class="pill m">文档过期</span> 默认值直接决定首次运行的写能力，属安全语义描述偏差，建议优先纠正</td></tr>
+      <tr><td>1</td><td class="src">docs/ARCHITECTURE.md · Settings</td><td>当前默认权限已更正为 <b>workspace</b>；原 readonly 描述是历史偏差</td><td><code>src/shared/schemas.ts</code> → <code>defaultPermission: "workspace"</code></td><td><span class="pill m">文档已校正</span> 当前权限、运行模式与 CLI 审批边界见 <a href="../ARCHITECTURE.md#permission-run-mode-and-cli-approval">统一规则</a>；不改变运行行为</td></tr>
       <tr><td>2</td><td class="src">README.md:40</td><td>“10 个本地文件/系统工具 <b>及</b> 3 个原生只读 Git 工具”</td><td>本地注册表共 <b>10</b> 个，3 个 git 工具<b>已包含在内</b>（docs/ARCHITECTURE.md:87 的说法正确）</td><td><span class="pill m">计数表述</span> 易被读成 13 个</td></tr>
       <tr><td>3</td><td class="src">README.md:54 · package.json:37</td><td>“终端 CLI (Node 22 <b>Commander</b>)”，依赖 <code>commander ^13.1.0</code></td><td><code>src/</code> 与 <code>scripts/</code> 中<b>无任何 commander 引用</b>，CLI 用自写 <code>parseArgs</code></td><td><span class="pill m">未使用依赖</span> 可移除，或注明历史遗留</td></tr>
       <tr><td>4</td><td class="src">docs/ARCHITECTURE.md:23, 33</td><td>强制集成点：browser.ts → <code>createBrowserTools(...)</code>；<code>src/renderer/App.tsx</code> → <code>App</code></td><td>实际导出 <code>createBrowserToolRegistry()</code>（harness.ts:84 用的正是它）；组件是 <code>src/renderer/components/workbench/App.tsx</code>，<code>src/renderer/App.tsx</code> 不存在</td><td><span class="pill a">契约表漂移</span> 照表接线会失败</td></tr>

@@ -68,10 +68,10 @@ printf '%s' '继续处理' | forge run --workspace /absolute/path/to/project --p
 
 运行选项（与源码一致）：`--model MODEL`、`--mode plan|build`、`--permission readonly|workspace|unrestricted`、`--prompt-file PATH`、`--prompt-stdin`、`--json`、`--yes`。
 
-审批行为：
+审批行为（仅本节的一次性 `forge run`，包括 `run --session`；交互式 full-access 规则不同，见 [统一权限／模式／审批说明](ARCHITECTURE.md#permission-run-mode-and-cli-approval)）：
 
 - 只有**同时**显式给出 `--permission unrestricted` 与 `--yes` 时才自动批准。
-- `workspace` 模式**永不**自动批准；非交互终端下审批会被拒绝。
+- 该单次运行入口在 `workspace` 权限下不自动批准；非交互终端下审批会被拒绝。未显式传权限时使用共享默认 `workspace`，不会因为 `--yes` 自动升级。
 - `--json` 输出**版本 1 JSONL**：每条 `{version:1, kind:"event", event:...}`，最后一条 `{version:1, kind:"result", session:...}`。
 
 退出码：`completed` → 0；`cancelled` / Ctrl-C → 130；其他失败态 → 1。
