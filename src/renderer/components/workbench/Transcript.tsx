@@ -772,19 +772,12 @@ export const StoredTranscript = memo(function StoredTranscript({
               ) : (
                 <div className="transcript-turn-body">
                   <ExecutionProcess execution={finalEntry ? execution : undefined}>
-                    {blocks.map((block, blockIndex) => {
-                      const first = block.kind === "single" ? block.entry : block.entries[0];
-                      const previous = blocks[blockIndex - 1];
-                      const priorStep = previous?.kind === "single" ? previous.entry.item.step : previous?.entries.at(-1)?.item.step;
-                      const step = first?.item.step;
-                      const heading = step !== undefined && step !== priorStep
-                        ? <div className="transcript-execution-counts" data-step={step}>执行第 {step} 步</div> : null;
+                    {blocks.map((block) => {
                       if (block.kind === "single") {
-                        return <Fragment key={block.entry.item.id}>{heading}{renderTimelineEntry(block.entry, snapshot, headers, phases, timeline)}</Fragment>;
+                        return <Fragment key={block.entry.item.id}>{renderTimelineEntry(block.entry, snapshot, headers, phases, timeline)}</Fragment>;
                       }
                       return (
                         <div className="tool-call-group" key={block.id}>
-                          {heading}
                           {block.entries.map(({ item, index }) =>
                             item.kind === "tool"
                               ? renderToolCard(item, index, phases, timeline)
@@ -794,12 +787,7 @@ export const StoredTranscript = memo(function StoredTranscript({
                       );
                     })}
                   </ExecutionProcess>
-                  {finalEntry && <>
-                    {finalEntry.item.step !== undefined && processItems.at(-1)?.item.step !== finalEntry.item.step && (
-                      <div className="transcript-execution-counts" data-step={finalEntry.item.step}>执行第 {finalEntry.item.step} 步</div>
-                    )}
-                    {renderTimelineEntry(finalEntry, snapshot, headers, phases, timeline)}
-                  </>}
+                  {finalEntry && renderTimelineEntry(finalEntry, snapshot, headers, phases, timeline)}
                   <PublishedFiles sessionId={snapshot.id} files={files} />
                 </div>
               )
