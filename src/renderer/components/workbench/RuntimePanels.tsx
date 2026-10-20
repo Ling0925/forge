@@ -1,17 +1,25 @@
 import {
   ArrowSquareOut,
   ArrowsInLineVertical,
+  ChartBar,
   Cpu,
   FileText,
   ListChecks,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { OperationScope } from "../../state/operation-scope";
+import { sessionUsage } from "../../state/session-usage";
 import { useWorkbench } from "../../state/workbench-context";
 import type { SessionSnapshot, TaskPlan } from "../../../shared/schemas";
 import { sessionPlans } from "../../../shared/plans";
 import { Button } from "../primitives/Button";
 import { StatusBadge } from "../primitives/StatusBadge";
+import {
+  type MemoryExcerptBlock,
+  type MemoryPlanSummary,
+  type ParsedContextMemory,
+  parseContextMemory,
+} from "./context-memory-parser";
 import { Markdown } from "./Markdown";
 
 function planProgress(plan: TaskPlan) {
@@ -372,6 +380,272 @@ export function SubAgentsPanel() {
   );
 }
 
+function MemoryExcerptCard({
+  label,
+  excerpt,
+}: {
+  readonly label?: string | undefined;
+  readonly excerpt: MemoryExcerptBlock;
+}) {
+  return (
+    <div className="inspector-memory-block">
+      {(label || excerpt.ref || excerpt.roleLabel || excerpt.truncated) && (
+        <div className="inspector-memory-block-head">
+          {label && <span className="inspector-memory-block-title">{label}</span>}
+          {excerpt.roleLabel && (
+            <span className="inspector-memory-role-pill">{excerpt.roleLabel}</span>
+          )}
+          {excerpt.ref && (
+            <span className="inspector-memory-ref-pill">{excerpt.ref}</span>
+          )}
+          {excerpt.truncated && (
+            <span className="inspector-memory-trunc-pill">已截断</span>
+          )}
+        </div>
+      )}
+      <div className="inspector-memory-block-body">
+        <Markdown source={excerpt.text} />
+      </div>
+    </div>
+  );
+}
+
+function MemoryPlanBlock({ plan }: { readonly plan: MemoryPlanSummary }) {
+  return (
+    <div className="inspector-memory-block">
+      <div className="inspector-memory-block-head">
+        <span className="inspector-memory-block-title">
+          关联计划{plan.title ? ` · ${plan.title}` : ""}
+        </span>
+      </div>
+      {plan.explanation && (
+        <div className="inspector-memory-block-body">
+          <Markdown source={plan.explanation} />
+        </div>
+      )}
+      {plan.steps.length > 0 && (
+        <ul className="inspector-memory-list">
+          {plan.steps.map((s, idx) => (
+            <li key={`${idx}:${s.step}`} className="inspector-memory-list-item">
+              <span className="inspector-memory-item-text">{s.step}</span>
+              <span className="inspector-memory-ref-pill">
+                {s.status === "completed"
+                  ? "已完成"
+                  : s.status === "in_progress"
+                    ? "进行中"
+                    : "待执行"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function ContextMemoryView({
+  parsed,
+}: {
+  readonly parsed: ParsedContextMemory;
+}) {
+  if (parsed.kind === "working_state") {
+    return (
+      <div className="inspector-memory-view wb-stack">
+        {parsed.archiveRange && (
+          <div className="inspector-memory-meta-row">
+            <span className="inspector-memory-meta-pill">
+              工作状态摘要
+            </span>
+            <span className="inspector-memory-ref-pill">
+              归档记录 {parsed.archiveRange}
+            </span>
+          </div>
+        )}
+        {parsed.goal && (
+          <div className="inspector-memory-block">
+            <div className="inspector-memory-block-head">
+              <span className="inspector-memory-block-title">任务目标</span>
+            </div>
+            <div className="inspector-memory-block-body">
+              <Markdown source={parsed.goal} />
+            </div>
+          </div>
+        )}
+        {parsed.sections.map((section) => (
+          <div key={section.key} className="inspector-memory-block">
+            <div className="inspector-memory-block-head">
+              <span className="inspector-memory-block-title">
+                {section.label}
+              </span>
+              <span className="inspector-memory-count">
+                {section.items.length}
+              </span>
+            </div>
+            <ul className="inspector-memory-list">
+              {section.items.map((item, idx) => (
+                <li
+                  key={`${section.key}:${idx}`}
+                  className="inspector-memory-list-item"
+                >
+                  <span className="inspector-memory-item-text">
+                    {item.text}
+                  </span>
+                  {item.refs.length > 0 && (
+                    <span className="inspector-memory-refs">
+                      {item.refs.map((ref) => (
+                        <span key={ref} className="inspector-memory-ref-pill">
+                          {ref}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (parsed.kind === "run_checkpoint") {
+    return (
+      <div className="inspector-memory-view wb-stack">
+        <div className="inspector-memory-meta-row">
+          <span className="inspector-memory-meta-pill">
+            运行检查点 · {parsed.statusLabel}
+          </span>
+          {parsed.archiveRange && (
+            <span className="inspector-memory-ref-pill">
+              记录 {parsed.archiveRange}
+            </span>
+          )}
+          {parsed.endedAt && (
+            <span className="inspector-memory-time">{parsed.endedAt}</span>
+          )}
+          {parsed.effectsMayBeUncertain && (
+            <span className="inspector-memory-trunc-pill">副作用待确认</span>
+          )}
+        </div>
+        {parsed.initialRequest && (
+          <MemoryExcerptCard label="初始请求" excerpt={parsed.initialRequest} />
+        )}
+        {parsed.latestRequest && (
+          <MemoryExcerptCard label="最近请求" excerpt={parsed.latestRequest} />
+        )}
+        {parsed.latestAssistantReport && (
+          <MemoryExcerptCard
+            label="最近助手回复"
+            excerpt={parsed.latestAssistantReport}
+          />
+        )}
+        {parsed.plan && <MemoryPlanBlock plan={parsed.plan} />}
+        {parsed.toolObservations.length > 0 && (
+          <div className="inspector-memory-block">
+            <div className="inspector-memory-block-head">
+              <span className="inspector-memory-block-title">最近工具观察</span>
+              <span className="inspector-memory-count">
+                {parsed.toolObservations.length}
+              </span>
+            </div>
+            <div className="wb-stack">
+              {parsed.toolObservations.map((obs, idx) => (
+                <MemoryExcerptCard
+                  key={`${obs.ref ?? idx}:${idx}`}
+                  excerpt={obs}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {parsed.priorMemory && (
+          <details className="wb-disclosure inspector-memory-subdisclosure">
+            <summary>前序历史记忆摘录</summary>
+            <div className="wb-disclosure-body">
+              <ContextMemoryView parsed={parsed.priorMemory} />
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  }
+
+  if (parsed.kind === "fallback_state") {
+    return (
+      <div className="inspector-memory-view wb-stack">
+        <div className="inspector-memory-meta-row">
+          <span className="inspector-memory-meta-pill">摘录回退记忆</span>
+          {parsed.archiveRange && (
+            <span className="inspector-memory-ref-pill">
+              归档 {parsed.archiveRange}
+            </span>
+          )}
+          {parsed.unsummarizedRanges && (
+            <span className="inspector-memory-trunc-pill">
+              未摘要区间 {parsed.unsummarizedRanges}
+            </span>
+          )}
+        </div>
+        {parsed.plan && <MemoryPlanBlock plan={parsed.plan} />}
+        {parsed.excerpts.length > 0 && (
+          <div className="inspector-memory-block">
+            <div className="inspector-memory-block-head">
+              <span className="inspector-memory-block-title">最近记录摘录</span>
+              <span className="inspector-memory-count">
+                {parsed.excerpts.length}
+              </span>
+            </div>
+            <div className="wb-stack">
+              {parsed.excerpts.map((item, idx) => (
+                <MemoryExcerptCard
+                  key={`${item.ref ?? idx}:${idx}`}
+                  excerpt={item}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {parsed.previousState && (
+          <details className="wb-disclosure inspector-memory-subdisclosure">
+            <summary>前序记忆状态</summary>
+            <div className="wb-disclosure-body">
+              <ContextMemoryView parsed={parsed.previousState} />
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  }
+
+  if (parsed.kind === "structured_json") {
+    return (
+      <div className="inspector-memory-view wb-stack">
+        {parsed.archiveRange && (
+          <div className="inspector-memory-meta-row">
+            <span className="inspector-memory-ref-pill">
+              归档 {parsed.archiveRange}
+            </span>
+          </div>
+        )}
+        <dl className="wb-details inspector-details-grid">
+          {parsed.entries.map((entry) => (
+            <div key={entry.key} className="inspector-memory-kv-row">
+              <dt>{entry.label}</dt>
+              <dd>{entry.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    );
+  }
+
+  return (
+    <div className="inspector-memory-view">
+      <Markdown source={parsed.text} />
+    </div>
+  );
+}
+
 export function ContextManagementPanel() {
   const { state, refreshActiveSession } = useWorkbench();
   const snapshot = state.activeSnapshot;
@@ -433,6 +707,14 @@ export function ContextManagementPanel() {
     };
   }, [sessionId, diagnosticsOpen]);
 
+  const parsedMemory = useMemo(
+    () =>
+      snapshot?.contextSummary
+        ? parseContextMemory(snapshot.contextSummary.content)
+        : null,
+    [snapshot?.contextSummary],
+  );
+
   if (!snapshot) return null;
   const run = state.activeRuns[snapshot.id];
   const running =
@@ -440,17 +722,33 @@ export function ContextManagementPanel() {
     run?.status === "awaiting_approval" ||
     snapshot.status === "running" ||
     snapshot.status === "awaiting_approval";
+  const usageStats = sessionUsage(snapshot.events);
+  const finished = snapshot.events
+    .filter((e) => e.type === "run_finished")
+    .at(-1);
+  const totalTokens =
+    usageStats.total?.totalTokens ??
+    (finished?.type === "run_finished" ? finished.usage?.totalTokens : undefined);
 
   return (
     <section className="wb-stack inspector-section">
-      <h3>上下文</h3>
-      {/* Raw context statistics collapse into one quiet disclosure; the
-          compaction controls below stay directly reachable. */}
+      <h3>上下文与记忆</h3>
+      {/* Single unified token total & context statistics disclosure */}
       <details
-        className="wb-disclosure inspector-disclosure-card"
+        className="wb-disclosure inspector-disclosure-card inspector-usage-card"
         onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)}
       >
-        <summary>上下文统计</summary>
+        <summary>
+          <span className="inspector-disclosure-head">
+            <ChartBar size={14} weight="bold" />
+            <span>上下文统计</span>
+          </span>
+          {totalTokens !== undefined && (
+            <span className="inspector-token-pill">
+              总计 {totalTokens.toLocaleString()} tokens
+            </span>
+          )}
+        </summary>
         <div className="wb-disclosure-body">
           {diagnosticsError ? (
             <p role="alert" className="form-error">
@@ -461,6 +759,12 @@ export function ContextManagementPanel() {
           ) : (
             <div className="context-diagnostics-view">
               <dl className="wb-details inspector-details-grid">
+                <dt>累计 Tokens</dt>
+                <dd className="usage-total-highlight">
+                  {totalTokens !== undefined
+                    ? `${totalTokens.toLocaleString()} tokens`
+                    : "尚无已结算用量"}
+                </dd>
                 <dt>原始记录</dt>
                 <dd>
                   {diagnostics.transcriptChars.toLocaleString()} 字符 ·{" "}
@@ -475,18 +779,37 @@ export function ContextManagementPanel() {
                     : "语义摘要 / 未压缩"}
                 </dd>
               </dl>
+              {finished?.type === "run_finished" && (
+                <div className="inspector-usage-footer">
+                  <span className="usage-footer-tag">
+                    {finished.steps ?? finished.turns} 步
+                  </span>
+                  <span className="usage-footer-tag">
+                    {finished.toolCalls} 次工具调用
+                  </span>
+                  {Boolean(finished.retries) && (
+                    <span className="usage-footer-tag">
+                      {finished.retries} 次请求重试
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       </details>
-      {snapshot.contextSummary && (
-        <details className="wb-disclosure inspector-disclosure-card">
+      {snapshot.contextSummary && parsedMemory && (
+        <details className="wb-disclosure inspector-disclosure-card inspector-memory-card">
           <summary>
-            已保存摘要 · 边界 {snapshot.contextSummary.boundary}
-            {snapshot.contextSummary.fallback ? " · 摘录回退" : ""}
+            <span className="inspector-disclosure-head">
+              <span>
+                已保存摘要 · 边界 {snapshot.contextSummary.boundary}
+                {snapshot.contextSummary.fallback ? " · 摘录回退" : ""}
+              </span>
+            </span>
           </summary>
           <div className="wb-disclosure-body">
-            <Markdown source={snapshot.contextSummary.content} />
+            <ContextMemoryView parsed={parsedMemory} />
           </div>
         </details>
       )}

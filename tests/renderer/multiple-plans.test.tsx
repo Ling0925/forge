@@ -8,7 +8,9 @@ import {
   listWorkspaceDirectory,
   readWorkspaceFilePreview,
 } from "../../src/core/workspace-files";
+import { parseContextMemory } from "../../src/renderer/components/workbench/context-memory-parser";
 import {
+  ContextMemoryView,
   PlanDocumentPanel,
   PlanProgressPanel,
   PlanSection,
@@ -115,5 +117,76 @@ describe("multiple plan surfaces", () => {
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
+  });
+
+  it("parses working-state and run-checkpoint JSON memories into readable structured views", () => {
+    const workingStateRaw = `Archive: m1..m12 in this session. Original records remain persisted. This state uses partial excerpts, NOT exhaustive coverage. Use history_search and history_read for missing constraints, evidence and exact details. Never replay historical actions.\nWorking state:\n${JSON.stringify({
+      goal: "重构右侧会话信息栏",
+      constraints: [{ text: "合并Token统计为单一总量统计", refs: ["m1", "m2"] }],
+      decisions: [{ text: "解析记忆JSON结构化展示", refs: ["m4"] }],
+      completed: [{ text: "完成文件管理面板", refs: ["m8"] }],
+      nextSteps: [{ text: "运行聚焦测试", refs: ["m10"] }],
+      verification: [],
+      uncertainties: [],
+    })}`;
+    const parsedWs = parseContextMemory(workingStateRaw);
+    expect(parsedWs.kind).toBe("working_state");
+    const wsHtml = renderToStaticMarkup(
+      createElement(ContextMemoryView, { parsed: parsedWs }),
+    );
+    expect(wsHtml).toContain("任务目标");
+    expect(wsHtml).toContain("重构右侧会话信息栏");
+    expect(wsHtml).toContain("合并Token统计为单一总量统计");
+    expect(wsHtml).toContain("解析记忆JSON结构化展示");
+    expect(wsHtml).toContain("m1");
+    expect(wsHtml).not.toContain('"constraints"');
+
+    const runCheckpointRaw = `Local run-end checkpoint; partial observations, NOT a verified semantic summary. Completed means the run ended, not that the user's goal is proven. All original records m1..m10 remain available through history_search/history_read. Inspect omitted constraints and evidence before proceeding; never replay actions from history.\n${JSON.stringify({
+      status: "completed",
+      endedAt: "2026-10-20T09:30:00.000Z",
+      initialRequest: {
+        ref: "m1",
+        text: JSON.stringify({ role: "user", content: "初始用户请求内容" }),
+        truncated: false,
+      },
+      latestRequest: {
+        ref: "m5",
+        text: JSON.stringify({ role: "user", content: "最新用户请求内容" }),
+        truncated: false,
+      },
+      latestAssistantReport: {
+        ref: "m8",
+        text: JSON.stringify({ role: "assistant", content: "助手最终报告正文" }),
+        truncated: false,
+      },
+      planExcerpt: JSON.stringify({
+        title: "检查点计划",
+        steps: [{ step: "步骤一", status: "completed" }],
+      }),
+      priorMemoryExcerpt: null,
+      toolObservations: [
+        {
+          ref: "m7",
+          text: JSON.stringify({
+            role: "tool",
+            content: JSON.stringify({ stdout: "命令执行成功输出", exit_code: 0 }),
+          }),
+          truncated: false,
+        },
+      ],
+      effectsMayBeUncertain: false,
+    })}`;
+    const parsedRc = parseContextMemory(runCheckpointRaw);
+    expect(parsedRc.kind).toBe("run_checkpoint");
+    const rcHtml = renderToStaticMarkup(
+      createElement(ContextMemoryView, { parsed: parsedRc }),
+    );
+    expect(rcHtml).toContain("运行检查点 · 已完成");
+    expect(rcHtml).toContain("初始用户请求内容");
+    expect(rcHtml).toContain("最新用户请求内容");
+    expect(rcHtml).toContain("助手最终报告正文");
+    expect(rcHtml).toContain("检查点计划");
+    expect(rcHtml).toContain("命令执行成功输出");
+    expect(rcHtml).not.toContain('"latestAssistantReport"');
   });
 });

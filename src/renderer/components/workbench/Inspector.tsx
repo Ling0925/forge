@@ -1,7 +1,6 @@
 import {
   ArrowsCounterClockwise,
   CaretRight,
-  ChartBar,
   Cpu,
   FileCode,
   Folder,
@@ -146,13 +145,9 @@ export function Inspector({
   const run = state.activeSessionId
     ? state.activeRuns[state.activeSessionId]
     : undefined;
-  const finished = snapshot?.events
-    .filter((e) => e.type === "run_finished")
-    .at(-1);
   const started = snapshot?.events
     .filter((e) => e.type === "run_started")
     .at(-1);
-  const usage = finished?.type === "run_finished" ? finished.usage : undefined;
   const storedActive =
     !run &&
     (snapshot?.status === "running" ||
@@ -608,64 +603,6 @@ export function Inspector({
                             </p>
                           )}
                         </section>
-                        <details
-                          className="wb-disclosure inspector-disclosure-card inspector-usage-card"
-                          open
-                        >
-                          <summary>
-                            <span className="inspector-disclosure-head">
-                              <ChartBar size={14} weight="bold" />
-                              <span>上次运行用量</span>
-                            </span>
-                            {usage && (
-                              <span className="inspector-token-pill">
-                                {usage.totalTokens.toLocaleString()} tokens
-                              </span>
-                            )}
-                          </summary>
-                          <div className="wb-disclosure-body">
-                            {usage ? (
-                              <div className="inspector-usage-content">
-                                <dl className="wb-details inspector-usage-dl">
-                                  <dt>输入 / 输出</dt>
-                                  <dd>
-                                    {usage.promptTokens.toLocaleString()} /{" "}
-                                    {usage.completionTokens.toLocaleString()}
-                                  </dd>
-                                  <dt>总计</dt>
-                                  <dd className="usage-total-highlight">
-                                    {usage.totalTokens.toLocaleString()}
-                                  </dd>
-                                  {usage.cachedPromptTokens !== undefined && (
-                                    <>
-                                      <dt>缓存输入</dt>
-                                      <dd>
-                                        {usage.cachedPromptTokens.toLocaleString()}
-                                      </dd>
-                                    </>
-                                  )}
-                                </dl>
-                              </div>
-                            ) : (
-                              <p className="wb-muted">尚无已结算的运行用量</p>
-                            )}
-                            {finished?.type === "run_finished" && (
-                              <div className="inspector-usage-footer">
-                                <span className="usage-footer-tag">
-                                  {finished.steps ?? finished.turns} 步
-                                </span>
-                                <span className="usage-footer-tag">
-                                  {finished.toolCalls} 次工具调用
-                                </span>
-                                {Boolean(finished.retries) && (
-                                  <span className="usage-footer-tag">
-                                    {finished.retries} 次请求重试
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </details>
                         <ContextManagementPanel
                           key={`context:${state.activeSessionId ?? "none"}`}
                         />
