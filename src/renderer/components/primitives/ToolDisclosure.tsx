@@ -75,6 +75,7 @@ const friendlyLabels: Readonly<Record<string, string>> = {
   make_directory: "创建目录",
   run_command: "运行命令",
   command_task: "查看后台命令",
+  read_command_output: "读取命令输出",
   git_status: "查看 Git 状态",
   git_diff: "查看差异",
   git_log: "查看提交记录",
@@ -95,6 +96,18 @@ const friendlyLabels: Readonly<Record<string, string>> = {
   list_agents: "查看子代理列表",
   mcp_list_tools: "列出 MCP 工具",
   mcp_call_tool: "调用 MCP 工具",
+  project_context: "读取项目上下文",
+  load_skill: "加载技能",
+  publish_file: "发布文件",
+  web_fetch: "抓取网页",
+  history_search: "搜索历史记录",
+  history_read: "读取历史记录",
+  list_models: "列出模型",
+  update_memory: "更新记忆",
+  del_memory: "删除记忆",
+  get_memory: "查看记忆",
+  search_memory: "搜索记忆",
+  forge_memory: "整理记忆",
 };
 
 export function friendlyLabel(name: string): string {
@@ -115,7 +128,11 @@ export function getToolIcon(name: string) {
   if (name === "search_files")
     return <MagnifyingGlass size={16} weight="regular" />;
   if (name === "create_plan" || name === "update_plan") return <ListChecks size={16} weight="regular" />;
-  if (name === "run_command" || name === "command_task") {
+  if (
+    name === "run_command" ||
+    name === "command_task" ||
+    name === "read_command_output"
+  ) {
     return <TerminalWindow size={16} weight="regular" />;
   }
   if (
@@ -137,6 +154,20 @@ export function getToolIcon(name: string) {
   if (name.startsWith("browser_")) return <Globe size={16} weight="regular" />;
   if (name.startsWith("mcp_"))
     return <PuzzlePiece size={16} weight="regular" />;
+  // Named families come before the generic "…file…" fallback, which would
+  // otherwise swallow publish_file and label it as a plain file read.
+  if (name === "project_context") {
+    return <FolderOpen size={16} weight="regular" />;
+  }
+  if (name === "load_skill") return <PuzzlePiece size={16} weight="regular" />;
+  if (name === "publish_file")
+    return <PaperPlaneTilt size={16} weight="regular" />;
+  if (name === "web_fetch") return <Globe size={16} weight="regular" />;
+  if (name === "list_models") return <Cpu size={16} weight="regular" />;
+  if (name.startsWith("history_"))
+    return <ListNumbers size={16} weight="regular" />;
+  if (name.endsWith("_memory"))
+    return <HardDrive size={16} weight="regular" />;
   if (name.includes("file") || name.includes("directory")) {
     return <FileText size={16} weight="regular" />;
   }

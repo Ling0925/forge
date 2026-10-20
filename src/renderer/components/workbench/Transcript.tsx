@@ -358,7 +358,12 @@ function groupTurnEntries(
   let currentTools: TurnEntry[] | null = null;
 
   for (const entry of entries) {
-    const hasHeader = Boolean(headers[entry.index]);
+    // Only a stage marker that actually prints a title earns its own block: a
+    // title-less phase header renders nothing (StageHeader returns null), so
+    // treating it as a boundary would strand the turn's first tool row in a
+    // standalone block (12px parent gap + 1px margin) instead of the 1px
+    // tool-group rhythm its neighbours below share.
+    const hasStageTitle = Boolean(headers[entry.index]?.title);
     const isPlan =
       entry.item.kind === "tool" &&
       ["create_plan", "update_plan"].includes(entry.item.call.function.name) &&
@@ -368,7 +373,7 @@ function groupTurnEntries(
     if (isPlan) {
       currentTools = null;
       blocks.push({ kind: "single", entry });
-    } else if (isTool && !hasHeader) {
+    } else if (isTool && !hasStageTitle) {
       if (!currentTools) {
         currentTools = [];
         blocks.push({

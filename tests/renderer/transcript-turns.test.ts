@@ -115,6 +115,41 @@ describe("Transcript Turn partitioning and grouping", () => {
     }
   });
 
+  it("keeps a title-less stage header from splitting the first tool row out of the group", () => {
+    const entries = [
+      { item: toolItem("t1"), index: 0 },
+      { item: toolItem("t2"), index: 1 },
+    ];
+    // A phase marker without a title renders nothing (StageHeader returns null),
+    // so it must not cost the first row its compact 1px group rhythm.
+    const headers = [{ id: 1, title: null }, null];
+    const blocks = groupTurnEntries(entries, headers);
+    expect(blocks.map((block) => block.kind)).toEqual(["tool_group"]);
+    expect(
+      blocks.map((block) =>
+        block.kind === "tool_group" ? block.entries.length : 0,
+      ),
+    ).toEqual([2]);
+  });
+
+  it("still starts a new block when the stage header carries a title", () => {
+    const entries = [
+      { item: toolItem("t1"), index: 0 },
+      { item: toolItem("t2"), index: 1 },
+    ];
+    const headers = [
+      null,
+      { id: 1, title: "检查参数", completed: 0, total: 2, percent: 0 },
+    ];
+    const blocks = groupTurnEntries(entries, headers);
+    expect(blocks.map((block) => block.kind)).toEqual(["tool_group", "single"]);
+    expect(
+      blocks.map((block) =>
+        block.kind === "single" ? block.entry.item.id : "",
+      ),
+    ).toEqual(["", "t2"]);
+  });
+
   it("computes accurate summary statistics for collapsed turns", () => {
     const items = [
       { item: toolItem("t1"), index: 0 },

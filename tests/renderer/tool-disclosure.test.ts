@@ -76,6 +76,20 @@ describe("tool disclosure row", () => {
     expect(html).toContain("工具调用");
   });
 
+  it.each([
+    ["project_context", "读取项目上下文"],
+    ["load_skill", "加载技能"],
+    ["publish_file", "发布文件"],
+    ["read_command_output", "读取命令输出"],
+    ["web_fetch", "抓取网页"],
+    ["history_search", "搜索历史记录"],
+    ["list_models", "列出模型"],
+    ["search_memory", "搜索记忆"],
+  ])("labels %s with its own verb instead of the generic fallback", (toolName, label) => {
+    const html = render({ toolName, status: "completed" });
+    expect(html).toContain(`class="tool-disclosure-label">${label}</span>`);
+  });
+
   it("explains a command and keeps the concrete command in the expanded view", () => {
     const html = render({
       toolName: "run_command",
