@@ -39,7 +39,7 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
   await service.updateSettings({
     settings: { baseUrl: "http://localhost:1234/v1", model: "fixture" },
   });
-  const web = await createWebHost({
+  const web = await createWebHost({ trustedLan: true,
     service,
     workspace: directory,
     host: "127.0.0.1",
@@ -248,7 +248,7 @@ it("pushes progress to the browser alongside Vite HMR without HTTP polling", asy
     release();
     await browser.close();
     await vite.close();
-    await web.close();
+    await web.dispose();
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
