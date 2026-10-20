@@ -84,6 +84,7 @@ export interface WorkbenchState {
   readonly mobileTab: "task" | "inspector";
   readonly isMobileSidebarOpen: boolean;
   readonly alertError: string | null;
+  readonly alertReadSessionId: SessionId | null;
 }
 function retainOutput(
   run: ActiveRunState,
@@ -161,6 +162,7 @@ export const initialWorkbenchState: WorkbenchState = {
   mobileTab: "task",
   isMobileSidebarOpen: false,
   alertError: null,
+  alertReadSessionId: null,
 };
 export type WorkbenchAction =
   | { readonly type: "SET_SETTINGS"; readonly settings: PublicSettings }
@@ -201,7 +203,9 @@ export type WorkbenchAction =
   | { readonly type: "OPEN_NEW_SESSION"; readonly isOpen: boolean }
   | { readonly type: "SET_MOBILE_TAB"; readonly tab: "task" | "inspector" }
   | { readonly type: "SET_MOBILE_SIDEBAR"; readonly isOpen: boolean }
-  | { readonly type: "SET_ALERT_ERROR"; readonly error: string | null };
+  | { readonly type: "SET_ALERT_ERROR"; readonly error: string | null }
+  | { readonly type: "SET_SESSION_READ_ERROR"; readonly sessionId: SessionId; readonly error: string }
+  | { readonly type: "CLEAR_SESSION_READ_ERROR"; readonly sessionId: SessionId };
 const active = (status: SessionStatus) =>
   status === "running" || status === "awaiting_approval";
 /** No further events can arrive for a run that already reached a terminal status. */
@@ -741,6 +745,16 @@ export function workbenchReducer(
     case "SET_MOBILE_SIDEBAR":
       return { ...state, isMobileSidebarOpen: action.isOpen };
     case "SET_ALERT_ERROR":
-      return { ...state, alertError: action.error };
+      return { ...state, alertError: action.error, alertReadSessionId: null };
+    case "SET_SESSION_READ_ERROR":
+      return state.activeSessionId === action.sessionId
+        ? { ...state, isSnapshotLoading: false, alertError: action.error, alertReadSessionId: action.sessionId }
+        : state;
+    case "CLEAR_SESSION_READ_ERROR":
+      // A successful background read must not dismiss a failed user operation
+      // or the read error belonging to another session.
+      return state.alertReadSessionId === action.sessionId
+        ? { ...state, alertError: null, alertReadSessionId: null }
+        : state;
   }
 }
