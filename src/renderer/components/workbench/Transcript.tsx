@@ -339,7 +339,7 @@ function groupTurnEntries(
       currentTools = null;
       blocks.push({ kind: "single", entry });
     } else if (isTool && !hasHeader) {
-      if (!currentTools || currentTools.at(-1)?.item.step !== entry.item.step) {
+      if (!currentTools) {
         currentTools = [];
         blocks.push({
           kind: "tool_group",
