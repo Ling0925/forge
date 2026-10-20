@@ -104,11 +104,22 @@ export function PlanProgressPanel({
       {currentPlan && currentProgress ? (
         <div className="inspector-plan-body wb-stack">
           <div className="wb-plan-current-title">
-            <div className="wb-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <div className="wb-plan-title-line">
               <strong>{currentPlan.title ?? "原有计划"}</strong>
-              <span className="wb-muted" style={{ fontSize: "11px" }}>
-                {percent}%
-              </span>
+              {currentProgress.total > 0 && (
+                <div className="inspector-plan-stats-row">
+                  <span className="inspector-plan-stat-pill is-completed">
+                    已完成 {currentProgress.completed}
+                  </span>
+                  <span className="inspector-plan-stat-pill is-active">
+                    进行中 {inProgressCount}
+                  </span>
+                  <span className="inspector-plan-stat-pill is-pending">
+                    待处理 {pendingCount}
+                  </span>
+                  <span className="inspector-plan-percent">{percent}%</span>
+                </div>
+              )}
             </div>
             <div className="inspector-plan-progress-track">
               <div
@@ -117,19 +128,6 @@ export function PlanProgressPanel({
               />
             </div>
           </div>
-          {currentProgress.total > 0 && (
-            <div className="inspector-plan-stats-row">
-              <span className="inspector-plan-stat-pill is-completed">
-                已完成 {currentProgress.completed}
-              </span>
-              <span className="inspector-plan-stat-pill is-active">
-                进行中 {inProgressCount}
-              </span>
-              <span className="inspector-plan-stat-pill is-pending">
-                待处理 {pendingCount}
-              </span>
-            </div>
-          )}
           <PlanSteps plan={currentPlan} />
         </div>
       ) : (
@@ -308,25 +306,27 @@ export function SubAgentsPanel() {
                   aria-label={`打开子任务：${child.title}`}
                   onClick={() => void selectSession(child.id)}
                 >
-                  <ArrowSquareOut size={13} weight="bold" />
+                  <ArrowSquareOut size={12} weight="bold" className="child-title-icon" />
                   <span className="child-title-clamp">{child.title}</span>
                 </Button>
-                {(child.status === "running" ||
-                  child.status === "awaiting_approval") && (
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    disabled={cancelling}
-                    onClick={() => void cancelOwned(child.id)}
-                  >
-                    {cancelling ? "正在取消…" : "取消任务"}
-                  </Button>
-                )}
+                <div className="child-card-badges">
+                  <StatusBadge status={child.status} />
+                  {(child.status === "running" ||
+                    child.status === "awaiting_approval") && (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={cancelling}
+                      onClick={() => void cancelOwned(child.id)}
+                    >
+                      {cancelling ? "正在取消…" : "取消任务"}
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="inspector-child-meta">
-                <StatusBadge status={child.status} />
                 <span title={child.model}>
-                  <Cpu size={12} weight="bold" style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
+                  <Cpu size={11} weight="bold" style={{ display: "inline", verticalAlign: "middle", marginRight: 3 }} />
                   {child.model}
                 </span>
               </div>

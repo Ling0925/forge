@@ -5,6 +5,7 @@ import {
   FileCode,
   Folder,
   ShieldCheck,
+  SidebarSimple,
   SlidersHorizontal,
 } from "@phosphor-icons/react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
@@ -175,11 +176,11 @@ export function Inspector({
     >
       <div className="inspector-header wb-inspector-head">
         <div className="inspector-title-row">
-          <SlidersHorizontal size={15} weight="bold" className="inspector-title-icon" />
+          <SlidersHorizontal size={14} weight="bold" className="inspector-title-icon" />
           <span>执行详情</span>
+          {snapshot && <StatusBadge status={run?.status ?? snapshot.status} />}
         </div>
         <div className="inspector-head-actions">
-          {snapshot && <StatusBadge status={run?.status ?? snapshot.status} />}
           {onRequestCollapse && (
             <button
               type="button"
@@ -188,7 +189,9 @@ export function Inspector({
               title="收起详情"
               onClick={onRequestCollapse}
             >
-              <CaretRight size={14} weight="bold" />
+              <SidebarSimple size={14} className="wb-inspector-close-icon" />
+              <span className="wb-inspector-close-label">收起</span>
+              <CaretRight size={11} weight="bold" className="wb-inspector-close-caret" />
             </button>
           )}
         </div>

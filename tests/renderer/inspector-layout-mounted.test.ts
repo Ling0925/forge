@@ -63,12 +63,15 @@ it("keeps execution details compact, navigable and diagnostics on demand", async
             effectsMayBeUncertain:false
           })
         },
-        plan:{steps:[{step:'检查会话数据与执行状态',status:'completed'},{step:'验证长路径与窄屏布局',status:'in_progress'}],explanation:'真实计划说明'}
+        plan:{steps:[{step:'检查会话数据与执行状态',status:'completed'},{step:'验证长路径与窄屏布局',status:'in_progress'},{step:'清理临时输出并汇总',status:'pending'}],explanation:'真实计划说明'}
       };
+      const childSessions=[
+        {id:'child-1',parentSessionId:'session',title:'独立子代理：收集仓库结构与测试配置并输出简要结论',status:'completed',model:'cbcn/deepseek-v4.1-flash',workspace:'/home/ling/services/desktop-harness',createdAt:'2026-01-01T00:01:00.000Z',updatedAt:'2026-01-01T00:02:00.000Z',latestReport:'已完成目录扫描与配置核对。'}
+      ];
       function Harness(){
         const [tick,setTick]=useState(0);
         window.refreshFixture=()=>setTick(tick+1);
-        window.testController={state:{...initialWorkbenchState,activeSessionId:'session',activeSnapshot:{...snapshot,updatedAt:String(tick)},activeRuns:{session:{status:'running',permission:'unrestricted'}},sessions:[]},refreshActiveSession:async()=>{},selectSession:async()=>{}};
+        window.testController={state:{...initialWorkbenchState,activeSessionId:'session',activeSnapshot:{...snapshot,updatedAt:String(tick)},activeRuns:{session:{status:'running',permission:'unrestricted'}},sessions:childSessions},refreshActiveSession:async()=>{},selectSession:async()=>{}};
         return <div className="wb-app mobile-inspector" style={{height:'100vh',justifyContent:'flex-end'}}><Inspector onRequestCollapse={()=>{window.collapsed=true}}/></div>;
       }
       createRoot(document.getElementById('root')).render(<Harness/>);
@@ -124,6 +127,39 @@ it("keeps execution details compact, navigable and diagnostics on demand", async
             .getByText("检查会话数据与执行状态", { exact: true })
             .isVisible(),
         ).toBe(true);
+        // Verify PlanSteps pending item circle and inline title row
+        const stepMetrics = await page.evaluate(() => {
+          const list = document.querySelector(".wb-plan-progress");
+          const pending = document.querySelector(
+            ".wb-plan-progress .plan-pending",
+          );
+          const titleRow = document.querySelector(
+            ".inspector-plan-progress-panel .inspector-title-row",
+          );
+          const listStyle = list ? getComputedStyle(list) : null;
+          const pendingStyle = pending ? getComputedStyle(pending) : null;
+          const pendingRect = pending?.getBoundingClientRect();
+          const titleRowStyle = titleRow ? getComputedStyle(titleRow) : null;
+          return {
+            gap: listStyle?.rowGap ?? listStyle?.gap,
+            pendingWidth: pendingRect?.width ?? 0,
+            pendingHeight: pendingRect?.height ?? 0,
+            pendingBorderWidth: pendingStyle?.borderTopWidth ?? "0px",
+            pendingBorderColor: pendingStyle?.borderTopColor ?? "",
+            titleRowDisplay: titleRowStyle?.display ?? "",
+          };
+        });
+        expect(stepMetrics.gap).toBe("0px");
+        expect(stepMetrics.pendingWidth).toBe(14);
+        expect(stepMetrics.pendingHeight).toBe(14);
+        expect(Number.parseFloat(stepMetrics.pendingBorderWidth)).toBeGreaterThan(
+          0,
+        );
+        expect(stepMetrics.pendingBorderColor).not.toBe("rgba(0, 0, 0, 0)");
+        expect(stepMetrics.titleRowDisplay).toBe("flex");
+        await page.screenshot({
+          path: `/tmp/forge-inspector-plan-${width}-${theme}.png`,
+        });
         await page.getByRole("tab", { name: "Plan", exact: true }).click();
         expect(
           await page.getByText("真实计划说明", { exact: true }).isVisible(),
