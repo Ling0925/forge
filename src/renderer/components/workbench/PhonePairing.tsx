@@ -216,8 +216,8 @@ export function PhonePairing() {
       </div>
 
       <ul className="phone-pairing-notes">
-        <li>二维码是普通 HTTP 地址，不含密钥或随机令牌，只用于按地址配对。</li>
-        <li>配对只校验地址，不做身份鉴权：同一局域网内知道该地址的人都可能连接。</li>
+        <li>二维码只包含普通 HTTP 地址，不含授权凭证；HTTP 不提供传输保密性。</li>
+        <li>默认需要设备授权；通过本机 forge devices 配对和撤销，步骤见 docs/LAN_AUTHORIZATION.md。</li>
         <li>{canControl
           ? "手机连接的是同一核心与同一份任务列表；关闭桌面应用会终止正在运行的任务。"
           : "手机连接当前服务器的核心与任务；停止该核心服务会终止正在运行的任务。"}</li>
