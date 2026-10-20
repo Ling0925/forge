@@ -187,7 +187,7 @@ Forge 秉持**零黑盒、强可见、诚实报告**的设计准则：
 
 1. **非操作系统沙箱**：`run_command` 不是 OS 级容器沙箱。一旦批准命令执行，该进程以宿主当前用户权限运行，具有访问工作区之外网络与文件的能力。
 2. **Checkpoint 保护范围**：Checkpoint 快照**仅自动覆盖由 `write_file`、`append_file` 和 `edit_file` 发起的直接文件变动**，不捕获 `run_command` 生成的副作用（如 `git reset`、编译器输出或脚本执行产生的改动）。
-3. **MCP 仅支持标准输入输出**：MCP 服务仅支持 `stdio` 传输模式，不支持远程 HTTP/SSE/OAuth。注册后默认保持禁用状态，必须显式调用 `enable` 启用，且每次调用仍需确认。
+3. **MCP 连接**：支持 stdio、Streamable HTTP 和旧版 SSE。注册本身不连接；CLI 注册默认启用，可加 `--disabled`。调用沿用当前权限策略，无限制模式不额外确认。远程鉴权可配置私有请求头，尚无 OAuth 登录流程。
 4. **浏览器运行时需外部提供**：浏览器工具依赖 Playwright 与外部 Chromium 实例，必须在配置中严格指定具体的 Origin 白名单（不允许通配符）。
 5. **真实指标保证**：仅当服务端在协议中返回可观测的真实 Token 统计与缓存指标时，工作台才如实展示；绝不推断、伪造或估计缓存命中率。
 
@@ -213,14 +213,19 @@ forge fork <session-uuid>                          # 分支克隆当前历史（
 forge compact <session-uuid>                       # 生成语义紧凑摘要，减少上下文消耗
 
 # ------------------------------
-# MCP 工具管理 (stdio)
+# MCP 工具管理
 # ------------------------------
 forge mcp list                                     # 查看已注册的 MCP 服务
-forge mcp add <name> -- /path/to/server.mjs        # 注册新的 stdio 服务（默认禁用）
-forge mcp enable <name>                            # 显式启用该服务
+forge mcp register local "Local" node /path/to/server.mjs
+forge mcp register-remote remote "Remote" https://example.com/mcp
+forge mcp enable local                            # 启用之前禁用的服务
+forge hooks set /path/to/hooks.json                # 按需配置生命周期脚本
+forge hooks clear                                 # 移除 hook 配置
 ```
 
 ### 快捷交互（交互会话中）
+
+子代理可通过 `spawn_agent` 的 `isolation: "worktree"` 在独立 Git 工作树中修改文件，默认仍共享工作区。详见 [工作树隔离](docs/AGENT_WORKTREES.md)、[生命周期 hooks](docs/TOOL_HOOKS.md) 和 [MCP](docs/MCP.md)。
 
 - `/plan` / `/build`：实时切换规划与构建模式。
 - `/compact`：触发当前会话历史的语义压缩。

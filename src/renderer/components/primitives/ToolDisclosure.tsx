@@ -420,6 +420,7 @@ interface SpawnAgentParams {
   readonly model?: string;
   readonly writePaths?: readonly string[];
   readonly maxToolCalls?: number;
+  readonly isolation?: "shared" | "worktree";
 }
 
 function SpawnAgentView({
@@ -438,6 +439,15 @@ function SpawnAgentView({
   const model =
     params?.model ||
     (typeof resultRecord?.model === "string" ? resultRecord.model : undefined);
+  const isolation =
+    params?.isolation ||
+    (typeof resultRecord?.isolation === "string"
+      ? (resultRecord.isolation as "shared" | "worktree")
+      : undefined);
+  const workspace =
+    typeof resultRecord?.workspace === "string"
+      ? resultRecord.workspace
+      : undefined;
   const task = params?.task;
   const ownership = params?.ownership;
   const writePaths = params?.writePaths;
@@ -460,6 +470,16 @@ function SpawnAgentView({
         {childSessionId && (
           <span className="agent-meta-chip agent-id-chip" title={childSessionId}>
             <span>子会话 {childSessionId.slice(0, 8)}</span>
+          </span>
+        )}
+        {isolation && isolation !== "shared" && (
+          <span className="agent-meta-chip agent-isolation-chip" title={`隔离模式：${isolation}`}>
+            <span>隔离：{isolation}</span>
+          </span>
+        )}
+        {workspace && (
+          <span className="agent-meta-chip agent-workspace-chip" title={`工作区：${workspace}`}>
+            <span>工作区：{workspace}</span>
           </span>
         )}
         {params?.maxToolCalls !== undefined && (
@@ -507,6 +527,12 @@ interface ChildAgentReportItem {
     readonly totalTokens?: number;
   };
   readonly error?: string;
+  readonly workspace?: string;
+  readonly worktree?: {
+    readonly repository: string;
+    readonly worktree: string;
+    readonly baseRevision: string;
+  };
 }
 
 function parseWaitAgentsResult(data: unknown): readonly ChildAgentReportItem[] | null {
@@ -524,17 +550,22 @@ function parseWaitAgentsResult(data: unknown): readonly ChildAgentReportItem[] |
   for (const item of parsed) {
     if (item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string") {
       const rec = item as Record<string, unknown>;
+      const worktree =
+        rec.worktree && typeof rec.worktree === "object"
+          ? (rec.worktree as NonNullable<ChildAgentReportItem["worktree"]>)
+          : undefined;
       items.push({
         id: rec.id as string,
         status: typeof rec.status === "string" ? rec.status : "completed",
-        model: typeof rec.model === "string" ? rec.model : undefined,
-        summary: typeof rec.summary === "string" ? rec.summary : undefined,
-        content: typeof rec.content === "string" ? rec.content : undefined,
-        usage:
-          rec.usage && typeof rec.usage === "object"
-            ? (rec.usage as ChildAgentReportItem["usage"])
-            : undefined,
-        error: typeof rec.error === "string" ? rec.error : undefined,
+        ...(typeof rec.model === "string" ? { model: rec.model } : {}),
+        ...(typeof rec.summary === "string" ? { summary: rec.summary } : {}),
+        ...(typeof rec.content === "string" ? { content: rec.content } : {}),
+        ...(rec.usage && typeof rec.usage === "object"
+          ? { usage: rec.usage as NonNullable<ChildAgentReportItem["usage"]> }
+          : {}),
+        ...(typeof rec.error === "string" ? { error: rec.error } : {}),
+        ...(typeof rec.workspace === "string" ? { workspace: rec.workspace } : {}),
+        ...(worktree ? { worktree } : {}),
       });
     }
   }
@@ -589,6 +620,18 @@ function WaitAgentsView({ reports }: { readonly reports: readonly ChildAgentRepo
               <div className="agent-error-box">
                 <WarningCircle size={14} weight="fill" />
                 <span>{report.error}</span>
+              </div>
+            )}
+
+            {report.worktree && (
+              <div className="agent-paths-section">
+                <span className="agent-paths-title">工作树：</span>
+                <code
+                  className="agent-path-tag"
+                  title={`仓库：${report.worktree.repository}\n基线：${report.worktree.baseRevision}`}
+                >
+                  {report.worktree.worktree}
+                </code>
               </div>
             )}
 

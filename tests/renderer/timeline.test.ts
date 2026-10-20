@@ -240,7 +240,9 @@ it("matches repeated IDs by occurrence across multiple user turns", () => {
         ? item.content
         : item.kind === "tool"
           ? item.output
-          : item.message,
+          : item.kind === "error"
+            ? item.message
+            : undefined,
     ),
   ).toEqual([
     "first",
@@ -338,7 +340,9 @@ it("positions prior errors at proven run boundaries without inventing message ti
         ? item.message
         : item.kind === "message"
           ? item.content
-          : item.output,
+          : item.kind === "tool"
+            ? item.output
+            : undefined,
     ),
   ).toEqual([
     "first",

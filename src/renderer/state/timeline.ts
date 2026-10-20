@@ -36,7 +36,26 @@ export type TimelineItem = { readonly turn?: number; readonly step?: number } & 
       readonly message: string;
       readonly timestamp: string;
       readonly historical?: boolean;
+    }
+  | {
+      readonly kind: "hook_diagnostic";
+      readonly id: string;
+      readonly hook: "beforeTool" | "afterTool" | "toolError" | "runEnd";
+      readonly hookId: string;
+      readonly status: "denied" | "failed" | "timed_out" | "cancelled";
+      readonly reason?: string;
+      readonly exitCode?: number;
+      readonly durationMs: number;
+      readonly toolCallId?: string;
+      readonly timestamp: string;
+      readonly historical?: boolean;
     });
+
+function isHookDiagnostic(
+  status: string,
+): status is "denied" | "failed" | "timed_out" | "cancelled" {
+  return ["denied", "failed", "timed_out", "cancelled"].includes(status);
+}
 
 /**
  * Measured duration for one tool occurrence. Only real recorded timestamps
@@ -87,19 +106,40 @@ export function reduceTimeline(
   const alignedRuns = turns.length > 0 && turns.every(turn => turn.events.length > 0);
   let turn = -1;
   const placedErrors = new Set<number>();
+  const placedDiagnostics = new Set<number>();
   const appendErrors = (from: number, to: number) => {
     snapshot.events.slice(from, to).forEach((event, offset) => {
-      if (event.type !== "error") return;
       const index = from + offset;
-      placedErrors.add(index);
-      items.push({
-        kind: "error",
-        id: `error:${index}`,
-        message: event.error.message,
-        timestamp: event.timestamp,
-        ...(event.turn === undefined ? {} : { turn: event.turn }),
-        ...(event.step === undefined ? {} : { step: event.step }),
-      });
+      if (event.type === "error") {
+        placedErrors.add(index);
+        items.push({
+          kind: "error",
+          id: `error:${index}`,
+          message: event.error.message,
+          timestamp: event.timestamp,
+          ...(event.turn === undefined ? {} : { turn: event.turn }),
+          ...(event.step === undefined ? {} : { step: event.step }),
+        });
+      } else if (
+        event.type === "tool_hook" &&
+        isHookDiagnostic(event.diagnostic.status)
+      ) {
+        placedDiagnostics.add(index);
+        items.push({
+          kind: "hook_diagnostic",
+          id: `hook:${index}`,
+          hook: event.diagnostic.hook,
+          hookId: event.diagnostic.id,
+          status: event.diagnostic.status,
+          ...(event.diagnostic.reason !== undefined ? { reason: event.diagnostic.reason } : {}),
+          ...(event.diagnostic.exitCode !== undefined ? { exitCode: event.diagnostic.exitCode } : {}),
+          durationMs: event.diagnostic.durationMs,
+          ...(event.toolCallId !== undefined ? { toolCallId: event.toolCallId } : {}),
+          timestamp: event.timestamp,
+          ...(event.turn === undefined ? {} : { turn: event.turn }),
+          ...(event.step === undefined ? {} : { step: event.step }),
+        });
+      }
     });
   };
   const starts = snapshot.events.filter((e) => e.type === "tool_started");
@@ -291,7 +331,7 @@ export function reduceTimeline(
   const historical: TimelineItem[] = [];
   const anchoredErrors: TimelineItem[] = [];
   snapshot.events.forEach((event, index) => {
-    if (event.type === "error" && !placedErrors.has(index))
+    if (event.type === "error" && !placedErrors.has(index)) {
       (event.turn === undefined ? historical : anchoredErrors).push({
         kind: "error",
         id: `error:${index}`,
@@ -300,6 +340,26 @@ export function reduceTimeline(
         ...(event.turn === undefined ? { historical: true } : { turn: event.turn }),
         ...(event.step === undefined ? {} : { step: event.step }),
       });
+    } else if (
+      event.type === "tool_hook" &&
+      isHookDiagnostic(event.diagnostic.status) &&
+      !placedDiagnostics.has(index)
+    ) {
+      (event.turn === undefined ? historical : anchoredErrors).push({
+        kind: "hook_diagnostic",
+        id: `hook:${index}`,
+        hook: event.diagnostic.hook,
+        hookId: event.diagnostic.id,
+        status: event.diagnostic.status,
+        ...(event.diagnostic.reason !== undefined ? { reason: event.diagnostic.reason } : {}),
+        ...(event.diagnostic.exitCode !== undefined ? { exitCode: event.diagnostic.exitCode } : {}),
+        durationMs: event.diagnostic.durationMs,
+        ...(event.toolCallId !== undefined ? { toolCallId: event.toolCallId } : {}),
+        timestamp: event.timestamp,
+        ...(event.turn === undefined ? { historical: true } : { turn: event.turn }),
+        ...(event.step === undefined ? {} : { step: event.step }),
+      });
+    }
   });
   const result: TimelineItem[] = [...historical, ...items];
   // Only the active run may have calls still in transit. Historical/orphan events

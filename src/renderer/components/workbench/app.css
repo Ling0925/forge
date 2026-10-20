@@ -714,6 +714,47 @@
   border-radius: var(--radius-card);
 }
 
+.hook-diagnostic-badge {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--text-primary);
+  margin-block: var(--space-2);
+}
+
+.hook-diagnostic-badge[data-status="denied"] {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.hook-diagnostic-icon {
+  flex-shrink: 0;
+  color: var(--error);
+}
+
+.hook-diagnostic-badge[data-status="denied"] .hook-diagnostic-icon {
+  color: var(--warning);
+}
+
+.hook-diagnostic-title {
+  font-weight: 600;
+}
+
+.hook-diagnostic-reason {
+  color: var(--text-secondary);
+}
+
+.hook-diagnostic-code {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
 /* The inspector keeps approvals and navigation before its selected evidence. */
 .inspector-tabs .tablist {
   position: sticky;

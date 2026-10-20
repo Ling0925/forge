@@ -1,4 +1,4 @@
-import { CaretDown, CaretRight, Check, Copy } from "@phosphor-icons/react";
+import { CaretDown, CaretRight, Check, Copy, WarningCircle } from "@phosphor-icons/react";
 import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Collapsible } from "../primitives/Collapsible";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
@@ -285,6 +285,7 @@ function partitionTurns(timeline: readonly TimelineItem[]): readonly TranscriptT
 
   for (const [index, item] of timeline.entries()) {
     if (item.kind === "error" && item.historical) continue;
+    if (item.kind === "hook_diagnostic" && item.historical) continue;
 
     const isHumanUser =
       item.kind === "message" && item.role === "user" && !item.origin;
@@ -364,7 +365,7 @@ function computeTurnSummary(items: readonly TurnEntry[]): string {
     if (item.kind === "tool") {
       toolCount++;
       if (item.status === "failed") hasError = true;
-    } else if (item.kind === "error") {
+    } else if (item.kind === "error" || item.kind === "hook_diagnostic") {
       hasError = true;
     } else if (item.kind === "message" && item.role === "assistant") {
       if (item.content) hasAssistant = true;
@@ -420,6 +421,7 @@ function renderTimelineEntry(
 ) {
   const { item, index } = entry;
   if (item.kind === "error" && item.historical) return null;
+  if (item.kind === "hook_diagnostic" && item.historical) return null;
   if (item.kind === "message" && item.origin === "agent_reconciliation")
     return (
       <details className="message message-internal" key={item.id}>
@@ -428,6 +430,41 @@ function renderTimelineEntry(
         <pre className="message-body">{item.content}</pre>
       </details>
     );
+  if (item.kind === "hook_diagnostic") {
+    const statusText =
+      item.status === "denied"
+        ? "拒绝执行"
+        : item.status === "timed_out"
+          ? "执行超时"
+          : item.status === "cancelled"
+            ? "已取消"
+            : "执行失败";
+    return (
+      <div
+        key={item.id}
+        className="hook-diagnostic-badge"
+        role="alert"
+        data-status={item.status}
+        data-hook={item.hook}
+      >
+        <WarningCircle
+          size={14}
+          weight="fill"
+          className="hook-diagnostic-icon"
+          aria-hidden="true"
+        />
+        <span className="hook-diagnostic-title">
+          Hook {item.hookId} ({item.hook}) {statusText}
+        </span>
+        {item.reason && (
+          <span className="hook-diagnostic-reason">：{item.reason}</span>
+        )}
+        {item.exitCode !== undefined && item.exitCode !== 0 && (
+          <span className="hook-diagnostic-code">（退出码 {item.exitCode}）</span>
+        )}
+      </div>
+    );
+  }
   if (item.kind === "message")
     return (
       <Fragment key={item.id}>
@@ -565,7 +602,9 @@ export const StoredTranscript = memo(function StoredTranscript({
   }, []);
 
   const historicalErrors = timeline.filter(
-    (item) => item.kind === "error" && item.historical,
+    (item) =>
+      (item.kind === "error" || item.kind === "hook_diagnostic") &&
+      item.historical,
   );
   const turns = partitionTurns(timeline);
   const executions = completedTurnExecutions(snapshot);
@@ -576,13 +615,16 @@ export const StoredTranscript = memo(function StoredTranscript({
       {historicalErrors.length > 0 && (
         <details className="message message-internal">
           <summary>历史异常记录 · {historicalErrors.length}</summary>
-          {historicalErrors.map(
-            (item) =>
-              item.kind === "error" && (
-                <p key={item.id}>
-                  {new Date(item.timestamp).toLocaleString()} · {item.message}
-                </p>
-              ),
+          {historicalErrors.map((item) =>
+            item.kind === "error" ? (
+              <p key={item.id}>
+                {new Date(item.timestamp).toLocaleString()} · {item.message}
+              </p>
+            ) : item.kind === "hook_diagnostic" ? (
+              <p key={item.id}>
+                {new Date(item.timestamp).toLocaleString()} · Hook {item.hookId} ({item.hook}) {item.status === "denied" ? "拒绝" : item.status === "timed_out" ? "超时" : "失败"}{item.reason ? `：${item.reason}` : ""}
+              </p>
+            ) : null,
           )}
         </details>
       )}
@@ -600,7 +642,12 @@ export const StoredTranscript = memo(function StoredTranscript({
           : turn.items;
         const blocks = groupTurnEntries(processItems, headers);
         const counts = record ? executionLabel(record) : "";
-        const hasError = turn.items.some(({ item }) => item.kind === "error" || (item.kind === "tool" && item.status === "failed"));
+        const hasError = turn.items.some(
+          ({ item }) =>
+            item.kind === "error" ||
+            item.kind === "hook_diagnostic" ||
+            (item.kind === "tool" && item.status === "failed"),
+        );
         const summaryText = counts ? `${counts}${hasError ? " · 含异常记录" : ""}` : computeTurnSummary(turn.items);
         const files = turn.items.flatMap(({ item }) => item.kind === "tool" && item.status === "completed" && item.call.function.name === "publish_file" ? item.files ?? [] : []);
 

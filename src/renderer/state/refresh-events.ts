@@ -19,6 +19,7 @@ const REFRESH_EVENT_TYPES = new Set<AgentEvent["type"]>([
   "tool_finished",
   "web_search_result",
   "agent_update",
+  "tool_hook",
 ]);
 
 export function shouldRefreshTranscript(type: AgentEvent["type"]): boolean {

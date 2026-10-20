@@ -615,7 +615,7 @@ export function Settings() {
               <div className="settings-card">
                 <div className="settings-card-header">
                   <h3>工具扩展</h3>
-                  <p>MCP 操作独立保存并立即生效，不受底部“保存设置”或“放弃修改”影响。连接测试会启动服务器进程。</p>
+                  <p>MCP 操作独立保存并立即生效。连接测试会启动本地服务器或连接远程服务。</p>
                 </div>
                 <div className="settings-card-body">
                   <McpPanel />

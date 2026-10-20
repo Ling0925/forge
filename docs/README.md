@@ -27,7 +27,9 @@
 | [视觉设计](../DESIGN.md) | 共享界面的视觉与交互契约 |
 | [模型协议](PROVIDERS.md) | Chat Completions 与 Responses 适配 |
 | [项目上下文](CONTEXT.md) | 项目指令与技能发现 |
-| [MCP](MCP.md) | stdio 扩展与工具调用 |
+| [MCP](MCP.md) | stdio、HTTP/SSE 扩展与工具调用 |
+| [生命周期 hooks](TOOL_HOOKS.md) | 按需执行工具与收尾脚本 |
+| [子代理工作树](AGENT_WORKTREES.md) | 独立修改、保留结果与合入 |
 | [浏览器工具](BROWSER_TOOLS.md) | Playwright 集成及能力边界 |
 | [路径保护](PATH_GUARD.md) | 工作区文件路径校验 |
 | [运行时集成](RUNTIME_INTEGRATION.md) | 浏览器配置与 Provider 缓存指标 |

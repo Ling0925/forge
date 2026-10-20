@@ -322,6 +322,11 @@ export function RuntimePanels() {
           </details>
         )}
         {snapshot.ownership && <p className="inspector-ownership-tag">负责范围：{snapshot.ownership}</p>}
+        {snapshot.agentWorktree && (
+          <p className="inspector-ownership-tag">
+            工作树：<code>{snapshot.agentWorktree.worktree}</code>
+          </p>
+        )}
       </section>
       <section className="wb-stack inspector-section">
         <h3>上下文</h3>
