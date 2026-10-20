@@ -1,6 +1,9 @@
+import type { Message } from "../../../shared/schemas";
+
 export interface MemoryRefItem {
   readonly text: string;
   readonly refs: readonly string[];
+  readonly truncated?: boolean | undefined;
 }
 
 export interface MemorySectionGroup {
@@ -13,6 +16,7 @@ export interface MemoryExcerptBlock {
   readonly ref?: string | undefined;
   readonly roleLabel?: string | undefined;
   readonly text: string;
+  readonly rawText?: string | undefined;
   readonly truncated?: boolean | undefined;
 }
 
@@ -23,6 +27,7 @@ export interface MemoryPlanSummary {
     readonly step: string;
     readonly status: string;
   }[];
+  readonly truncated?: boolean | undefined;
 }
 
 export type ParsedContextMemory =
@@ -31,6 +36,7 @@ export type ParsedContextMemory =
       readonly archiveRange?: string | undefined;
       readonly goal: string;
       readonly sections: readonly MemorySectionGroup[];
+      readonly truncated?: boolean | undefined;
     }
   | {
       readonly kind: "run_checkpoint";
@@ -43,6 +49,7 @@ export type ParsedContextMemory =
       readonly latestAssistantReport?: MemoryExcerptBlock | undefined;
       readonly plan?: MemoryPlanSummary | undefined;
       readonly priorMemory?: ParsedContextMemory | undefined;
+      readonly priorMemoryTruncated?: boolean | undefined;
       readonly toolObservations: readonly MemoryExcerptBlock[];
     }
   | {
@@ -50,6 +57,7 @@ export type ParsedContextMemory =
       readonly archiveRange?: string | undefined;
       readonly unsummarizedRanges?: string | undefined;
       readonly previousState?: ParsedContextMemory | undefined;
+      readonly previousStateTruncated?: boolean | undefined;
       readonly plan?: MemoryPlanSummary | undefined;
       readonly excerpts: readonly MemoryExcerptBlock[];
     }
@@ -138,6 +146,17 @@ function formatReadableToolEnvelope(raw: string): string {
     }
     const obj = parsed as Record<string, unknown>;
     const parts: string[] = [];
+    if (typeof obj.command === "string" && obj.command.trim()) {
+      parts.push(`$ ${obj.command.trim()}`);
+    } else if (Array.isArray(obj.command) && obj.command.length > 0) {
+      parts.push(`$ ${obj.command.map(String).join(" ")}`);
+    }
+    if (typeof obj.path === "string" && obj.path.trim()) {
+      parts.push(`路径：${obj.path.trim()}`);
+    }
+    if (typeof obj.summary === "string" && obj.summary.trim()) {
+      parts.push(obj.summary.trim());
+    }
     if (typeof obj.error === "string" && obj.error.trim()) {
       parts.push(`错误：${obj.error.trim()}`);
     }
@@ -159,13 +178,77 @@ function formatReadableToolEnvelope(raw: string): string {
     if (parts.length > 0) {
       return parts.join("\n");
     }
+    return Object.entries(obj)
+      .filter(([, v]) => v !== null && v !== undefined && v !== "")
+      .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
+      .join("\n");
   } catch {
-    const contentMatch = trimmed.match(/"(?:stdout|content|output|error)":"((?:\\.|[^"\\])*)/);
+    const parts: string[] = [];
+    const cmdMatch = trimmed.match(/"command":"((?:\\.|[^"\\])*)/);
+    if (cmdMatch?.[1]) {
+      parts.push(`$ ${unescapeJsonStringFragment(cmdMatch[1]).trim()}`);
+    }
+    const pathMatch = trimmed.match(/"path":"((?:\\.|[^"\\])*)/);
+    if (pathMatch?.[1]) {
+      parts.push(`路径：${unescapeJsonStringFragment(pathMatch[1]).trim()}`);
+    }
+    const contentMatch = trimmed.match(
+      /"(?:stdout|content|output|error|summary)":"((?:\\.|[^"\\])*)/,
+    );
     if (contentMatch?.[1]) {
-      return unescapeJsonStringFragment(contentMatch[1]).trim();
+      parts.push(unescapeJsonStringFragment(contentMatch[1]).trim());
+    }
+    if (parts.length > 0) {
+      return parts.join("\n");
     }
   }
   return trimmed;
+}
+
+export function extractReadableMessageFromRecord(message: Message): {
+  readonly roleLabel: string;
+  readonly text: string;
+} {
+  const roleLabel = ROLE_LABELS[message.role] ?? message.role;
+  const parts: string[] = [];
+  if (message.content && message.content.trim()) {
+    const body =
+      message.role === "tool"
+        ? formatReadableToolEnvelope(message.content)
+        : message.content.trim();
+    if (body) parts.push(body);
+  }
+  if (
+    message.role === "assistant" &&
+    Array.isArray(message.tool_calls) &&
+    message.tool_calls.length > 0
+  ) {
+    const calls = message.tool_calls
+      .map((call) => {
+        const name = call.function?.name ?? "tool";
+        const args = call.function?.arguments?.trim();
+        return args ? `${name}(${args})` : name;
+      })
+      .join("、");
+    parts.push(`调用工具：${calls}`);
+  }
+  return {
+    roleLabel,
+    text: parts.join("\n\n") || "（空记录）",
+  };
+}
+
+export function resolveMessageByRef(
+  messages: readonly Message[] | undefined,
+  ref: string | undefined,
+): { readonly roleLabel: string; readonly text: string } | undefined {
+  if (!messages || !ref) return undefined;
+  const match = ref.match(/^m([1-9]\d*)$/);
+  if (!match?.[1]) return undefined;
+  const index = Number(match[1]) - 1;
+  const message = messages[index];
+  if (!message) return undefined;
+  return extractReadableMessageFromRecord(message);
 }
 
 export function extractReadableMessageText(
@@ -179,7 +262,10 @@ export function extractReadableMessageText(
       const parsed: unknown = JSON.parse(trimmed);
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
         const record = parsed as Record<string, unknown>;
-        const role = typeof record.role === "string" ? ROLE_LABELS[record.role] ?? record.role : undefined;
+        const role =
+          typeof record.role === "string"
+            ? ROLE_LABELS[record.role] ?? record.role
+            : undefined;
         if (typeof record.excerpt === "string") {
           const inner = extractReadableMessageText(record.excerpt);
           return {
@@ -215,7 +301,9 @@ export function extractReadableMessageText(
       }
     } catch {
       const roleMatch = trimmed.match(/"role":"([^"]+)"/);
-      const role = roleMatch?.[1] ? ROLE_LABELS[roleMatch[1]] ?? roleMatch[1] : undefined;
+      const role = roleMatch?.[1]
+        ? ROLE_LABELS[roleMatch[1]] ?? roleMatch[1]
+        : undefined;
       const excerptMatch = trimmed.match(/"excerpt":"((?:\\.|[^"\\])*)/);
       if (excerptMatch?.[1]) {
         const unescapedExcerpt = unescapeJsonStringFragment(excerptMatch[1]);
@@ -233,10 +321,23 @@ export function extractReadableMessageText(
           text: formatReadableToolEnvelope(unescaped),
         };
       }
+      const toolNameMatches = Array.from(
+        trimmed.matchAll(/"name":"((?:\\.|[^"\\])*)"/g),
+      )
+        .map((m) => m[1])
+        .filter((n): n is string => Boolean(n));
+      if (toolNameMatches.length > 0) {
+        return {
+          roleLabel: role ?? "助手",
+          text: `调用工具：${toolNameMatches.join("、")}`,
+        };
+      }
     }
   }
 
-  const toolHeaderMatch = trimmed.match(/^\[tool (?:result|call)[^\]]*\]\s*([\s\S]*)$/);
+  const toolHeaderMatch = trimmed.match(
+    /^\[tool (?:result|call)[^\]]*\]\s*([\s\S]*)$/,
+  );
   if (toolHeaderMatch?.[1]) {
     return {
       roleLabel: "工具",
@@ -247,7 +348,9 @@ export function extractReadableMessageText(
   return { text: trimmed };
 }
 
-export function extractReadablePlan(raw: string | null | undefined): MemoryPlanSummary | undefined {
+export function extractReadablePlan(
+  raw: string | null | undefined,
+): MemoryPlanSummary | undefined {
   if (!raw) return undefined;
   const trimmed = raw.trim();
   if (!trimmed || trimmed === "null") return undefined;
@@ -256,7 +359,10 @@ export function extractReadablePlan(raw: string | null | undefined): MemoryPlanS
     const parsed: unknown = JSON.parse(trimmed);
     if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
       const obj = parsed as Record<string, unknown>;
-      const title = typeof obj.title === "string" && obj.title.trim() ? obj.title.trim() : undefined;
+      const title =
+        typeof obj.title === "string" && obj.title.trim()
+          ? obj.title.trim()
+          : undefined;
       const explanation =
         typeof obj.explanation === "string" && obj.explanation.trim()
           ? obj.explanation.trim()
@@ -275,15 +381,17 @@ export function extractReadablePlan(raw: string | null | undefined): MemoryPlanS
               }
               return null;
             })
-            .filter((item): item is { step: string; status: string } => item !== null)
+            .filter(
+              (item): item is { step: string; status: string } => item !== null,
+            )
         : [];
       if (title || explanation || steps.length > 0) {
-        return { title, explanation, steps };
+        return { title, explanation, steps, truncated: false };
       }
     }
   } catch {
-    const titleMatch = trimmed.match(/"title":"((?:\\.|[^"\\])*)"/);
-    const explanationMatch = trimmed.match(/"explanation":"((?:\\.|[^"\\])*)"/);
+    const titleMatch = trimmed.match(/"title":"((?:\\.|[^"\\])*)/);
+    const explanationMatch = trimmed.match(/"explanation":"((?:\\.|[^"\\])*)/);
     const steps: { step: string; status: string }[] = [];
     const stepRegex = /\{"step":"((?:\\.|[^"\\])*)","status":"([^"]+)"\}/g;
     for (const match of trimmed.matchAll(stepRegex)) {
@@ -294,12 +402,14 @@ export function extractReadablePlan(raw: string | null | undefined): MemoryPlanS
         });
       }
     }
-    const title = titleMatch?.[1] ? unescapeJsonStringFragment(titleMatch[1]) : undefined;
+    const title = titleMatch?.[1]
+      ? unescapeJsonStringFragment(titleMatch[1])
+      : undefined;
     const explanation = explanationMatch?.[1]
       ? unescapeJsonStringFragment(explanationMatch[1])
       : undefined;
     if (title || explanation || steps.length > 0) {
-      return { title, explanation, steps };
+      return { title, explanation, steps, truncated: true };
     }
   }
   return undefined;
@@ -326,12 +436,15 @@ function parseExcerptObject(value: unknown): MemoryExcerptBlock | undefined {
   const extracted = extractReadableMessageText(rawText);
   const roleLabel =
     extracted.roleLabel ??
-    (typeof obj.role === "string" ? ROLE_LABELS[obj.role] ?? obj.role : undefined);
+    (typeof obj.role === "string"
+      ? ROLE_LABELS[obj.role] ?? obj.role
+      : undefined);
   if (!extracted.text.trim()) return undefined;
   return {
     ref,
     roleLabel,
     text: extracted.text,
+    rawText,
     truncated: Boolean(obj.truncated),
   };
 }
@@ -339,6 +452,7 @@ function parseExcerptObject(value: unknown): MemoryExcerptBlock | undefined {
 function tryParseWorkingStateRecord(
   record: Record<string, unknown>,
   archiveRange?: string,
+  truncated = false,
 ): ParsedContextMemory | undefined {
   const hasWorkingStateShape =
     typeof record.goal === "string" &&
@@ -373,6 +487,59 @@ function tryParseWorkingStateRecord(
     archiveRange,
     goal: (record.goal as string).trim(),
     sections,
+    truncated,
+  };
+}
+
+function salvageTruncatedWorkingState(
+  jsonCandidate: string,
+  archiveRange?: string,
+): ParsedContextMemory | undefined {
+  const goalMatch = jsonCandidate.match(/"goal":"((?:\\.|[^"\\])*)/);
+  if (!goalMatch?.[1]) return undefined;
+
+  const sections: MemorySectionGroup[] = [];
+  for (const { key, label } of WORKING_STATE_SECTIONS) {
+    const keyMarker = `"${key}":[`;
+    const startIdx = jsonCandidate.indexOf(keyMarker);
+    if (startIdx === -1) continue;
+    const afterStart = jsonCandidate.slice(startIdx + keyMarker.length);
+    const nextSectionIndices = WORKING_STATE_SECTIONS.map(({ key: otherKey }) =>
+      otherKey === key ? -1 : afterStart.indexOf(`"${otherKey}":[`),
+    ).filter((idx) => idx !== -1);
+    const sectionSlice =
+      nextSectionIndices.length > 0
+        ? afterStart.slice(0, Math.min(...nextSectionIndices))
+        : afterStart;
+
+    const items: MemoryRefItem[] = [];
+    const itemRegex = /\{"text":"((?:\\.|[^"\\])*)","refs":\[([^\]]*)\]\}/g;
+    for (const match of sectionSlice.matchAll(itemRegex)) {
+      const text = unescapeJsonStringFragment(match[1] ?? "").trim();
+      if (!text) continue;
+      const refs = Array.from((match[2] ?? "").matchAll(/"(m\d+)"/g)).map(
+        (m) => m[1] ?? "",
+      ).filter(Boolean);
+      items.push({ text, refs });
+    }
+    if (items.length === 0) {
+      const partialMatch = sectionSlice.match(/\{"text":"((?:\\.|[^"\\])*)/);
+      if (partialMatch?.[1]) {
+        const text = unescapeJsonStringFragment(partialMatch[1]).trim();
+        if (text) items.push({ text, refs: [], truncated: true });
+      }
+    }
+    if (items.length > 0) {
+      sections.push({ key, label, items });
+    }
+  }
+
+  return {
+    kind: "working_state",
+    archiveRange,
+    goal: unescapeJsonStringFragment(goalMatch[1]).trim(),
+    sections,
+    truncated: true,
   };
 }
 
@@ -403,17 +570,20 @@ function tryParseRunCheckpointRecord(
   );
   const initialRequest = parseExcerptObject(record.initialRequest);
   const latestRequest = parseExcerptObject(record.latestRequest);
-  const latestAssistantReport = parseExcerptObject(record.latestAssistantReport);
+  const latestAssistantReport = parseExcerptObject(
+    record.latestAssistantReport,
+  );
   const plan =
     typeof record.planExcerpt === "string"
       ? extractReadablePlan(record.planExcerpt)
       : undefined;
+  const priorRaw =
+    typeof record.priorMemoryExcerpt === "string"
+      ? record.priorMemoryExcerpt.trim()
+      : "";
   const priorMemory =
-    depth < 2 &&
-    typeof record.priorMemoryExcerpt === "string" &&
-    record.priorMemoryExcerpt.trim()
-      ? parseContextMemory(record.priorMemoryExcerpt, depth + 1)
-      : undefined;
+    depth < 2 && priorRaw ? parseContextMemory(priorRaw, depth + 1) : undefined;
+  const priorMemoryTruncated = Boolean(priorRaw && priorRaw.length >= 1150);
   const toolObservations = Array.isArray(record.toolObservations)
     ? record.toolObservations
         .map((item) => parseExcerptObject(item))
@@ -431,6 +601,7 @@ function tryParseRunCheckpointRecord(
     latestAssistantReport,
     plan,
     priorMemory,
+    priorMemoryTruncated,
     toolObservations,
   };
 }
@@ -446,7 +617,9 @@ function parseExcerptLines(rawLines: string): readonly MemoryExcerptBlock[] {
         if (Array.isArray(arr)) {
           for (const item of arr) {
             if (typeof item === "object" && item !== null) {
-              const extracted = extractReadableMessageText(JSON.stringify(item));
+              const extracted = extractReadableMessageText(
+                JSON.stringify(item),
+              );
               if (extracted.text.trim()) {
                 results.push({
                   roleLabel: extracted.roleLabel,
@@ -479,7 +652,9 @@ function parseExcerptLines(rawLines: string): readonly MemoryExcerptBlock[] {
           ref: idMatch?.[1],
           roleLabel: extracted.roleLabel,
           text: extracted.text,
-          truncated: trimmed.includes('"truncated":true'),
+          rawText: trimmed,
+          truncated:
+            trimmed.includes('"truncated":true') || !trimmed.endsWith("}"),
         });
         continue;
       }
@@ -508,23 +683,24 @@ export function parseContextMemory(
       .trim();
     try {
       const parsed: unknown = JSON.parse(jsonCandidate);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed)
+      ) {
         const ws = tryParseWorkingStateRecord(
           parsed as Record<string, unknown>,
           archiveRange,
+          false,
         );
         if (ws) return ws;
       }
     } catch {
-      const goalMatch = jsonCandidate.match(/"goal":"((?:\\.|[^"\\])*)/);
-      if (goalMatch?.[1]) {
-        return {
-          kind: "working_state",
-          archiveRange,
-          goal: unescapeJsonStringFragment(goalMatch[1]),
-          sections: [],
-        };
-      }
+      const salvaged = salvageTruncatedWorkingState(
+        jsonCandidate,
+        archiveRange,
+      );
+      if (salvaged) return salvaged;
     }
   }
 
@@ -568,7 +744,12 @@ export function parseContextMemory(
     let previousRaw = "";
     if (prevIdx !== -1) {
       const start = prevIdx + "Previous state:\n".length;
-      const end = planIdx !== -1 ? planIdx : latestIdx !== -1 ? latestIdx : trimmed.length;
+      const end =
+        planIdx !== -1
+          ? planIdx
+          : latestIdx !== -1
+            ? latestIdx
+            : trimmed.length;
       previousRaw = trimmed.slice(start, end).trim();
     } else if (retainedIdx !== -1) {
       const start = retainedIdx + "Retained memory:\n".length;
@@ -585,15 +766,22 @@ export function parseContextMemory(
 
     let excerptsRaw = "";
     if (latestIdx !== -1) {
-      excerptsRaw = trimmed.slice(latestIdx + "\nLatest excerpts:\n".length).trim();
+      excerptsRaw = trimmed
+        .slice(latestIdx + "\nLatest excerpts:\n".length)
+        .trim();
     } else if (partialIdx !== -1) {
-      excerptsRaw = trimmed.slice(partialIdx + "\nPartial excerpts:\n".length).trim();
+      excerptsRaw = trimmed
+        .slice(partialIdx + "\nPartial excerpts:\n".length)
+        .trim();
     }
 
     const previousState =
       depth < 2 && previousRaw
         ? parseContextMemory(previousRaw, depth + 1)
         : undefined;
+    const previousStateTruncated = Boolean(
+      previousRaw && previousRaw.length >= 1950,
+    );
     const plan = extractReadablePlan(planRaw);
     const excerpts = excerptsRaw ? parseExcerptLines(excerptsRaw) : [];
 
@@ -602,6 +790,7 @@ export function parseContextMemory(
       archiveRange,
       unsummarizedRanges: unsummarizedMatch?.[1]?.trim(),
       previousState,
+      previousStateTruncated,
       plan,
       excerpts,
     };
@@ -617,9 +806,13 @@ export function parseContextMemory(
     const jsonCandidate = trimmed.slice(jsonStart).trim();
     try {
       const parsed: unknown = JSON.parse(jsonCandidate);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed)
+      ) {
         const record = parsed as Record<string, unknown>;
-        const ws = tryParseWorkingStateRecord(record, archiveRange);
+        const ws = tryParseWorkingStateRecord(record, archiveRange, false);
         if (ws) return ws;
         const rc = tryParseRunCheckpointRecord(record, archiveRange, depth);
         if (rc) return rc;
@@ -643,7 +836,11 @@ export function parseContextMemory(
         }
       }
     } catch {
-      // Not valid standalone JSON; fall back to cleaned markdown
+      const salvaged = salvageTruncatedWorkingState(
+        jsonCandidate,
+        archiveRange,
+      );
+      if (salvaged) return salvaged;
     }
   }
 

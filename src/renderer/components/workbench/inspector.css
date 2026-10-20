@@ -1401,6 +1401,84 @@
   border: 1px solid var(--warning-border, rgba(217, 119, 6, 0.25));
 }
 
+.wb-inspector .inspector-memory-trunc-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: var(--warning-bg, rgba(217, 119, 6, 0.1));
+  color: var(--warning, #b45309);
+  border: 1px solid var(--warning-border, rgba(217, 119, 6, 0.25));
+  cursor: pointer;
+  transition: background-color 0.12s ease, opacity 0.12s ease;
+}
+
+.wb-inspector .inspector-memory-trunc-btn:hover {
+  opacity: 0.88;
+}
+
+.wb-inspector .inspector-memory-ref-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 9999px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.wb-inspector .inspector-memory-ref-btn:hover,
+.wb-inspector .inspector-memory-ref-btn.is-active {
+  background: var(--surface-selected);
+  color: var(--text-primary);
+  border-color: var(--border-control);
+}
+
+.wb-inspector .inspector-memory-expand-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.wb-inspector .inspector-memory-expand-link {
+  padding: 0;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.wb-inspector .inspector-memory-expand-link:hover {
+  color: var(--text-primary);
+}
+
+.wb-inspector .inspector-memory-ref-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  width: 100%;
+  min-width: 0;
+}
+
 .wb-inspector .inspector-memory-time {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -1464,15 +1542,22 @@
 
 .wb-inspector .inspector-memory-list-item {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   padding-top: 4px;
   border-top: 1px dashed var(--border-subtle);
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
+  min-width: 0;
+}
+
+.wb-inspector .inspector-memory-list-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
   min-width: 0;
 }
 

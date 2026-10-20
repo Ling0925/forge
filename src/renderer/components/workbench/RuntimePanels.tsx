@@ -10,15 +10,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { OperationScope } from "../../state/operation-scope";
 import { sessionUsage } from "../../state/session-usage";
 import { useWorkbench } from "../../state/workbench-context";
-import type { SessionSnapshot, TaskPlan } from "../../../shared/schemas";
+import type { Message, SessionSnapshot, TaskPlan } from "../../../shared/schemas";
 import { sessionPlans } from "../../../shared/plans";
 import { Button } from "../primitives/Button";
 import { StatusBadge } from "../primitives/StatusBadge";
 import {
   type MemoryExcerptBlock,
   type MemoryPlanSummary,
+  type MemoryRefItem,
   type ParsedContextMemory,
   parseContextMemory,
+  resolveMessageByRef,
 } from "./context-memory-parser";
 import { Markdown } from "./Markdown";
 
@@ -191,6 +193,7 @@ export function PlanDocumentPanel({
             const progress = planProgress(plan);
             return (
               <details
+                open
                 key={`${plan.id}:${index}`}
                 className="wb-disclosure inspector-disclosure-card"
               >
@@ -332,6 +335,7 @@ export function SubAgentsPanel() {
                 .slice(-1)
                 .map((update) => (
                   <details
+                    open
                     key={update.childSessionId}
                     className="wb-disclosure"
                   >
@@ -357,7 +361,7 @@ export function SubAgentsPanel() {
           </Button>
         )}
       {snapshot.agentTask && (
-        <details className="wb-disclosure">
+        <details open className="wb-disclosure">
           <summary>查看子任务指令</summary>
           <div className="wb-disclosure-body">
             <Markdown source={snapshot.agentTask} />
@@ -380,61 +384,263 @@ export function SubAgentsPanel() {
   );
 }
 
+const EXCERPT_PREVIEW_CHARS = 220;
+
 function MemoryExcerptCard({
   label,
   excerpt,
+  messages,
 }: {
   readonly label?: string | undefined;
   readonly excerpt: MemoryExcerptBlock;
+  readonly messages?: readonly Message[] | undefined;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const resolvedRecord = useMemo(
+    () => resolveMessageByRef(messages, excerpt.ref),
+    [messages, excerpt.ref],
+  );
+  const fullText =
+    resolvedRecord && resolvedRecord.text.length >= excerpt.text.length
+      ? resolvedRecord.text
+      : excerpt.text;
+  const hasLongerFullRecord = Boolean(
+    resolvedRecord && resolvedRecord.text.length > excerpt.text.length,
+  );
+  const isLongPreview =
+    !hasLongerFullRecord && excerpt.text.length > EXCERPT_PREVIEW_CHARS;
+  const isExpandable = Boolean(
+    excerpt.truncated || hasLongerFullRecord || isLongPreview,
+  );
+
+  const displayedText = expanded
+    ? fullText
+    : isLongPreview
+      ? `${excerpt.text.slice(0, EXCERPT_PREVIEW_CHARS).trimEnd()}…`
+      : excerpt.text;
+
   return (
     <div className="inspector-memory-block">
-      {(label || excerpt.ref || excerpt.roleLabel || excerpt.truncated) && (
+      {(label || excerpt.ref || excerpt.roleLabel || isExpandable) && (
         <div className="inspector-memory-block-head">
-          {label && <span className="inspector-memory-block-title">{label}</span>}
-          {excerpt.roleLabel && (
-            <span className="inspector-memory-role-pill">{excerpt.roleLabel}</span>
+          {label && (
+            <span className="inspector-memory-block-title">{label}</span>
           )}
-          {excerpt.ref && (
-            <span className="inspector-memory-ref-pill">{excerpt.ref}</span>
+          {(excerpt.roleLabel ?? resolvedRecord?.roleLabel) && (
+            <span className="inspector-memory-role-pill">
+              {excerpt.roleLabel ?? resolvedRecord?.roleLabel}
+            </span>
           )}
-          {excerpt.truncated && (
-            <span className="inspector-memory-trunc-pill">已截断</span>
+          {excerpt.ref &&
+            (isExpandable ? (
+              <button
+                type="button"
+                className="inspector-memory-ref-btn"
+                aria-expanded={expanded}
+                title={expanded ? "点击收起记录" : "点击展开原记录"}
+                onClick={() => setExpanded((prev) => !prev)}
+              >
+                {excerpt.ref}
+              </button>
+            ) : (
+              <span className="inspector-memory-ref-pill">{excerpt.ref}</span>
+            ))}
+          {isExpandable && (
+            <button
+              type="button"
+              className="inspector-memory-trunc-btn"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((prev) => !prev)}
+            >
+              {expanded
+                ? "已展开 · 点击收起"
+                : excerpt.truncated || hasLongerFullRecord
+                  ? "已截断 · 点击展开"
+                  : "点击展开全文"}
+            </button>
           )}
         </div>
       )}
       <div className="inspector-memory-block-body">
-        <Markdown source={excerpt.text} />
+        <Markdown source={displayedText} />
       </div>
+      {isExpandable && (
+        <div className="inspector-memory-expand-footer">
+          <button
+            type="button"
+            className="inspector-memory-expand-link"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded ? "收起完整内容" : "展开完整内容"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-function MemoryPlanBlock({ plan }: { readonly plan: MemoryPlanSummary }) {
+function WorkingStateItemRow({
+  item,
+  messages,
+}: {
+  readonly item: MemoryRefItem;
+  readonly messages?: readonly Message[] | undefined;
+}) {
+  const [expandedRef, setExpandedRef] = useState<string | null>(null);
+  const [textExpanded, setTextExpanded] = useState(false);
+
+  const isLongItemText = item.text.length > EXCERPT_PREVIEW_CHARS;
+  const hasTruncatedOrLong = Boolean(item.truncated || isLongItemText);
+  const displayedItemText =
+    textExpanded || !isLongItemText
+      ? item.text
+      : `${item.text.slice(0, EXCERPT_PREVIEW_CHARS).trimEnd()}…`;
+
+  const resolvedRefMessage = useMemo(
+    () =>
+      expandedRef
+        ? resolveMessageByRef(messages, expandedRef)
+        : undefined,
+    [messages, expandedRef],
+  );
+
+  return (
+    <li className="inspector-memory-list-item">
+      <div className="inspector-memory-list-row">
+        <span className="inspector-memory-item-text">{displayedItemText}</span>
+        <span className="inspector-memory-refs">
+          {hasTruncatedOrLong && (
+            <button
+              type="button"
+              className="inspector-memory-trunc-btn"
+              aria-expanded={textExpanded}
+              onClick={() => setTextExpanded((prev) => !prev)}
+            >
+              {textExpanded ? "收起" : "已截断 · 展开"}
+            </button>
+          )}
+          {item.refs.map((ref) => {
+            const isOpen = expandedRef === ref;
+            return (
+              <button
+                key={ref}
+                type="button"
+                className={`inspector-memory-ref-btn${isOpen ? " is-active" : ""}`}
+                aria-expanded={isOpen}
+                title={isOpen ? `收起记录 ${ref}` : `点击查看记录 ${ref}`}
+                onClick={() =>
+                  setExpandedRef((prev) => (prev === ref ? null : ref))
+                }
+              >
+                {ref}
+              </button>
+            );
+          })}
+        </span>
+      </div>
+      {expandedRef && (
+        <div className="inspector-memory-ref-preview">
+          <div className="inspector-memory-block-head">
+            <span className="inspector-memory-ref-pill">{expandedRef}</span>
+            {resolvedRefMessage?.roleLabel && (
+              <span className="inspector-memory-role-pill">
+                {resolvedRefMessage.roleLabel}
+              </span>
+            )}
+            <button
+              type="button"
+              className="inspector-memory-expand-link"
+              onClick={() => setExpandedRef(null)}
+            >
+              收起
+            </button>
+          </div>
+          <div className="inspector-memory-block-body">
+            <Markdown
+              source={
+                resolvedRefMessage?.text ??
+                item.text
+              }
+            />
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function MemoryPlanBlock({
+  plan,
+  currentPlan,
+}: {
+  readonly plan: MemoryPlanSummary;
+  readonly currentPlan?: TaskPlan | null | undefined;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const fullExplanation =
+    currentPlan?.explanation &&
+    currentPlan.explanation.length > (plan.explanation?.length ?? 0)
+      ? currentPlan.explanation
+      : plan.explanation;
+  const fullSteps =
+    currentPlan?.steps && currentPlan.steps.length > plan.steps.length
+      ? currentPlan.steps
+      : plan.steps;
+  const isExpandable = Boolean(
+    plan.truncated ||
+      (fullExplanation &&
+        fullExplanation.length > (plan.explanation?.length ?? 0)) ||
+      fullSteps.length > plan.steps.length ||
+      (plan.explanation && plan.explanation.length > EXCERPT_PREVIEW_CHARS),
+  );
+  const activeExplanation = expanded
+    ? fullExplanation
+    : plan.explanation && plan.explanation.length > EXCERPT_PREVIEW_CHARS
+      ? `${plan.explanation.slice(0, EXCERPT_PREVIEW_CHARS).trimEnd()}…`
+      : plan.explanation;
+  const activeSteps = expanded ? fullSteps : plan.steps;
+
   return (
     <div className="inspector-memory-block">
       <div className="inspector-memory-block-head">
         <span className="inspector-memory-block-title">
           关联计划{plan.title ? ` · ${plan.title}` : ""}
         </span>
+        {isExpandable && (
+          <button
+            type="button"
+            className="inspector-memory-trunc-btn"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded
+              ? "已展开 · 点击收起"
+              : plan.truncated
+                ? "已截断 · 点击展开"
+                : "点击展开完整计划"}
+          </button>
+        )}
       </div>
-      {plan.explanation && (
+      {activeExplanation && (
         <div className="inspector-memory-block-body">
-          <Markdown source={plan.explanation} />
+          <Markdown source={activeExplanation} />
         </div>
       )}
-      {plan.steps.length > 0 && (
+      {activeSteps.length > 0 && (
         <ul className="inspector-memory-list">
-          {plan.steps.map((s, idx) => (
+          {activeSteps.map((s, idx) => (
             <li key={`${idx}:${s.step}`} className="inspector-memory-list-item">
-              <span className="inspector-memory-item-text">{s.step}</span>
-              <span className="inspector-memory-ref-pill">
-                {s.status === "completed"
-                  ? "已完成"
-                  : s.status === "in_progress"
-                    ? "进行中"
-                    : "待执行"}
-              </span>
+              <div className="inspector-memory-list-row">
+                <span className="inspector-memory-item-text">{s.step}</span>
+                <span className="inspector-memory-ref-pill">
+                  {s.status === "completed"
+                    ? "已完成"
+                    : s.status === "in_progress"
+                      ? "进行中"
+                      : "待执行"}
+                </span>
+              </div>
             </li>
           ))}
         </ul>
@@ -445,17 +651,19 @@ function MemoryPlanBlock({ plan }: { readonly plan: MemoryPlanSummary }) {
 
 export function ContextMemoryView({
   parsed,
+  messages,
+  currentPlan,
 }: {
   readonly parsed: ParsedContextMemory;
+  readonly messages?: readonly Message[] | undefined;
+  readonly currentPlan?: TaskPlan | null | undefined;
 }) {
   if (parsed.kind === "working_state") {
     return (
       <div className="inspector-memory-view wb-stack">
         {parsed.archiveRange && (
           <div className="inspector-memory-meta-row">
-            <span className="inspector-memory-meta-pill">
-              工作状态摘要
-            </span>
+            <span className="inspector-memory-meta-pill">工作状态摘要</span>
             <span className="inspector-memory-ref-pill">
               归档记录 {parsed.archiveRange}
             </span>
@@ -483,23 +691,11 @@ export function ContextMemoryView({
             </div>
             <ul className="inspector-memory-list">
               {section.items.map((item, idx) => (
-                <li
+                <WorkingStateItemRow
                   key={`${section.key}:${idx}`}
-                  className="inspector-memory-list-item"
-                >
-                  <span className="inspector-memory-item-text">
-                    {item.text}
-                  </span>
-                  {item.refs.length > 0 && (
-                    <span className="inspector-memory-refs">
-                      {item.refs.map((ref) => (
-                        <span key={ref} className="inspector-memory-ref-pill">
-                          {ref}
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </li>
+                  item={item}
+                  messages={messages}
+                />
               ))}
             </ul>
           </div>
@@ -528,18 +724,29 @@ export function ContextMemoryView({
           )}
         </div>
         {parsed.initialRequest && (
-          <MemoryExcerptCard label="初始请求" excerpt={parsed.initialRequest} />
+          <MemoryExcerptCard
+            label="初始请求"
+            excerpt={parsed.initialRequest}
+            messages={messages}
+          />
         )}
         {parsed.latestRequest && (
-          <MemoryExcerptCard label="最近请求" excerpt={parsed.latestRequest} />
+          <MemoryExcerptCard
+            label="最近请求"
+            excerpt={parsed.latestRequest}
+            messages={messages}
+          />
         )}
         {parsed.latestAssistantReport && (
           <MemoryExcerptCard
             label="最近助手回复"
             excerpt={parsed.latestAssistantReport}
+            messages={messages}
           />
         )}
-        {parsed.plan && <MemoryPlanBlock plan={parsed.plan} />}
+        {parsed.plan && (
+          <MemoryPlanBlock plan={parsed.plan} currentPlan={currentPlan} />
+        )}
         {parsed.toolObservations.length > 0 && (
           <div className="inspector-memory-block">
             <div className="inspector-memory-block-head">
@@ -553,16 +760,24 @@ export function ContextMemoryView({
                 <MemoryExcerptCard
                   key={`${obs.ref ?? idx}:${idx}`}
                   excerpt={obs}
+                  messages={messages}
                 />
               ))}
             </div>
           </div>
         )}
         {parsed.priorMemory && (
-          <details className="wb-disclosure inspector-memory-subdisclosure">
+          <details
+            open
+            className="wb-disclosure inspector-memory-subdisclosure"
+          >
             <summary>前序历史记忆摘录</summary>
             <div className="wb-disclosure-body">
-              <ContextMemoryView parsed={parsed.priorMemory} />
+              <ContextMemoryView
+                parsed={parsed.priorMemory}
+                messages={messages}
+                currentPlan={currentPlan}
+              />
             </div>
           </details>
         )}
@@ -586,7 +801,9 @@ export function ContextMemoryView({
             </span>
           )}
         </div>
-        {parsed.plan && <MemoryPlanBlock plan={parsed.plan} />}
+        {parsed.plan && (
+          <MemoryPlanBlock plan={parsed.plan} currentPlan={currentPlan} />
+        )}
         {parsed.excerpts.length > 0 && (
           <div className="inspector-memory-block">
             <div className="inspector-memory-block-head">
@@ -600,16 +817,24 @@ export function ContextMemoryView({
                 <MemoryExcerptCard
                   key={`${item.ref ?? idx}:${idx}`}
                   excerpt={item}
+                  messages={messages}
                 />
               ))}
             </div>
           </div>
         )}
         {parsed.previousState && (
-          <details className="wb-disclosure inspector-memory-subdisclosure">
+          <details
+            open
+            className="wb-disclosure inspector-memory-subdisclosure"
+          >
             <summary>前序记忆状态</summary>
             <div className="wb-disclosure-body">
-              <ContextMemoryView parsed={parsed.previousState} />
+              <ContextMemoryView
+                parsed={parsed.previousState}
+                messages={messages}
+                currentPlan={currentPlan}
+              />
             </div>
           </details>
         )}
@@ -666,7 +891,7 @@ export function ContextManagementPanel() {
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [controlMessage, setControlMessage] = useState("");
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(true);
   const [diagnosticsError, setDiagnosticsError] = useState("");
   const sessionId = snapshot?.id;
   const cancelOwned = async (id: NonNullable<typeof state.activeSessionId>) => {
@@ -733,8 +958,9 @@ export function ContextManagementPanel() {
   return (
     <section className="wb-stack inspector-section">
       <h3>上下文与记忆</h3>
-      {/* Single unified token total & context statistics disclosure */}
+      {/* Single unified token total & context statistics disclosure (expanded by default) */}
       <details
+        open
         className="wb-disclosure inspector-disclosure-card inspector-usage-card"
         onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)}
       >
@@ -799,7 +1025,10 @@ export function ContextManagementPanel() {
         </div>
       </details>
       {snapshot.contextSummary && parsedMemory && (
-        <details className="wb-disclosure inspector-disclosure-card inspector-memory-card">
+        <details
+          open
+          className="wb-disclosure inspector-disclosure-card inspector-memory-card"
+        >
           <summary>
             <span className="inspector-disclosure-head">
               <span>
@@ -809,7 +1038,11 @@ export function ContextManagementPanel() {
             </span>
           </summary>
           <div className="wb-disclosure-body">
-            <ContextMemoryView parsed={parsedMemory} />
+            <ContextMemoryView
+              parsed={parsedMemory}
+              messages={snapshot.messages}
+              currentPlan={snapshot.plan}
+            />
           </div>
         </details>
       )}

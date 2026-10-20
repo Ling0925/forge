@@ -444,6 +444,7 @@ export function Inspector({
                                   : change.path;
                               return (
                                 <details
+                                  open
                                   key={`${change.path}-${i}`}
                                   className="wb-disclosure inspector-file-card"
                                 >
@@ -505,7 +506,7 @@ export function Inspector({
                           </div>
                         )}
                       </section>
-                      <details className="wb-disclosure">
+                      <details open className="wb-disclosure">
                         <summary>文件检查点与恢复</summary>
                         <div className="wb-disclosure-body">
                           <CheckpointPanel
@@ -531,7 +532,8 @@ export function Inspector({
                         { id: "resources", label: "项目资源" },
                       ]}
                     />
-                    {sessionSubTab === "overview" ? (
+                    {section === "inspector-resources" &&
+                    sessionSubTab === "overview" ? (
                       <div className="inspector-subtabpanel wb-stack">
                         <section className="inspector-overview inspector-card">
                           <div className="inspector-card-header">

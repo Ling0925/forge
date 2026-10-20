@@ -38,7 +38,33 @@ it("keeps execution details compact, navigable and diagnostics on demand", async
           content:'# Workspace Preview Content'
         })
       };
-      const snapshot={id:'session',status:'running',model:'provider/model-with-a-long-identifier',workspace:'/home/ling/services/desktop-harness',messages:[],events:[],changes:[],plan:{steps:[{step:'检查会话数据与执行状态',status:'completed'},{step:'验证长路径与窄屏布局',status:'in_progress'}],explanation:'真实计划说明'}};
+      const snapshot={
+        id:'session',
+        status:'running',
+        model:'provider/model-with-a-long-identifier',
+        workspace:'/home/ling/services/desktop-harness',
+        messages:[
+          {id:'msg-1',role:'user',content:'初始简短摘要但包含完整背景说明：需要把右侧面板的折叠项默认展开，并支持点击展开截断内容。',timestamp:'2026-01-01T00:00:00.000Z'}
+        ],
+        events:[],
+        changes:[],
+        contextSummary:{
+          boundary:1,
+          fallback:true,
+          content:'Local run-end checkpoint; partial observations, NOT a verified semantic summary. All original records m1..m1 remain available.\\n' + JSON.stringify({
+            status:'completed',
+            endedAt:'2026-01-01T00:05:00.000Z',
+            initialRequest:{ref:'m1',text:JSON.stringify({role:'user',content:'初始简短摘要'}),truncated:true},
+            latestRequest:null,
+            latestAssistantReport:null,
+            planExcerpt:null,
+            priorMemoryExcerpt:null,
+            toolObservations:[],
+            effectsMayBeUncertain:false
+          })
+        },
+        plan:{steps:[{step:'检查会话数据与执行状态',status:'completed'},{step:'验证长路径与窄屏布局',status:'in_progress'}],explanation:'真实计划说明'}
+      };
       function Harness(){
         const [tick,setTick]=useState(0);
         window.refreshFixture=()=>setTick(tick+1);
@@ -125,18 +151,16 @@ it("keeps execution details compact, navigable and diagnostics on demand", async
         await page
           .getByRole("tab", { name: "变更与检查点", exact: true })
           .click();
-        await page.getByText("文件检查点与恢复", { exact: true }).click();
         expect(
           await page.getByRole("button", { name: "刷新检查点" }).isVisible(),
-        ).toBe(true);
-        await page.getByRole("tab", { name: "会话信息", exact: true }).click();
-        expect(
-          await page.getByText("无限制", { exact: true }).isVisible(),
         ).toBe(true);
         expect(
           await page.evaluate(() => Reflect.get(window, "diagnosticCalls")),
         ).toBe(0);
-        await page.getByText("上下文统计", { exact: true }).click();
+        await page.getByRole("tab", { name: "会话信息", exact: true }).click();
+        expect(
+          await page.getByText("无限制", { exact: true }).isVisible(),
+        ).toBe(true);
         await expect
           .poll(() =>
             page.evaluate(() => Reflect.get(window, "diagnosticCalls")),
@@ -153,6 +177,18 @@ it("keeps execution details compact, navigable and diagnostics on demand", async
         ).toBe(true);
         expect(
           await page.getByText("42,000 字符", { exact: false }).isVisible(),
+        ).toBe(true);
+        // Memory card is open by default and truncated excerpt expands on click
+        expect(
+          await page.getByText("初始简短摘要", { exact: true }).isVisible(),
+        ).toBe(true);
+        await page
+          .getByRole("button", { name: "已截断 · 点击展开", exact: true })
+          .click();
+        expect(
+          await page
+            .getByText("需要把右侧面板的折叠项默认展开", { exact: false })
+            .isVisible(),
         ).toBe(true);
         await page.screenshot({
           path: `/tmp/forge-inspector-${width}-${theme}.png`,
