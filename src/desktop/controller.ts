@@ -239,7 +239,7 @@ export function createWorkerController(
           respond(request, await service.updateSettings(request.input));
           break;
         case "listModels":
-          respond(request, await service.listModels(undefined, request.sourceId));
+          respond(request, await service.listModels(undefined, request.sourceId, request.refresh));
           break;
         case "listSessions":
           respond(request, await service.listSessions());

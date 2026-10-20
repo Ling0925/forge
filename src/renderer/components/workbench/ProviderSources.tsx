@@ -172,7 +172,7 @@ export function ProviderSources({
       const request = modelCatalogCache
         .load(
           key,
-          async () => [...new Set(await window.forge.listModels(profile.id))],
+          async () => [...new Set(await window.forge.listModels(profile.id, refresh))],
           refresh,
         )
         .then((result) => {

@@ -19,8 +19,8 @@ it("keeps a picked model paired with the source it came from", async () => {
         import {Composer} from './src/renderer/components/workbench/Composer';
         import {WorkbenchProvider} from './src/renderer/state/workbench-context';
         import {defaultPublicSettings} from './src/shared/schemas';
-        window.starts=[];
-        window.forge={listModels:async id=>[id+'/one',id+'/two'],listSessions:async()=>[],
+        window.starts=[]; window.refreshes=[];
+        window.forge={listModels:async(id,refresh)=>{if(refresh)window.refreshes.push(id);return [id+'/one',id+'/two'];},listSessions:async()=>[],
           getSettings:async()=>({...defaultPublicSettings,isConfigured:true,baseUrl:'https://a.test/v1',model:'a/one',activeSourceId:'a',
             providerSources:[{id:'a',label:'Source A',baseUrl:'https://a.test/v1',model:'a/one',revision:1,hasApiKey:false},
                              {id:'b',label:'Source B',baseUrl:'https://b.test/v1',model:'b/one',revision:1,hasApiKey:false}]}),
@@ -68,6 +68,8 @@ it("keeps a picked model paired with the source it came from", async () => {
     const currentModel = page.getByRole("button", { name: /^选择模型：/ });
     expect(await currentModel.textContent()).toContain("Source A");
     await currentModel.click();
+    await page.getByRole("button", { name: "刷新模型目录", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "refreshes"))).toEqual(["a", "b"]);
     expect(await page.getByLabel("搜索模型或输入精确 ID").count()).toBe(0);
     expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
     const sourceB = page.getByRole("group", { name: "Source B", exact: true });

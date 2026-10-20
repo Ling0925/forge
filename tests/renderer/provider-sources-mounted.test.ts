@@ -11,8 +11,8 @@ it("manages independent sources, fetches selected /models, saves model selection
     import {TestProvider} from './src/renderer/state/workbench-context';
     import './src/renderer/styles/global.css';
     import './src/renderer/components/workbench/app.css';
-    window.calls=[]; window.reads=[]; window.failModels=false; window.failSave=false; window.extraModels=[];
-    window.forge={listModels:async(id)=>{window.reads.push(id);if(window.failModels)throw Error('目录请求失败');return [id+'/one',id+'/two',...window.extraModels]}};
+    window.calls=[]; window.reads=[]; window.refreshes=[]; window.failModels=false; window.failSave=false; window.extraModels=[];
+    window.forge={listModels:async(id,refresh)=>{window.reads.push(id);if(refresh)window.refreshes.push(id);if(window.failModels)throw Error('目录请求失败');return [id+'/one',id+'/two',...window.extraModels]}};
     createRoot(document.getElementById('root')).render(<TestProvider><Settings/></TestProvider>);
   ` }, bundle: true, write: false, format: 'iife', jsx: 'automatic', outfile: 'sources.js', loader: { '.woff2': 'dataurl' }, define: { 'process.env.NODE_ENV': '"development"' }, plugins: [{ name: 'source-host', setup(api) {
     api.onLoad({ filter: /workbench-context\.tsx$/ }, () => ({ loader: 'tsx', resolveDir: resolve('.'), contents: `
@@ -111,6 +111,7 @@ it("manages independent sources, fetches selected /models, saves model selection
     expect(cards[1]).toContain('源 B');
     await page.getByRole('button', { name: '刷新源 B的模型' }).click();
     await expect.poll(() => page.evaluate(() => Reflect.get(window, 'reads'))).toContain(b);
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, 'refreshes'))).toContain(b);
     await page.evaluate(() => Reflect.set(window, 'failModels', true));
     await page.getByRole('button', { name: '刷新源 A的模型' }).click();
     await page.getByText('目录加载失败：目录请求失败').waitFor();

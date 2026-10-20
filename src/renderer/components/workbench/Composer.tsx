@@ -670,7 +670,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setListing(true);
     setModelError("");
     const results = await Promise.allSettled(catalogSources.map(async (source) => {
-      const models = await modelCatalogCache.load(source.key, () => window.forge.listModels(source.id), refresh);
+      const models = await modelCatalogCache.load(source.key, () => window.forge.listModels(source.id, refresh), refresh);
       if (alive.current) setCatalogs((old) => ({ ...old, [source.key]: models }));
     }));
     if (!alive.current) return;
