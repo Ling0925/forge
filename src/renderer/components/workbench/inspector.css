@@ -125,19 +125,23 @@
   align-items: center;
   gap: 2px;
   padding: 3px;
-  margin: var(--space-3) var(--space-4) var(--space-3);
+  margin: var(--space-3) 0 var(--space-2);
   background: var(--surface-soft);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  position: relative;
+  position: sticky;
+  top: 0;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
+  min-width: 0;
+  z-index: 2;
 }
 
 .wb-inspector .inspector-tabs .tab-btn {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 28px;
-  padding: 3px 8px;
+  padding: 3px 6px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -149,10 +153,12 @@
   z-index: 1;
   text-align: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .wb-inspector .inspector-tabs .tab-btn:hover {
@@ -222,8 +228,85 @@
   padding: 0;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* --------------------------------------------------------------------------
+   Secondary Sub-Tabs Navigation
+   -------------------------------------------------------------------------- */
+
+.wb-inspector .inspector-subtabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.wb-inspector .inspector-subtab-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 26px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.wb-inspector .inspector-subtab-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.wb-inspector .inspector-subtab-btn.is-active {
+  color: var(--text-primary);
+  font-weight: 600;
+  background: var(--surface-card);
+  border-color: var(--border-subtle);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.wb-inspector .inspector-subtab-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.wb-inspector .inspector-subtab-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 5px;
+  min-width: 15px;
+  height: 15px;
+  line-height: 15px;
+  border-radius: 9999px;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.wb-inspector .inspector-subtabpanel {
+  min-width: 0;
+}
+
+.wb-inspector .inspector-subtabpanel[hidden] {
+  display: none !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -653,6 +736,37 @@
   color: var(--text-primary);
 }
 
+.wb-inspector .inspector-plan-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wb-inspector .inspector-plan-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 500;
+  border-radius: 9999px;
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.wb-inspector .inspector-plan-stat-pill.is-completed {
+  color: var(--success, #16a34a);
+}
+
+.wb-inspector .inspector-plan-stat-pill.is-active {
+  color: var(--accent);
+}
+
+.wb-inspector .inspector-plan-doc-body {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
 /* --------------------------------------------------------------------------
    Sub-Agents & Delegated Tasks
    -------------------------------------------------------------------------- */
@@ -967,8 +1081,262 @@
   align-self: flex-start;
 }
 
+/* --------------------------------------------------------------------------
+   Workspace File Manager
+   -------------------------------------------------------------------------- */
+
+.wb-inspector .inspector-file-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-manager-header-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-manager-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wb-inspector .inspector-file-workspace-root {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.wb-inspector .inspector-file-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-breadcrumb-sep {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.wb-inspector .inspector-file-breadcrumb-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.wb-inspector .inspector-file-breadcrumb-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.wb-inspector .inspector-file-breadcrumb-btn.is-current {
+  color: var(--text-primary);
+  font-weight: 600;
+  background: var(--surface-soft);
+}
+
+.wb-inspector .inspector-file-filter-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-soft);
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-filter-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.wb-inspector .inspector-file-filter-input {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.wb-inspector .inspector-file-filter-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wb-inspector .inspector-file-filter-clear:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.wb-inspector .inspector-file-tree-card {
+  padding: 8px;
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wb-inspector .inspector-file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-tree-row {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.wb-inspector .inspector-file-tree-row:hover {
+  background: var(--surface-hover);
+}
+
+.wb-inspector .inspector-file-tree-row.is-selected {
+  background: var(--surface-selected);
+  border-color: var(--border-subtle);
+}
+
+.wb-inspector .inspector-file-tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.wb-inspector .inspector-file-tree-icon.is-directory {
+  color: var(--accent);
+}
+
+.wb-inspector .inspector-file-tree-name {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-inspector .inspector-file-tree-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wb-inspector .inspector-file-tree-kind,
+.wb-inspector .inspector-file-tree-size {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.wb-inspector .inspector-file-tree-diff-btn {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.wb-inspector .inspector-file-tree-diff-btn:hover {
+  color: var(--accent);
+  border-color: var(--border-default);
+}
+
+.wb-inspector .inspector-file-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-preview-path {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.wb-inspector .inspector-file-preview-code {
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-soft);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.wb-inspector .inspector-meta-note {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 @media (pointer: coarse) {
   .wb-inspector .inspector-tabs .tab-btn,
+  .wb-inspector .inspector-subtab-btn,
   .wb-inspector details > summary {
     min-height: 40px;
   }

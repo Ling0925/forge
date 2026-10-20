@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { HarnessService } from "../shared/contracts";
+import {
+  listWorkspaceDirectory,
+  readWorkspaceFilePreview,
+} from "../core/workspace-files";
 import { ForgeError, toErrorInfo } from "../shared/errors";
 import {
   type RpcRequest,
@@ -314,6 +318,39 @@ export function createWorkerController(
           if (!service.getUsageStats) throw new ForgeError("not_found", "Usage statistics are unavailable on this host.");
           respond(request, await service.getUsageStats(request.filter));
           break;
+        case "listWorkspaceEntries": {
+          if (service.listWorkspaceEntries) {
+            respond(
+              request,
+              await service.listWorkspaceEntries(
+                request.sessionId,
+                request.path,
+              ),
+            );
+            break;
+          }
+          const session = await service.getSession(request.sessionId);
+          respond(
+            request,
+            await listWorkspaceDirectory(session.workspace, request.path),
+          );
+          break;
+        }
+        case "readWorkspaceFile": {
+          if (service.readWorkspaceFile) {
+            respond(
+              request,
+              await service.readWorkspaceFile(request.sessionId, request.path),
+            );
+            break;
+          }
+          const session = await service.getSession(request.sessionId);
+          respond(
+            request,
+            await readWorkspaceFilePreview(session.workspace, request.path),
+          );
+          break;
+        }
         case "compactSession":
           respond(request, await service.compactSession(request.sessionId));
           break;

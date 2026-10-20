@@ -1,7 +1,18 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { PlanSection } from "../../src/renderer/components/workbench/RuntimePanels";
+import {
+  listWorkspaceDirectory,
+  readWorkspaceFilePreview,
+} from "../../src/core/workspace-files";
+import {
+  PlanDocumentPanel,
+  PlanProgressPanel,
+  PlanSection,
+} from "../../src/renderer/components/workbench/RuntimePanels";
 import { ToolDisclosure } from "../../src/renderer/components/primitives/ToolDisclosure";
 import { mergeTranscript } from "../../src/renderer/state/transcript-sync";
 import { initialWorkbenchState, workbenchReducer, type WorkbenchState } from "../../src/renderer/state/workbench-reducer";
@@ -55,5 +66,54 @@ describe("multiple plan surfaces", () => {
     const merged = mergeTranscript(state.activeSnapshot, snapshot);
     expect(merged.plans).toEqual([revised, second]);
     expect(merged.plan).toEqual(revised);
+  });
+
+  it("separates Plan documentation/history from PlanProgress checklist and stats", () => {
+    const docHtml = renderToStaticMarkup(
+      createElement(PlanDocumentPanel, {
+        snapshot: { plan: second, plans: [first, second] },
+      }),
+    );
+    expect(docHtml).toContain("Second task");
+    expect(docHtml).toContain("Task B only");
+    expect(docHtml).toContain("历史计划 1");
+    expect(docHtml).toContain("First task");
+
+    const progressHtml = renderToStaticMarkup(
+      createElement(PlanProgressPanel, {
+        snapshot: { plan: second, plans: [first, second] },
+      }),
+    );
+    expect(progressHtml).toContain("计划进度");
+    expect(progressHtml).toContain("B work");
+    expect(progressHtml).toContain("进行中 1");
+    expect(progressHtml).not.toContain("历史计划 1");
+  });
+
+  it("lists workspace entries safely and previews UTF-8 files while filtering sensitive paths", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "forge-ws-files-"));
+    try {
+      mkdirSync(join(workspace, "src"));
+      writeFileSync(join(workspace, "src", "index.ts"), "export const ok = 42;\n");
+      writeFileSync(join(workspace, ".env"), "SECRET_KEY=topsecret\n");
+
+      const rootListing = await listWorkspaceDirectory(workspace);
+      expect(rootListing.entries.map((entry) => entry.name)).toEqual(["src"]);
+
+      const srcListing = await listWorkspaceDirectory(workspace, "src");
+      expect(srcListing.entries.map((entry) => entry.path)).toEqual([
+        "src/index.ts",
+      ]);
+
+      const preview = await readWorkspaceFilePreview(workspace, "src/index.ts");
+      expect(preview.binary).toBe(false);
+      expect(preview.content).toContain("export const ok = 42;");
+
+      await expect(
+        readWorkspaceFilePreview(workspace, ".env"),
+      ).rejects.toThrow();
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 });
