@@ -292,6 +292,7 @@ function useController() {
     mode: "build" | "plan" = "build",
     providerSourceId?: string,
     images?: readonly ImageAttachment[],
+    routeGroupId?: string,
   ) => {
     const id = target ?? current.current.activeSessionId;
     if (!id || !window.forge) return false;
@@ -311,6 +312,7 @@ function useController() {
         permission: permission ?? current.current.settings?.defaultPermission,
         ...(model ? { model } : {}),
         ...(providerSourceId ? { providerSourceId } : {}),
+        ...(routeGroupId ? { routeGroupId } : {}),
       });
       starting.current.add(id);
       dispatch({ type: "START_RUN_INITIATED", sessionId: id });
@@ -332,7 +334,7 @@ function useController() {
     const input = inputQueue.current.peek(id);
     if (!input) return;
     queuedStarts.current.set(id, input);
-    const started = await startRun(input.prompt, input.permission, input.model, id, input.mode, input.providerSourceId, input.images);
+    const started = await startRun(input.prompt, input.permission, input.model, id, input.mode, input.providerSourceId, input.images, input.routeGroupId);
     if (!started) {
       queuedStarts.current.delete(id);
       inputQueue.current.pause(id);

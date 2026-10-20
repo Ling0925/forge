@@ -28,6 +28,7 @@ import { Button } from "../primitives/Button";
 import { WorkspacePicker } from "./WorkspacePicker";
 import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
+import { ProviderAttemptNote } from "./ModelAccessPanels";
 import { UsagePopover } from "./UsagePopover";
 import { OutputSpeed } from "./OutputSpeed";
 import {
@@ -52,7 +53,7 @@ const taskSchema = z
           s.startsWith("/") || /^[A-Za-z]:[\\/]/.test(s) || s.startsWith("\\\\"),
         "请输入绝对工作区路径",
       ),
-    model: settingsFields.model,
+    model: settingsFields.model.optional(),
     prompt: z.string().max(1000000),
     images: imageAttachmentsSchema.optional(),
   })
@@ -175,25 +176,43 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     if (isNew && !state.isSettingsOpen) promptRef.current?.focus();
   }, [isNew, state.isSettingsOpen]);
   const [picks, setPicks] = useState<
-    Record<string, Readonly<{ sourceId?: string | undefined; model: string }>>
+    Record<
+      string,
+      Readonly<{
+        sourceId?: string | undefined;
+        model?: string | undefined;
+        routeGroupId?: string | undefined;
+      }>
+    >
   >({});
   const sourceProfiles = state.settings?.providerSources ?? [];
+  const routes = state.settings?.routeGroups ?? [];
   const pick = picks[draftId];
-  const providerSourceId =
-    pick?.sourceId ??
-    (!isNew ? state.activeSnapshot?.providerSourceId : undefined) ??
-    state.settings?.activeSourceId;
+  const routeChoice =
+    pick?.routeGroupId ??
+    (!isNew ? state.activeSnapshot?.routeGroupId : undefined);
+  const selectedRoute = routes.find((route) => route.id === routeChoice);
+  const providerSourceId = selectedRoute
+    ? undefined
+    : (pick?.sourceId ??
+      (!isNew ? state.activeSnapshot?.providerSourceId : undefined) ??
+      state.settings?.activeSourceId);
   const providerSource = sourceProfiles.find((source) => source.id === providerSourceId);
   // A model only belongs to the source it was picked under. Keeping them in one
   // record prevents "source B + model of A" from ever being submitted.
   const pinnedModel =
-    pick && (pick.sourceId === undefined || pick.sourceId === providerSourceId)
+    !selectedRoute &&
+    pick &&
+    (pick.sourceId === undefined || pick.sourceId === providerSourceId)
       ? pick.model
       : undefined;
-  const defaultModel = !isNew
-    ? (state.activeSnapshot?.model ?? providerSource?.model)
-    : providerSource?.model;
-  const model = pinnedModel ?? defaultModel ?? state.settings?.model ?? "";
+  const defaultModel = selectedRoute
+    ? undefined
+    : !isNew
+      ? (state.activeSnapshot?.model ?? providerSource?.model)
+      : providerSource?.model;
+  const model =
+    pinnedModel ?? defaultModel ?? (selectedRoute ? "" : state.settings?.model) ?? "";
   // `/model <id>` names only a model, so resolve its source the same way the
   // picker does: the model carries its source instead of needing a switch.
   const setModel = (value: string) => {
@@ -202,6 +221,12 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setPicks((old) => ({
       ...old,
       [draftId]: { ...(sourceId ? { sourceId } : {}), model: value },
+    }));
+  };
+  const setRoute = (routeGroupId: string) => {
+    setPicks((old) => ({
+      ...old,
+      [draftId]: { routeGroupId },
     }));
   };
   const [catalogs, setCatalogs] = useState<Record<string, readonly string[]>>({});
@@ -330,6 +355,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     id: SessionId;
     workspace: string;
     model: string;
+    routeGroupId?: string;
   } | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -411,17 +437,21 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const changeMode = (next: "build" | "plan") => {
     setModes((old) => ({ ...old, [draftId]: next }));
   };
-  const isConfigured =
-    providerSourceId && !providerSource
+  const isConfigured = routeChoice
+    ? Boolean(selectedRoute)
+    : providerSourceId && !providerSource
       ? false
       : providerSource
         ? Boolean(providerSource.baseUrl && model)
         : state.settings?.isConfigured === true;
-  const configurationHint = providerSourceId && !providerSource
-    ? "当前会话绑定的模型来源已被删除，请选择该会话的模型或新建会话。"
-    : providerSource && !providerSource.model
-      ? "选择一个模型即可开始对话；来源会随模型自动切换。"
-      : "连接模型后即可开始对话。";
+  const configurationHint =
+    routeChoice && !selectedRoute
+      ? "路由组不存在，请重新选择。"
+      : providerSourceId && !providerSource
+        ? "当前会话绑定的模型来源已被删除，请选择该会话的模型或新建会话。"
+        : providerSource && !providerSource.model
+          ? "选择一个模型即可开始对话；来源会随模型自动切换。"
+          : "连接模型后即可开始对话。";
   const { dispatch, loadSessions } = useWorkbench();
   const slash = useSlashCommands({
     prompt,
@@ -454,10 +484,14 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           const ok = queueInput({
             sessionId: id,
             prompt: text,
-            model,
+            ...(selectedRoute
+              ? { routeGroupId: selectedRoute.id }
+              : {
+                  model,
+                  ...(providerSourceId ? { providerSourceId } : {}),
+                }),
             permission: mode === "plan" ? "readonly" : permission,
             mode,
-            ...(providerSourceId ? { providerSourceId } : {}),
           });
           if (!ok) throw new Error("加入待发队列失败。");
         }
@@ -492,10 +526,14 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           if (switchSession)
             setPicks((old) => ({
               ...old,
-              [snapshot.id]: {
-                ...(snapshot.providerSourceId ? { sourceId: snapshot.providerSourceId } : {}),
-                model: snapshot.model,
-              },
+              [snapshot.id]: snapshot.routeGroupId
+                ? { routeGroupId: snapshot.routeGroupId }
+                : {
+                    ...(snapshot.providerSourceId
+                      ? { sourceId: snapshot.providerSourceId }
+                      : {}),
+                    model: snapshot.model,
+                  },
             }));
           dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
           dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
@@ -530,9 +568,11 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       setBusy(true);
       setError("");
       const accepted = kind === "follow-up"
-        ? queueInput({ sessionId: id, prompt: capturedPrompt, model, permission: mode === "plan" ? "readonly" : permission, mode,
+        ? queueInput({ sessionId: id, prompt: capturedPrompt, permission: mode === "plan" ? "readonly" : permission, mode,
           ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
-          ...(providerSourceId ? { providerSourceId } : {}) })
+          ...(selectedRoute
+            ? { routeGroupId: selectedRoute.id }
+            : { model, ...(providerSourceId ? { providerSourceId } : {}) }) })
         : await sendSteering(capturedPrompt, id, capturedImages.length > 0 ? capturedImages : undefined);
       submitting.current = false;
       if (!alive.current) return;
@@ -552,24 +592,34 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     }
     // The pair is validated together: a model picked under one source must
     // never be submitted with another source's endpoint and credential.
-    if (pick && pick.sourceId !== undefined && pick.sourceId !== providerSourceId) {
+    if (
+      !selectedRoute &&
+      pick &&
+      pick.sourceId !== undefined &&
+      pick.sourceId !== providerSourceId
+    ) {
       setError("所选模型属于其他来源，请重新选择模型。");
       return;
     }
-    if (providerSource && !providerSource.model && !model) {
+    if (!selectedRoute && providerSource && !providerSource.model && !model) {
       setError("请选择一个模型；来源会随模型自动切换。");
       return;
     }
     const capturedDraftId = draftId;
     const capturedImages = images;
+    const capturedRouteId = selectedRoute?.id;
     const parsed = taskSchema.safeParse({
       workspace: isNew ? workspace : state.activeSnapshot?.workspace,
-      model,
+      ...(model ? { model } : {}),
       prompt,
       ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
     });
     if (!parsed.success) {
       setError(parsed.error.issues.map((issue) => issue.message).join("；"));
+      return;
+    }
+    if (!capturedRouteId && !parsed.data.model) {
+      setError("请选择一个模型。");
       return;
     }
     submitting.current = true;
@@ -581,12 +631,19 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       if (
         pending &&
         pending.workspace === parsed.data.workspace &&
-        pending.model === parsed.data.model
+        pending.model === (parsed.data.model ?? "") &&
+        pending.routeGroupId === capturedRouteId
       )
         id = pending.id;
       else {
         const snapshot = await createSession(
-          { workspace: parsed.data.workspace, model: parsed.data.model, ...(providerSourceId ? { providerSourceId } : {}) },
+          capturedRouteId
+            ? { workspace: parsed.data.workspace, routeGroupId: capturedRouteId }
+            : {
+                workspace: parsed.data.workspace,
+                ...(parsed.data.model ? { model: parsed.data.model } : {}),
+                ...(providerSourceId ? { providerSourceId } : {}),
+              },
           false,
         );
         id = snapshot?.id ?? null;
@@ -594,7 +651,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           pendingNew.current = {
             id,
             workspace: parsed.data.workspace,
-            model: parsed.data.model,
+            model: parsed.data.model ?? "",
+            ...(capturedRouteId ? { routeGroupId: capturedRouteId } : {}),
           };
       }
     }
@@ -607,6 +665,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           mode,
           providerSourceId,
           capturedImages.length > 0 ? capturedImages : undefined,
+          capturedRouteId,
         )
       : false;
     submitting.current = false;
@@ -1043,6 +1102,14 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             )}
           </div>
         )}
+        {!isNew && state.activeSnapshot?.id === state.activeSessionId && (
+          <ProviderAttemptNote
+            sessionId={state.activeSessionId}
+            events={state.activeSnapshot.events}
+            routeGroupId={selectedRoute?.id ?? routeChoice}
+            routeGroupLabel={selectedRoute?.label}
+          />
+        )}
         <ImageAttachments
           images={images}
           reading={reading}
@@ -1388,7 +1455,10 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               value={model}
               models={allKnownModels}
               hideSearch={true}
-              sourceLabel={providerSource?.label}
+              sourceLabel={selectedRoute ? undefined : providerSource?.label}
+              routes={routes.map((route) => ({ id: route.id, label: route.label }))}
+              routeGroupId={selectedRoute?.id}
+              onSelectRoute={setRoute}
               onSelect={(model, sourceId) => {
                 if (busy || submission) return;
                 // Picking a model records the source it came from in the same

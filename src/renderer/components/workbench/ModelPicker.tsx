@@ -3,7 +3,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ModelCatalog, type ModelCatalogGroup } from "./ModelCatalog";
 
 const efforts = ["low", "medium", "high", "xhigh", "max"] as const;
-const formatEffort = (value: string | undefined) => value === "max" ? "MAX" : value;
+const formatEffort = (value: string | undefined) =>
+  value === "max" ? "MAX" : value;
 
 export function ModelPicker(props: {
   readonly value: string;
@@ -23,12 +24,19 @@ export function ModelPicker(props: {
   readonly sourceId?: string | undefined;
   /** Human-readable label of the source the value belongs to. */
   readonly sourceLabel?: string | undefined;
+  readonly routes?: readonly { readonly id: string; readonly label: string }[];
+  readonly routeGroupId?: string | undefined;
+  readonly onSelectRoute?: (routeId: string) => void;
   readonly disabled?: boolean;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
   const [modelsOpen, setModelsOpen] = useState(false);
   const catalogId = useId();
+  const selectedRoute = props.routes?.find(
+    (route) => route.id === props.routeGroupId,
+  );
+  const shownValue = selectedRoute?.label || props.value || "选择模型";
   const initialized = useRef(false);
   const effortIndex = efforts.findIndex(
     (value) => value === props.reasoning?.value,
@@ -65,18 +73,24 @@ export function ModelPicker(props: {
       const search =
         !props.hideSearch &&
         window.matchMedia("(pointer: fine) and (min-width: 769px)").matches
-          ? ref.current?.querySelector<HTMLInputElement>("input:not([type=range])")
+          ? ref.current?.querySelector<HTMLInputElement>(
+              "input:not([type=range])",
+            )
           : null;
       const option =
         ref.current?.querySelector<HTMLButtonElement>(
           '.model-catalog-option[aria-pressed="true"]:not(:disabled)',
-        ) ?? ref.current?.querySelector<HTMLButtonElement>(
+        ) ??
+        ref.current?.querySelector<HTMLButtonElement>(
           ".model-catalog-option:not(:disabled)",
         );
-      const back = ref.current?.querySelector<HTMLButtonElement>(".model-picker-back");
+      const back =
+        ref.current?.querySelector<HTMLButtonElement>(".model-picker-back");
       (search ?? option ?? back)?.focus();
     } else {
-      ref.current?.querySelector<HTMLButtonElement>(".model-picker-current")?.focus();
+      ref.current
+        ?.querySelector<HTMLButtonElement>(".model-picker-current")
+        ?.focus();
     }
   }, [open, modelsOpen, props.hideSearch]);
   useEffect(() => {
@@ -123,13 +137,12 @@ export function ModelPicker(props: {
     >
       <summary
         className="composer-dropdown-trigger composer-model-summary"
-        title={`${props.value || "尚未选择模型"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}${effortLabel ? ` · 思考：${effortLabel}` : ""}`}
+        title={`${shownValue}${selectedRoute ? " · 路由组" : ""}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}${effortLabel ? ` · 思考：${effortLabel}` : ""}`}
       >
         <Cpu size={16} aria-hidden="true" />
-        <span className="composer-dropdown-label">
-          {props.value.split("/").at(-1) || "选择模型"}
-        </span>
-        {props.sourceLabel && (
+        <span className="composer-dropdown-label">{shownValue}</span>
+        {selectedRoute && <span className="composer-model-source">路由组</span>}
+        {props.sourceLabel && !selectedRoute && (
           // The source is not a separate choice: it always travels with the
           // model, so it is shown as belonging to the model rather than as a
           // control of its own.
@@ -163,14 +176,40 @@ export function ModelPicker(props: {
               <button
                 type="button"
                 className="model-picker-current"
-                title={`${props.value || "尚未选择模型"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}`}
-                aria-label={`选择模型：${props.value || "尚未选择"}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}`}
+                title={`${shownValue}${selectedRoute ? " · 路由组" : ""}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}`}
+                aria-label={`选择模型：${shownValue}${props.sourceLabel ? ` · ${props.sourceLabel}` : ""}`}
                 onClick={() => setModelsOpen(true)}
               >
-                <span>{props.value.split("/").at(-1) || "选择模型"}</span>
-                {props.sourceLabel && <small>{props.sourceLabel}</small>}
+                <span>{shownValue}</span>
+                {props.sourceLabel && !selectedRoute && (
+                  <small>{props.sourceLabel}</small>
+                )}
                 <CaretRight size={14} aria-hidden="true" />
               </button>
+            </div>
+          )}
+          {!modelsOpen && props.routes && props.routes.length > 0 && (
+            <div
+              className="model-picker-routes"
+              role="group"
+              aria-label="路由组"
+            >
+              {props.routes.map((route) => (
+                <button
+                  key={route.id}
+                  type="button"
+                  aria-pressed={route.id === props.routeGroupId}
+                  disabled={props.disabled}
+                  onClick={() => {
+                    props.onSelectRoute?.(route.id);
+                    close();
+                    ref.current?.querySelector("summary")?.focus();
+                  }}
+                >
+                  <span>{route.label}</span>
+                  <small>路由组</small>
+                </button>
+              ))}
             </div>
           )}
           {!modelsOpen && props.reasoning && (
@@ -182,11 +221,16 @@ export function ModelPicker(props: {
               <div className="effort-slider-heading">
                 <output>{formatEffort(efforts[draftEffort])}</output>
               </div>
-              <div className="effort-slider" data-max={draftEffort === efforts.length - 1}>
+              <div
+                className="effort-slider"
+                data-max={draftEffort === efforts.length - 1}
+              >
                 <div className="effort-slider-track" aria-hidden="true">
                   <span
                     className="effort-slider-fill"
-                    style={{ width: `${(draftEffort / (efforts.length - 1)) * 100}%` }}
+                    style={{
+                      width: `${(draftEffort / (efforts.length - 1)) * 100}%`,
+                    }}
                   />
                 </div>
                 <input
@@ -260,7 +304,9 @@ export function ModelPicker(props: {
                 loading={props.loading}
                 error={props.error}
                 inputId={catalogId + "-search"}
-                {...(props.hideSearch !== undefined ? { hideSearch: props.hideSearch } : {})}
+                {...(props.hideSearch !== undefined
+                  ? { hideSearch: props.hideSearch }
+                  : {})}
                 groups={props.groups}
                 sourceId={props.sourceId}
                 disabled={props.disabled}

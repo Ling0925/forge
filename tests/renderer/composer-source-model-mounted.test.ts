@@ -19,15 +19,16 @@ it("keeps a picked model paired with the source it came from", async () => {
         import {Composer} from './src/renderer/components/workbench/Composer';
         import {WorkbenchProvider} from './src/renderer/state/workbench-context';
         import {defaultPublicSettings} from './src/shared/schemas';
-        window.starts=[]; window.refreshes=[];
+        window.starts=[]; window.refreshes=[]; window.creates=[];
         window.forge={listModels:async(id,refresh)=>{if(refresh)window.refreshes.push(id);return [id+'/one',id+'/two'];},listSessions:async()=>[],
           getSettings:async()=>({...defaultPublicSettings,isConfigured:true,baseUrl:'https://a.test/v1',model:'a/one',activeSourceId:'a',
             providerSources:[{id:'a',label:'Source A',baseUrl:'https://a.test/v1',model:'a/one',revision:1,hasApiKey:false},
-                             {id:'b',label:'Source B',baseUrl:'https://b.test/v1',model:'b/one',revision:1,hasApiKey:false}]}),
-          createSession:async input=>({id:'11111111-1111-4111-8111-111111111111',workspace:'/tmp',title:'t',model:input.model,
+                             {id:'b',label:'Source B',baseUrl:'https://b.test/v1',model:'b/one',revision:1,hasApiKey:false}],
+            routeGroups:[{id:'r1',label:'Route One',strategy:'order',members:[{sourceId:'a',model:'a/one',credentialId:'default',enabled:true}]}]}),
+          createSession:async input=>{window.creates.push(input);return {id:'11111111-1111-4111-8111-111111111111',workspace:'/tmp',title:'t',model:input.model??'a/one',
             providerSourceId:input.providerSourceId,status:'idle',createdAt:'2026-01-01T00:00:00.000Z',updatedAt:'2026-01-01T00:00:00.000Z',
-            messages:[],events:[],changes:[],version:1}),
-          startRun:async input=>{window.starts.push({model:input.model,source:input.providerSourceId});
+            messages:[],events:[],changes:[],version:1};},
+          startRun:async input=>{window.starts.push(input);
             return {runId:'22222222-2222-4222-8222-222222222222',sessionId:input.sessionId};},
           onEvent:()=>()=>{},chooseWorkspace:async()=>'/tmp'};
         function Harness(){return <div className="wb-app" style={{paddingTop:'200px'}}><Composer isNew /></div>;}
@@ -44,52 +45,118 @@ it("keeps a picked model paired with the source it came from", async () => {
   });
   const browser = await chromium.launch({
     headless: true,
-    ...(process.env.FORGE_BROWSER_EXECUTABLE ? { executablePath: process.env.FORGE_BROWSER_EXECUTABLE } : {}),
+    ...(process.env.FORGE_BROWSER_EXECUTABLE
+      ? { executablePath: process.env.FORGE_BROWSER_EXECUTABLE }
+      : {}),
   });
   try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await browser.newPage({
+      viewport: { width: 1280, height: 900 },
+    });
     page.setDefaultTimeout(5000);
     await page.route("https://forge.test/**", (route) =>
-      route.fulfill({ contentType: "text/html", body: '<html><body><div id="root"></div></body></html>' }),
+      route.fulfill({
+        contentType: "text/html",
+        body: '<html><body><div id="root"></div></body></html>',
+      }),
     );
     await page.goto("https://forge.test/");
-    await page.addStyleTag({ content: bundle.outputFiles.find((file) => file.path.endsWith(".css"))?.text ?? "" });
-    await page.addScriptTag({ content: bundle.outputFiles.find((file) => file.path.endsWith(".js"))!.text });
+    await page.addStyleTag({
+      content:
+        bundle.outputFiles.find((file) => file.path.endsWith(".css"))?.text ??
+        "",
+    });
+    await page.addScriptTag({
+      content: bundle.outputFiles.find((file) => file.path.endsWith(".js"))!
+        .text,
+    });
     const input = page.locator("textarea.composer-textarea");
     await input.waitFor();
 
     // Opens on the active source's own default model.
-    await expect.poll(() => page.locator(".composer-model-summary").innerText()).toContain("one");
+    const summary = page.locator(".composer-model-summary");
+    await expect.poll(() => summary.innerText()).toContain("one");
 
-    // Picking a model under Source B moves the source with it: the summary now
-    // reports B's model and B's group owns the selected option.
-    await page.locator(".composer-model-summary").click();
+    // Route groups are an explicit choice in the picker and are distinguished
+    // from a source/model pair in the summary.
+    await summary.click();
+    const routeGroup = page.getByRole("group", { name: "路由组" });
+    const routeOne = routeGroup.getByRole("button", { name: /Route One/ });
+    await routeOne.click();
+    await expect
+      .poll(() => summary.getAttribute("title"))
+      .toContain("Route One");
+    await expect.poll(() => summary.getAttribute("title")).toContain("路由组");
+    await expect.poll(() => summary.innerText()).toContain("路由组");
+
+    // Picking a normal model clears the explicit route again.
+    await summary.click();
     expect(await page.locator(".model-catalog").count()).toBe(0);
     const currentModel = page.getByRole("button", { name: /^选择模型：/ });
-    expect(await currentModel.textContent()).toContain("Source A");
+    expect(await currentModel.textContent()).toContain("Route One");
     await currentModel.click();
-    await page.getByRole("button", { name: "刷新模型目录", exact: true }).click();
-    await expect.poll(() => page.evaluate(() => Reflect.get(window, "refreshes"))).toEqual(["a", "b"]);
+    await page
+      .getByRole("button", { name: "刷新模型目录", exact: true })
+      .click();
+    await expect
+      .poll(() => page.evaluate(() => Reflect.get(window, "refreshes")))
+      .toEqual(["a", "b"]);
     expect(await page.getByLabel("搜索模型或输入精确 ID").count()).toBe(0);
-    expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
+    expect(
+      await page.locator(".composer-model-panel").textContent(),
+    ).not.toMatch(/默认|default/);
+    const sourceA = page.getByRole("group", { name: "Source A", exact: true });
+    await sourceA.getByRole("button", { name: /a\/two/ }).click();
+    await expect.poll(() => summary.getAttribute("title")).toContain("a/two");
+    await expect
+      .poll(() => summary.getAttribute("title"))
+      .toContain("Source A");
+    await expect
+      .poll(() => summary.getAttribute("title"))
+      .not.toContain("路由组");
+
+    // Picking a model under Source B moves the source with it.
+    if ((await page.locator(".composer-model-panel").count()) === 0)
+      await summary.click();
+    await currentModel.click();
     const sourceB = page.getByRole("group", { name: "Source B", exact: true });
     await sourceB.getByRole("button", { name: /b\/two/ }).click();
-    await expect.poll(() => page.locator(".composer-model-summary").getAttribute("title")).toContain("b/two");
-    await expect.poll(() => page.locator(".composer-model-summary").getAttribute("title")).toContain("Source B");
+    await expect.poll(() => summary.getAttribute("title")).toContain("b/two");
+    await expect
+      .poll(() => summary.getAttribute("title"))
+      .toContain("Source B");
     expect(await page.locator(".model-catalog").count()).toBe(0);
     expect(await currentModel.textContent()).toContain("Source B");
-    expect(await currentModel.evaluate(node => node === document.activeElement)).toBe(true);
+    expect(
+      await currentModel.evaluate((node) => node === document.activeElement),
+    ).toBe(true);
     await currentModel.click();
-    await expect.poll(() => sourceB.getByRole("button", { pressed: true }).count()).toBe(1);
+    await expect
+      .poll(() => sourceB.getByRole("button", { pressed: true }).count())
+      .toBe(1);
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
 
-    // The submitted pair matches what the UI displays.
+    // The explicit route is submitted as a routeGroupId, without a model or
+    // source pair, and the same value reaches both create and start requests.
+    await summary.click();
+    await routeGroup.getByRole("button", { name: /Route One/ }).click();
+    await expect
+      .poll(() => summary.getAttribute("title"))
+      .toContain("Route One");
     await input.fill("hello");
     await input.press("Enter");
     await expect
       .poll(() => page.evaluate(() => Reflect.get(window, "starts")))
-      .toEqual([{ model: "b/two", source: "b" }]);
+      .toMatchObject([{ routeGroupId: "r1" }]);
+    const starts = await page.evaluate(() => Reflect.get(window, "starts"));
+    expect(starts[0].model).toBeUndefined();
+    expect(starts[0].providerSourceId).toBeUndefined();
+    const creates = await page.evaluate(() => Reflect.get(window, "creates"));
+    expect(creates).toHaveLength(1);
+    expect(creates[0]).toMatchObject({ workspace: "/tmp", routeGroupId: "r1" });
+    expect(creates[0].model).toBeUndefined();
+    expect(creates[0].providerSourceId).toBeUndefined();
   } finally {
     await browser.close();
   }

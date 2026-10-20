@@ -248,6 +248,10 @@ export function createWorkerController(
         case "listModels":
           respond(request, await service.listModels(undefined, request.sourceId, request.refresh));
           break;
+        case "modelAccess":
+          if (!service.modelAccess) throw new ForgeError("not_found", "Model access is unavailable on this host.");
+          respond(request, await service.modelAccess(request.input));
+          break;
         case "listSessions":
           respond(request, await service.listSessions());
           break;

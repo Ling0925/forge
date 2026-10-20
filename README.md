@@ -24,7 +24,8 @@
 ---
 
 > 💡 **原创声明与设计定位**  
-> Forge 是一款从零构建的本地编码与任务代理工具，**未导入、Fork 或依赖任何既有代理 Harness 源码**（设计调研见 [docs/REFERENCE_DESIGN.md](docs/REFERENCE_DESIGN.md)）。  
+> Forge 使用原创共享代理运行时。部分模型接入协议、预设及账号/路由算法依据 **Magpie 的 MIT 许可源码改编为 TypeScript**；不是 Go 网关或外部 CLI 包装（[来源与许可](THIRD_PARTY_NOTICES.md)、[实现及验证边界](docs/MODEL_ACCESS_PORT_STATUS.md)）。
+>
 > 无论是终端 CLI 还是 Linux 桌面工作台，均由**同一套核心运行时**驱动，共享状态模型、工具管道、会话存储与文件安全检查点。**Forge 不是云托管代理，也不是 OS 沙箱**，用户对本地文件、命令调用及模型交互拥有完全的可见性与审查权。
 
 ---
@@ -40,7 +41,7 @@
 | 🔌 **原生 Git 工具与 stdio MCP** | 内置 10 个本地文件/系统工具及 3 个原生只读 Git 观测工具（`git_status` / `git_diff` / `git_log`）；支持基于标准 stdio 的 MCP 工具扩展。 |
 | 📎 **对话文件交付** | 模型通过 `publish_file` 发送不可变会话附件，支持安全预览、Web 下载、桌面另存为和 CLI 保存；[使用与边界](docs/PUBLISHED_FILES.md)。 |
 | 🧠 **SQLite 长期记忆** | 标签、摘要和详情的增删改查；`forge_memory` 从跨会话历史及已有记忆检索材料，再由当前模型熔炼并事务入库，支持预览和来源追溯；[使用说明](docs/memory.md)。 |
-| 🎯 **动态精确模型发现** | 原生 `list_models` 工具实时列出当前兼容 Provider 的精确可用模型 ID，支持按子串过滤与分页，避免虚构模型。 |
+| 🎯 **动态精确模型发现** | `list_models` 保留供应商精确 ID，支持筛选、分页、持久目录缓存和显式刷新；目录不代表即时额度或可用性。 |
 | 🎨 **Warm Light-First 工作台** | 桌面端采用温暖浅色优先的美学语法，去边框化、横向静默工具行（Quiet Tool Rows）与一体化圆润输入舱，打造沉稳专注的交互体验。 |
 
 ---
@@ -122,6 +123,12 @@ forge run '修复 tests/math.test.ts 中失败的单测用例' --workspace /abso
 forge sessions
 forge resume <session-uuid>
 ```
+
+### 多来源与账号管理
+
+`forge providers --help` 提供预设、来源、目录、显式连通/推理测试、Magpie 导入、Codex/Copilot 登录和额度查询；`forge routes --help` 管理显式路由组。工作台设置中提供对应入口。旧 `config` / `models` 命令继续可用。
+
+四种协议为 Chat Completions、Responses、Anthropic Messages 和原生 Gemini。云鉴权、真实账号验证、迁移/回退及尚未移植的平台见 [接入状态与用法](docs/MODEL_ACCESS_PORT_STATUS.md)；目录存在不代表账号可调用。只有显式选择路由组才允许跨模型切换。
 
 ### 源码开发（仅限源码检出仓库）
 

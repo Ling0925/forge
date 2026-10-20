@@ -9,7 +9,7 @@ const storageKey = "forge-model-catalog-v1";
 export function modelCatalogKey(source: {
   id?: string | undefined;
   baseUrl: string;
-  apiMode?: "chat-completions" | "responses" | "anthropic" | undefined;
+  apiMode?: string | undefined;
 }, environmentOverride = false): string {
   // Explicit sources ignore environment overrides, just like getProviderConfig.
   return JSON.stringify([source.id ?? "legacy", source.baseUrl, source.apiMode ?? "chat-completions", source.id ? false : environmentOverride]);

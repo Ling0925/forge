@@ -20,6 +20,7 @@ export function UsageDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<UsageStatsDto | null>(null);
+  const routeGroups = state.settings?.routeGroups ?? [];
 
   const [daysFilter, setDaysFilter] = useState<number | undefined>(undefined);
   const [workspaceFilter, setWorkspaceFilter] = useState<string | undefined>(
@@ -451,6 +452,79 @@ export function UsageDashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Actual provider attempts by route, source and credential */}
+              {data.routes && data.routes.length > 0 && (
+                <div className="usage-dashboard-section">
+                  <div className="usage-section-header">
+                    <span className="usage-section-title">
+                      <ArrowsClockwise size={15} />
+                      来源调用记录
+                    </span>
+                    <span className="usage-kpi-badge">
+                      {data.routes.length} 条
+                    </span>
+                  </div>
+
+                  <div className="usage-table-wrapper">
+                    <table className="usage-table">
+                      <thead>
+                        <tr>
+                          <th>路由组</th>
+                          <th>来源</th>
+                          <th>凭据</th>
+                          <th>模型</th>
+                          <th>协议</th>
+                          <th>尝试 / 成功 / 失败</th>
+                          <th>输入 / 输出</th>
+                          <th>总 Tokens</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.routes.map((route) => (
+                          <tr
+                            key={`${route.groupId ?? ""}|${route.sourceId}|${route.credentialId ?? ""}|${route.model}|${route.apiMode}`}
+                          >
+                            <td className="usage-mono">
+                              {route.groupId
+                                ? (routeGroups.find(
+                                    (group) => group.id === route.groupId,
+                                  )?.label ?? route.groupId)
+                                : "—"}
+                            </td>
+                            <td className="usage-mono">{route.sourceId}</td>
+                            <td className="usage-mono">
+                              {route.credentialId ?? "—"}
+                            </td>
+                            <td className="usage-mono">{route.model}</td>
+                            <td className="usage-mono">{route.apiMode}</td>
+                            <td className="usage-mono">
+                              {route.attempts} / {route.succeeded} /{" "}
+                              {route.failed}
+                              {route.unknownUsage > 0
+                                ? ` · 未计 ${route.unknownUsage}`
+                                : ""}
+                            </td>
+                            <td className="usage-mono">
+                              {compactTokens(route.promptTokens)} /{" "}
+                              {compactTokens(route.completionTokens)}
+                            </td>
+                            <td
+                              className="usage-mono"
+                              style={{
+                                fontWeight: 600,
+                                color: "var(--text-primary)",
+                              }}
+                            >
+                              {compactTokens(route.totalTokens)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
