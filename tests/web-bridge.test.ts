@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createTransportBridge, requestId } from "../src/shared/bridge";
 import { sessionIdSchema } from "../src/shared/schemas";
+import { ForgeError } from "../src/shared/errors";
+import type { RpcRequest } from "../src/shared/ipc";
 
 describe("shared desktop/Web bridge", () => {
   it("retains recovery events until the UI subscribes", async () => {
@@ -27,6 +29,24 @@ describe("shared desktop/Web bridge", () => {
     expect(request).toHaveBeenCalledTimes(1);
     const wrong = createTransportBridge({ request: async () => ({ id: randomUUID(), method: "listSessions", ok: true, result: [] }), onEvent: () => {} });
     await expect(wrong.listSessions()).rejects.toThrow("Invalid host response");
+  });
+  it.each([true, false])("preserves structured storage errors (retryable=%s) without replaying RPCs", async (retryable) => {
+    const error = { code: "storage", message: "Safe storage failure", retryable };
+    const request = vi.fn(async (input: RpcRequest) => ({ id: input.id, method: input.method, ok: false, error }));
+    const bridge = createTransportBridge({ request, onEvent: () => {} });
+    const result = bridge.getSession(sessionIdSchema.parse(randomUUID()));
+    await expect(result).rejects.toBeInstanceOf(ForgeError);
+    await expect(result).rejects.toMatchObject(error);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  it("never retries effectful calls even when the host marks its error retryable", async () => {
+    const request = vi.fn(async (input: RpcRequest) => ({ id: input.id, method: input.method, ok: false,
+      error: { code: "storage", message: "Safe storage failure", retryable: true } }));
+    const bridge = createTransportBridge({ request, onEvent: () => {} });
+    const sessionId = sessionIdSchema.parse(randomUUID());
+    await expect(bridge.startRun({ sessionId, prompt: "execute once" })).rejects.toMatchObject({ retryable: true });
+    await expect(bridge.renameSession(sessionId, "changed")).rejects.toMatchObject({ retryable: true });
+    expect(request.mock.calls.map(([input]) => input.method)).toEqual(["startRun", "renameSession"]);
   });
   it("delivers early run events only after startRun has resolved", async () => {
     const sessionId = sessionIdSchema.parse(randomUUID());
