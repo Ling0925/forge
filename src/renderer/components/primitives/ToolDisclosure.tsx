@@ -9,7 +9,10 @@ import {
   Cpu,
   FilePlus,
   FileText,
+  Folder,
+  FolderOpen,
   FolderPlus,
+  Funnel,
   GitDiff,
   Globe,
   HardDrive,
@@ -647,6 +650,88 @@ function WaitAgentsView({ reports }: { readonly reports: readonly ChildAgentRepo
   );
 }
 
+interface CommandTaskItem {
+  readonly id: string;
+  readonly status: string;
+  readonly title?: string;
+  readonly exitCode?: number;
+  readonly exit_code?: number;
+  readonly duration_ms?: number;
+  readonly output_available?: boolean;
+}
+
+function CommandTaskListView({
+  tasks,
+  pendingIds,
+}: {
+  readonly tasks: readonly CommandTaskItem[];
+  readonly pendingIds?: readonly string[];
+}) {
+  if (tasks.length === 0) {
+    return <span className="tool-section-empty">暂无后台任务</span>;
+  }
+  return (
+    <div className="command-tasks-view">
+      {tasks.map((task) => {
+        const isCompleted = task.status === "completed";
+        const isRunning =
+          task.status === "running" ||
+          task.status === "starting" ||
+          pendingIds?.includes(task.id);
+        const isFailed = task.status === "failed";
+        const exit = task.exitCode ?? task.exit_code;
+        return (
+          <div
+            key={task.id}
+            className={`command-task-card status-${task.status}`}
+          >
+            <div className="command-task-main">
+              <span className={`command-task-badge status-${task.status}`}>
+                {isCompleted ? (
+                  <CheckCircle size={12} weight="fill" />
+                ) : isRunning ? (
+                  <CircleDashed size={12} weight="bold" />
+                ) : (
+                  <WarningCircle size={12} weight="fill" />
+                )}
+                <span>
+                  {isCompleted
+                    ? "已完成"
+                    : isRunning
+                      ? "执行中"
+                      : isFailed
+                        ? "失败"
+                        : "已终止"}
+                </span>
+              </span>
+              <code className="command-task-id" title={task.id}>
+                #{task.id.slice(0, 8)}
+              </code>
+              {task.title && (
+                <span className="command-task-title">{task.title}</span>
+              )}
+            </div>
+            <div className="command-task-meta">
+              {exit !== undefined && (
+                <span
+                  className={`tool-exit tool-exit-${exit === 0 ? "ok" : "bad"}`}
+                >
+                  退出码 {exit}
+                </span>
+              )}
+              {typeof task.duration_ms === "number" && (
+                <span className="command-task-duration">
+                  {formatDuration(task.duration_ms)}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SendAgentMessageView({
   id,
   message,
@@ -903,6 +988,22 @@ const consoleConsumedKeys: ReadonlySet<string> = new Set([
   "truncated",
   "output_truncated",
   "duration_ms",
+  // Internal protocol & pagination fields for background command tasks:
+  "id",
+  "status",
+  "output_available",
+  "output_id",
+  "output_notice",
+  "preview_truncated",
+  "result_is_error",
+  "offset",
+  "offset_units",
+  "total_chars",
+  "next_offset",
+  "action",
+  "background",
+  "tasks",
+  "pending_ids",
 ]);
 
 function scalarFact(value: unknown): string | null {
@@ -941,23 +1042,83 @@ function decodeCommandConsole(
       facts: [],
       pending: false,
     };
+
+  // If a command_task's output payload is itself a JSON string representing
+  // the command's completed envelope ({ stdout, stderr, exit_code, ... }),
+  // unwrap it so the console displays genuine lines instead of escaped JSON.
+  let innerRecord: Record<string, unknown> | null = null;
+  if (typeof record.output === "string") {
+    try {
+      const parsedInner: unknown = JSON.parse(record.output);
+      if (
+        typeof parsedInner === "object" &&
+        parsedInner !== null &&
+        !Array.isArray(parsedInner)
+      ) {
+        innerRecord = parsedInner as Record<string, unknown>;
+      }
+    } catch {
+      // Plain text output
+    }
+  }
+
   const stringField = (key: string) =>
     typeof record[key] === "string" ? (record[key] as string) : null;
   const numberField = (key: string) => {
     const value = record[key];
     return typeof value === "number" && Number.isFinite(value) ? value : null;
   };
-  const body =
-    consoleBodyKeys
-      .map((key) => stringField(key))
-      .find((value) => value !== null) ?? null;
-  const pending = record.output_available === false;
+
+  const innerStringField = (key: string) =>
+    innerRecord && typeof innerRecord[key] === "string"
+      ? (innerRecord[key] as string)
+      : null;
+  const innerNumberField = (key: string) => {
+    if (!innerRecord) return null;
+    const value = innerRecord[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+
+  let body: string | null = null;
+  if (innerRecord) {
+    const stdout = innerStringField("stdout");
+    const out = innerStringField("output");
+    const err = innerStringField("error");
+    if (stdout !== null) {
+      body = stdout;
+    } else if (out !== null) {
+      body = out;
+    } else if (err !== null) {
+      body = null;
+    } else {
+      body = stringField("output") ?? null;
+    }
+  } else {
+    body =
+      consoleBodyKeys
+        .map((key) => stringField(key))
+        .find((value) => value !== null) ?? null;
+  }
+
+  const stderr = innerStringField("stderr") ?? stringField("stderr");
+  const error = innerStringField("error") ?? stringField("error");
+  const exitCode = innerNumberField("exit_code") ?? numberField("exit_code");
+
+  const pending =
+    record.output_available === false || innerRecord?.output_available === false;
+
   const notices: string[] = [];
-  if (record.timed_out === true) notices.push("命令超时后已被终止。");
-  if (record.spawn_failed === true) notices.push("进程未能启动。");
-  const signal = stringField("signal");
+  const timedOut = record.timed_out === true || innerRecord?.timed_out === true;
+  if (timedOut) notices.push("命令超时后已被终止。");
+  const spawnFailed =
+    record.spawn_failed === true || innerRecord?.spawn_failed === true;
+  if (spawnFailed) notices.push("进程未能启动。");
+  const signal = innerStringField("signal") ?? stringField("signal");
   if (signal) notices.push(`命令被信号 ${signal} 终止。`);
-  if (record.output_truncated === true)
+  if (
+    record.output_truncated === true ||
+    innerRecord?.output_truncated === true
+  )
     notices.push("原始输出已在上限处截断。");
   if (record.truncated === true)
     notices.push(
@@ -965,13 +1126,29 @@ function decodeCommandConsole(
         ? "这是分页结果，还有更多输出可继续读取。"
         : "输出超出采集上限，已停止采集。",
     );
+  else if (
+    innerRecord?.truncated === true ||
+    innerRecord?.preview_truncated === true
+  )
+    notices.push("输出超出采集上限，已停止采集。");
+
   const facts: ConsoleFact[] = [];
-  const duration = numberField("duration_ms");
+  const duration =
+    innerNumberField("duration_ms") ?? numberField("duration_ms");
   if (duration !== null)
     facts.push({
       label: paramLabels.duration_ms ?? "进程耗时",
       value: formatDuration(duration),
     });
+
+  const taskId = stringField("id");
+  if (taskId && toolName === "command_task") {
+    facts.push({
+      label: "任务标识",
+      value: `#${taskId.slice(0, 8)}`,
+    });
+  }
+
   for (const [key, value] of Object.entries(record)) {
     if (facts.length >= 8) break;
     if (consoleConsumedKeys.has(key)) continue;
@@ -979,11 +1156,12 @@ function decodeCommandConsole(
     if (fact === null) continue;
     facts.push({ label: paramLabels[key] ?? key, value: fact });
   }
+
   return {
     body,
-    stderr: stringField("stderr"),
-    error: stringField("error"),
-    exitCode: numberField("exit_code"),
+    stderr,
+    error,
+    exitCode,
     notices,
     facts,
     pending,
@@ -1232,6 +1410,230 @@ function ReadFileResultView({
   );
 }
 
+function splitPath(fullPath: string): { readonly dir: string; readonly name: string } {
+  const normalized = fullPath.replace(/\\/g, "/");
+  const trimmed =
+    normalized.endsWith("/") && normalized.length > 1
+      ? normalized.slice(0, -1)
+      : normalized;
+  const lastSlash = trimmed.lastIndexOf("/");
+  if (lastSlash === -1) {
+    return { dir: "", name: normalized };
+  }
+  return {
+    dir: normalized.slice(0, lastSlash + 1),
+    name: normalized.slice(lastSlash + 1),
+  };
+}
+
+function FileCopyButton({ path }: { readonly path: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const copy = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(path);
+        setCopied(true);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => setCopied(false), 1500);
+      } catch {
+        // clipboard unavailable
+      }
+    },
+    [path],
+  );
+
+  return (
+    <button
+      type="button"
+      className={`tool-file-copy-btn${copied ? " is-copied" : ""}`}
+      onClick={copy}
+      aria-label={copied ? "已复制路径" : "复制路径"}
+      title={copied ? "已复制路径" : "复制路径"}
+    >
+      {copied ? (
+        <Check size={12} weight="bold" aria-hidden="true" />
+      ) : (
+        <Copy size={12} aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+function FileItemRow({
+  entry,
+}: {
+  readonly entry: { readonly path: string; readonly kind?: string };
+}) {
+  const isDir = entry.kind === "directory" || entry.path.endsWith("/");
+  const { dir, name } = splitPath(entry.path);
+
+  return (
+    <li className={`tool-file-item ${isDir ? "is-dir" : "is-file"}`}>
+      <span className="tool-file-icon" aria-hidden="true">
+        {isDir ? (
+          <Folder size={14} weight="fill" className="file-icon-dir" />
+        ) : (
+          <FileText size={14} weight="regular" className="file-icon-file" />
+        )}
+      </span>
+      <span className="tool-file-path" title={entry.path}>
+        {dir && <span className="tool-file-dir">{dir}</span>}
+        <span className="tool-file-name">{name || entry.path}</span>
+      </span>
+      <span className="tool-file-actions">
+        {isDir && <span className="tool-file-type-badge">目录</span>}
+        <FileCopyButton path={entry.path} />
+      </span>
+    </li>
+  );
+}
+
+function ListFilesResultView({
+  record,
+  parameters,
+  isWaiting,
+}: {
+  readonly record: Record<string, unknown>;
+  readonly parameters?: unknown;
+  readonly isWaiting: boolean;
+}) {
+  if (isWaiting && (!record || !Array.isArray(record.entries))) {
+    return (
+      <div className="tool-section tool-file-list-section">
+        <SectionHead title="文件列表" />
+        <span className="tool-section-empty">等待文件列表…</span>
+      </div>
+    );
+  }
+
+  const rawEntries = Array.isArray(record.entries) ? record.entries : [];
+  const entries: readonly { readonly path: string; readonly kind?: string }[] =
+    rawEntries.map((e) => {
+      if (typeof e === "string") return { path: e, kind: "file" };
+      if (
+        e &&
+        typeof e === "object" &&
+        typeof (e as Record<string, unknown>).path === "string"
+      ) {
+        const rec = e as Record<string, unknown>;
+        return {
+          path: rec.path as string,
+          kind: typeof rec.kind === "string" ? rec.kind : "file",
+        };
+      }
+      return { path: String(e), kind: "file" };
+    });
+
+  const parsedParams =
+    typeof parameters === "object" &&
+    parameters !== null &&
+    !Array.isArray(parameters)
+      ? (parameters as Record<string, unknown>)
+      : undefined;
+
+  const glob =
+    typeof parsedParams?.glob === "string" ? parsedParams.glob : undefined;
+  const isRecursive = parsedParams?.recursive === true;
+
+  const offset = typeof record.offset === "number" ? record.offset : 0;
+  const nextOffset =
+    typeof record.next_offset === "number" ? record.next_offset : null;
+  const truncated = record.truncated === true;
+  const scanTruncated = record.scan_truncated === true;
+
+  const dirCount = entries.filter((e) => e.kind === "directory").length;
+  const fileCount = entries.length - dirCount;
+
+  const summaryCount =
+    entries.length === 0
+      ? "0 个项目"
+      : dirCount > 0 && fileCount > 0
+        ? `${fileCount} 个文件 · ${dirCount} 个目录`
+        : dirCount > 0
+          ? `${dirCount} 个目录`
+          : `${fileCount} 个文件`;
+
+  const allPathsText = entries.map((e) => e.path).join("\n");
+
+  return (
+    <div className="tool-section tool-file-list-section">
+      <SectionHead
+        title="文件列表"
+        action={
+          entries.length > 0 ? (
+            <ToolCopyButton text={allPathsText} label="复制全部路径" />
+          ) : undefined
+        }
+      />
+
+      <div className="tool-read-meta tool-file-meta">
+        <span className="tool-read-badge" title="项目总数">
+          <ListBullets size={12} weight="bold" aria-hidden="true" />
+          <span>{summaryCount}</span>
+        </span>
+
+        {glob && (
+          <span className="tool-read-badge" title={`匹配模式：${glob}`}>
+            <Funnel size={12} weight="fill" aria-hidden="true" />
+            <span>{glob}</span>
+          </span>
+        )}
+
+        {isRecursive && (
+          <span className="tool-read-badge" title="已递归遍历子目录">
+            <span>递归</span>
+          </span>
+        )}
+
+        {offset > 0 && (
+          <span className="tool-read-badge" title={`当前起始偏移：${offset}`}>
+            <span>偏移 {offset}</span>
+          </span>
+        )}
+
+        {(truncated || nextOffset !== null) && (
+          <span
+            className="tool-read-badge tool-read-badge-warn"
+            title="条目过多，当前仅返回部分结果"
+          >
+            <WarningCircle size={12} weight="fill" aria-hidden="true" />
+            <span>已截断{nextOffset !== null ? ` (下一页: ${nextOffset})` : ""}</span>
+          </span>
+        )}
+
+        {scanTruncated && (
+          <span
+            className="tool-read-badge tool-read-badge-warn"
+            title="目录层级或文件量过大，扫描在达到上限时提前终止"
+          >
+            <WarningCircle size={12} weight="fill" aria-hidden="true" />
+            <span>扫描超出上限</span>
+          </span>
+        )}
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="tool-file-empty">
+          <FolderOpen size={20} weight="regular" aria-hidden="true" />
+          <span>无匹配文件</span>
+        </div>
+      ) : (
+        <div className="tool-file-list-container">
+          <ul className="tool-file-list">
+            {entries.map((entry, idx) => (
+              <FileItemRow key={`${entry.path}-${idx}`} entry={entry} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ToolDisclosure({
   toolName,
   target,
@@ -1254,7 +1656,21 @@ export function ToolDisclosure({
   // A plain command's arguments are its command line (shown in the console); a
   // background task's arguments are the only record of the requested action.
   const isRunCommand = toolName === "run_command";
-  const isConsole = isRunCommand || toolName === "command_task";
+  const isCommandTask = toolName === "command_task";
+  const parsedOutputRecord = (() => {
+    if (typeof output !== "string") return null;
+    try {
+      const parsed: unknown = JSON.parse(output);
+      return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  })();
+  const isCommandTaskList =
+    isCommandTask && Array.isArray(parsedOutputRecord?.tasks);
+  const isConsole = isRunCommand || (isCommandTask && !isCommandTaskList);
   const isWaiting = status === "running";
   // File modifications and failed tools open by default. Read-only queries and
   // terminal commands default to collapsed quiet rows from start to finish,
@@ -1276,6 +1692,7 @@ export function ToolDisclosure({
       ? parsedParams.path
       : undefined;
   const isReadFile = toolName === "read_file";
+  const isListFiles = toolName === "list_files";
   const readPath =
     isReadFile ? parameterPath || target : undefined;
   const consoleModel = isConsole
@@ -1347,11 +1764,42 @@ export function ToolDisclosure({
         })()
       : undefined;
 
+  const commandTaskTarget =
+    isCommandTask && parsedParams && typeof parsedParams === "object"
+      ? (() => {
+          const rec = parsedParams as Record<string, unknown>;
+          const action = typeof rec.action === "string" ? rec.action : "";
+          const id = typeof rec.id === "string" ? rec.id : "";
+          const actionText =
+            action === "wait"
+              ? "等待完成"
+              : action === "read"
+                ? "读取输出"
+                : action === "stop"
+                  ? "终止任务"
+                  : action === "list"
+                    ? "任务列表"
+                    : action;
+          const shortId = id ? `#${id.slice(0, 8)}` : "";
+          return [actionText, shortId].filter(Boolean).join(" · ") || undefined;
+        })()
+      : undefined;
+
+  const normalizedTarget =
+    isCommandTask &&
+    target &&
+    typeof parsedParams === "object" &&
+    parsedParams !== null &&
+    "id" in parsedParams &&
+    parsedParams.id === target
+      ? commandTaskTarget || `#${target.slice(0, 8)}`
+      : target;
+
   const displayTarget = readPath
     ? readPath.split(/[\\/]/).pop() || readPath
-    : target || planSummaryTarget || agentTarget || (isRunCommand ? command : undefined);
+    : normalizedTarget || commandTaskTarget || planSummaryTarget || agentTarget || (isRunCommand ? command : undefined);
   const showParameters =
-    !writesFiles && !isRunCommand && !planData && !isAgentTool && !isReadFile;
+    !writesFiles && !isRunCommand && !isCommandTask && !planData && !isAgentTool && !isReadFile;
   const showDebug = !isReadFile;
 
   useEffect(() => {
@@ -1433,6 +1881,13 @@ export function ToolDisclosure({
   const canShowReadFile =
     isReadFile &&
     result?.kind === "object" &&
+    (status !== "failed" || !failureReason);
+  const isListFilesResult =
+    isListFiles &&
+    result?.kind === "object" &&
+    Array.isArray(result.record.entries);
+  const canShowListFiles =
+    (isListFilesResult || (isListFiles && isWaiting && !result)) &&
     (status !== "failed" || !failureReason);
 
   return (
@@ -1603,6 +2058,21 @@ export function ToolDisclosure({
                   <SectionHead title="计划进度" />
                   <PlanView plan={planData} />
                 </div>
+              ) : isCommandTaskList ? (
+                <div className="tool-section tool-command-tasks-section">
+                  <SectionHead title="后台任务列表" />
+                  <CommandTaskListView
+                    tasks={
+                      (parsedOutputRecord?.tasks as unknown as readonly CommandTaskItem[]) ??
+                      []
+                    }
+                    pendingIds={
+                      parsedOutputRecord?.pending_ids as
+                        | readonly string[]
+                        | undefined
+                    }
+                  />
+                </div>
               ) : isSpawnAgent ? (
                 <div className="tool-section tool-agent-section">
                   <SectionHead title="子任务委派" />
@@ -1672,6 +2142,12 @@ export function ToolDisclosure({
               ) : canShowReadFile && result?.kind === "object" ? (
                 <ReadFileResultView
                   record={result.record}
+                  isWaiting={isWaiting}
+                />
+              ) : canShowListFiles ? (
+                <ListFilesResultView
+                  record={result?.kind === "object" ? result.record : {}}
+                  parameters={parsedParams}
                   isWaiting={isWaiting}
                 />
               ) : (

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useGlobalModalShortcuts } from "../../state/modal-shortcuts";
 import { WorkbenchProvider, useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
@@ -15,6 +16,7 @@ import "./workbench.css";
 import "./app.css";
 import "./workbench-header.css";
 import "./new-session.css";
+import "./inspector.css";
 import "../../styles/motion.css";
 
 function Workbench() {
@@ -138,7 +140,9 @@ function Workbench() {
             <Inspector
               focusToken={focusToken}
               onRequestCollapse={() => {
-                closeInspector();
+                flushSync(() => {
+                  closeInspector();
+                });
                 detailsToggleRef.current?.focus();
               }}
             />
