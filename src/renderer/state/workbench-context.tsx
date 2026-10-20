@@ -22,6 +22,7 @@ import type {
   PublicSettings,
   SessionId,
 } from "../shared-types";
+import { ForgeError } from "../../shared/errors";
 import { shouldRefreshTranscript } from "./refresh-events";
 import { RunInputQueue } from "./run-input-queue";
 import type { ImageAttachment } from "../../shared/images";
@@ -30,6 +31,20 @@ import {
   initialWorkbenchState,
   workbenchReducer,
 } from "./workbench-reducer";
+
+const SESSION_READ_RETRY_DELAYS = [100, 300] as const;
+function waitForSessionReadRetry(delay: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, delay);
+    signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
+  });
+}
 
 function useController() {
   const [state, rawDispatch] = useReducer(
@@ -74,10 +89,13 @@ function useController() {
       }),
     [dispatch],
   );
+  const readLifetime = useRef<AbortController | null>(null);
   const reads = useRef(new Map<string, number>());
   const pendingReads = useRef(new Map<string, Promise<void>>());
   const refreshSession = useCallback(
     async (id: SessionId, invalidate = true) => {
+      const signal = readLifetime.current?.signal;
+      if (!signal || signal.aborted) return;
       const pending = pendingReads.current.get(id);
       if (pending && !invalidate) return pending;
       const version = (reads.current.get(id) ?? 0) + 1;
@@ -87,25 +105,38 @@ function useController() {
         let observed: number | undefined;
         do {
           observed = reads.current.get(id);
-          try {
-            const snapshot = await window.forge.getSession(id);
-            dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
-          } catch (err) {
-            if (current.current.activeSessionId === id) {
-              dispatch({ type: "SET_SNAPSHOT_LOADING", isLoading: false });
-              fail(err);
+          let attempt = 0;
+          for (;;) {
+            if (signal.aborted) return;
+            try {
+              const snapshot = await window.forge.getSession(id);
+              if (signal.aborted) return;
+              dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
+              dispatch({ type: "CLEAR_SESSION_READ_ERROR", sessionId: id });
+              break;
+            } catch (err) {
+              if (signal.aborted) return;
+              const delay = SESSION_READ_RETRY_DELAYS[attempt++];
+              // Only this idempotent read may retry an explicitly transient
+              // storage conflict. Never retry mutations or hide corrupt data.
+              if (err instanceof ForgeError && err.code === "storage" && err.retryable && delay !== undefined) {
+                await waitForSessionReadRetry(delay, signal);
+                continue;
+              }
+              dispatch({ type: "SET_SESSION_READ_ERROR", sessionId: id,
+                error: err instanceof Error ? err.message : "会话读取失败，请重试" });
+              return;
             }
-            break;
           }
-        } while (alive.current && reads.current.get(id) !== observed);
+        } while (!signal.aborted && reads.current.get(id) !== observed);
       };
       const task = read().finally(() => {
-        pendingReads.current.delete(id);
+        if (pendingReads.current.get(id) === task) pendingReads.current.delete(id);
       });
       pendingReads.current.set(id, task);
       return task;
     },
-    [dispatch, fail],
+    [dispatch],
   );
   const selectSession = useCallback(
     async (sessionId: SessionId) => {
@@ -146,6 +177,8 @@ function useController() {
       fail(new Error("桌面 IPC 不可用。请从 Forge 桌面程序打开工作台。"));
       return;
     }
+    const lifetime = new AbortController();
+    readLifetime.current = lifetime;
     const titleRefreshes = new Map<string, ReturnType<typeof setTimeout>>();
     const off = window.forge.onEvent((event) => {
       const id = event.event.sessionId;
@@ -191,6 +224,9 @@ function useController() {
     void loadSessions();
     return () => {
       alive.current = false;
+      lifetime.abort();
+      pendingReads.current.clear();
+      reads.current.clear();
       off();
       for (const timer of titleRefreshes.values()) clearTimeout(timer);
     };

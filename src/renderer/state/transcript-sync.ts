@@ -1,4 +1,5 @@
 import type { SessionSnapshot } from "../shared-types";
+import { executionTurns } from "../../shared/execution";
 
 export interface PendingOutput {
   readonly id: string;
@@ -6,24 +7,77 @@ export interface PendingOutput {
   readonly truncated: boolean;
   readonly afterMessage: number;
   readonly toolCallId?: string | undefined;
+  readonly turn?: number | undefined;
+  readonly step?: number | undefined;
+}
+
+function outputMessages(output: PendingOutput, snapshot: SessionSnapshot) {
+  if (output.turn === undefined) return snapshot.messages.slice(output.afterMessage);
+  const turn = executionTurns(snapshot).find(item => item.turn === output.turn);
+  if (!turn) return [];
+  const steps = turn.events.filter(event => event.type === "step_started");
+  const stepIndex = steps.findIndex(event => event.step === output.step);
+  const start = stepIndex >= 0 ? steps[stepIndex]?.messageIndex : undefined;
+  const end = stepIndex >= 0 ? steps[stepIndex + 1]?.messageIndex : undefined;
+  return snapshot.messages.slice(
+    Math.max(output.afterMessage, start ?? turn.messageStart + 1),
+    end ?? turn.messageEnd,
+  );
+}
+
+function messageSaved(output: PendingOutput, snapshot: SessionSnapshot): boolean {
+  return outputMessages(output, snapshot).some(message =>
+    message.role === "assistant" && (output.toolCallId
+      ? message.tool_calls?.some(call => call.id === output.toolCallId) && Boolean(message.content)
+      : Boolean(message.content?.startsWith(output.text))),
+  );
+}
+
+export function retainedOutputs(snapshot: SessionSnapshot): readonly PendingOutput[] {
+  const outputs: PendingOutput[] = [];
+  for (const turn of executionTurns(snapshot)) {
+    if (turn.finish?.status === "completed") continue;
+    let step: number | undefined;
+    let afterMessage = turn.messageEnd;
+    const chunks = new Map<number | undefined, PendingOutput>();
+    for (const [index, event] of turn.events.entries()) {
+      if (event.type === "step_started") {
+        step = event.step;
+        afterMessage = event.messageIndex;
+      } else if (event.type === "retry_reset") {
+        chunks.delete(step);
+      } else if (event.type === "text_delta") {
+        const key = event.step ?? step;
+        const previous = chunks.get(key);
+        chunks.set(key, {
+          id: previous?.id ?? `retained:${turn.turn}:${index}`,
+          text: (previous?.text ?? "") + event.text,
+          truncated: false,
+          afterMessage,
+          turn: turn.turn,
+          ...(key === undefined ? {} : { step: key }),
+        });
+      }
+    }
+    for (const output of chunks.values()) {
+      if (output.text && !messageSaved(output, snapshot)) outputs.push(output);
+    }
+  }
+  return outputs;
 }
 
 export function outputSaved(
   output: PendingOutput,
   snapshot: SessionSnapshot | null,
 ): boolean {
-  return (
-    snapshot?.messages
-      .slice(output.afterMessage)
-      .some(
-        (message) =>
-          message.role === "assistant" &&
-          (output.toolCallId
-            ? message.tool_calls?.some(
-                (call) => call.id === output.toolCallId,
-              ) && Boolean(message.content)
-            : Boolean(message.content?.startsWith(output.text))),
-      ) ?? false
+  if (!snapshot) return false;
+  if (messageSaved(output, snapshot)) return true;
+  return retainedOutputs(snapshot).some(saved =>
+    (output.turn === undefined
+      ? saved.afterMessage === output.afterMessage
+      : saved.turn === output.turn) &&
+    (output.step === undefined || saved.step === output.step) &&
+    saved.text.startsWith(output.text),
   );
 }
 

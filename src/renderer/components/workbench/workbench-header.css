@@ -66,15 +66,41 @@
   display: none;
 }
 @media (min-width: 1001px) {
+  .wb-app .workbench-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: var(--header-height) minmax(0, 1fr);
+  }
+  .wb-app .workbench-panes {
+    display: contents;
+  }
+  .wb-app .workbench-task-header {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+  .wb-app .workbench-main {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+  }
+  .wb-app .workbench-inspector {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    height: 100%;
+  }
+  .wb-app:not(.inspector-collapsed) .wb-header-actions .wb-details-toggle {
+    display: none;
+  }
   .wb-app .wb-header-actions .wb-details-toggle {
     width: auto;
     min-width: 0;
-    height: var(--control-height-lg);
-    padding: 0 var(--space-3) 0 var(--space-2);
+    height: var(--control-height);
+    padding: 0 var(--space-2-5) 0 var(--space-2);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: var(--surface-card);
+    gap: 5px;
+    background: var(--surface-elevated);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     color: var(--text-secondary);
@@ -88,7 +114,7 @@
   .wb-app .wb-header-actions .wb-details-toggle:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
-    border-color: var(--border-default);
+    border-color: var(--border-control);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
   .wb-app .wb-header-actions .wb-details-toggle.is-active {
