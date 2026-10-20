@@ -9,7 +9,10 @@ import {
   Cpu,
   FilePlus,
   FileText,
+  Folder,
+  FolderOpen,
   FolderPlus,
+  Funnel,
   GitDiff,
   Globe,
   HardDrive,
@@ -1407,6 +1410,230 @@ function ReadFileResultView({
   );
 }
 
+function splitPath(fullPath: string): { readonly dir: string; readonly name: string } {
+  const normalized = fullPath.replace(/\\/g, "/");
+  const trimmed =
+    normalized.endsWith("/") && normalized.length > 1
+      ? normalized.slice(0, -1)
+      : normalized;
+  const lastSlash = trimmed.lastIndexOf("/");
+  if (lastSlash === -1) {
+    return { dir: "", name: normalized };
+  }
+  return {
+    dir: normalized.slice(0, lastSlash + 1),
+    name: normalized.slice(lastSlash + 1),
+  };
+}
+
+function FileCopyButton({ path }: { readonly path: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const copy = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(path);
+        setCopied(true);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => setCopied(false), 1500);
+      } catch {
+        // clipboard unavailable
+      }
+    },
+    [path],
+  );
+
+  return (
+    <button
+      type="button"
+      className={`tool-file-copy-btn${copied ? " is-copied" : ""}`}
+      onClick={copy}
+      aria-label={copied ? "已复制路径" : "复制路径"}
+      title={copied ? "已复制路径" : "复制路径"}
+    >
+      {copied ? (
+        <Check size={12} weight="bold" aria-hidden="true" />
+      ) : (
+        <Copy size={12} aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
+function FileItemRow({
+  entry,
+}: {
+  readonly entry: { readonly path: string; readonly kind?: string };
+}) {
+  const isDir = entry.kind === "directory" || entry.path.endsWith("/");
+  const { dir, name } = splitPath(entry.path);
+
+  return (
+    <li className={`tool-file-item ${isDir ? "is-dir" : "is-file"}`}>
+      <span className="tool-file-icon" aria-hidden="true">
+        {isDir ? (
+          <Folder size={14} weight="fill" className="file-icon-dir" />
+        ) : (
+          <FileText size={14} weight="regular" className="file-icon-file" />
+        )}
+      </span>
+      <span className="tool-file-path" title={entry.path}>
+        {dir && <span className="tool-file-dir">{dir}</span>}
+        <span className="tool-file-name">{name || entry.path}</span>
+      </span>
+      <span className="tool-file-actions">
+        {isDir && <span className="tool-file-type-badge">目录</span>}
+        <FileCopyButton path={entry.path} />
+      </span>
+    </li>
+  );
+}
+
+function ListFilesResultView({
+  record,
+  parameters,
+  isWaiting,
+}: {
+  readonly record: Record<string, unknown>;
+  readonly parameters?: unknown;
+  readonly isWaiting: boolean;
+}) {
+  if (isWaiting && (!record || !Array.isArray(record.entries))) {
+    return (
+      <div className="tool-section tool-file-list-section">
+        <SectionHead title="文件列表" />
+        <span className="tool-section-empty">等待文件列表…</span>
+      </div>
+    );
+  }
+
+  const rawEntries = Array.isArray(record.entries) ? record.entries : [];
+  const entries: readonly { readonly path: string; readonly kind?: string }[] =
+    rawEntries.map((e) => {
+      if (typeof e === "string") return { path: e, kind: "file" };
+      if (
+        e &&
+        typeof e === "object" &&
+        typeof (e as Record<string, unknown>).path === "string"
+      ) {
+        const rec = e as Record<string, unknown>;
+        return {
+          path: rec.path as string,
+          kind: typeof rec.kind === "string" ? rec.kind : "file",
+        };
+      }
+      return { path: String(e), kind: "file" };
+    });
+
+  const parsedParams =
+    typeof parameters === "object" &&
+    parameters !== null &&
+    !Array.isArray(parameters)
+      ? (parameters as Record<string, unknown>)
+      : undefined;
+
+  const glob =
+    typeof parsedParams?.glob === "string" ? parsedParams.glob : undefined;
+  const isRecursive = parsedParams?.recursive === true;
+
+  const offset = typeof record.offset === "number" ? record.offset : 0;
+  const nextOffset =
+    typeof record.next_offset === "number" ? record.next_offset : null;
+  const truncated = record.truncated === true;
+  const scanTruncated = record.scan_truncated === true;
+
+  const dirCount = entries.filter((e) => e.kind === "directory").length;
+  const fileCount = entries.length - dirCount;
+
+  const summaryCount =
+    entries.length === 0
+      ? "0 个项目"
+      : dirCount > 0 && fileCount > 0
+        ? `${fileCount} 个文件 · ${dirCount} 个目录`
+        : dirCount > 0
+          ? `${dirCount} 个目录`
+          : `${fileCount} 个文件`;
+
+  const allPathsText = entries.map((e) => e.path).join("\n");
+
+  return (
+    <div className="tool-section tool-file-list-section">
+      <SectionHead
+        title="文件列表"
+        action={
+          entries.length > 0 ? (
+            <ToolCopyButton text={allPathsText} label="复制全部路径" />
+          ) : undefined
+        }
+      />
+
+      <div className="tool-read-meta tool-file-meta">
+        <span className="tool-read-badge" title="项目总数">
+          <ListBullets size={12} weight="bold" aria-hidden="true" />
+          <span>{summaryCount}</span>
+        </span>
+
+        {glob && (
+          <span className="tool-read-badge" title={`匹配模式：${glob}`}>
+            <Funnel size={12} weight="fill" aria-hidden="true" />
+            <span>{glob}</span>
+          </span>
+        )}
+
+        {isRecursive && (
+          <span className="tool-read-badge" title="已递归遍历子目录">
+            <span>递归</span>
+          </span>
+        )}
+
+        {offset > 0 && (
+          <span className="tool-read-badge" title={`当前起始偏移：${offset}`}>
+            <span>偏移 {offset}</span>
+          </span>
+        )}
+
+        {(truncated || nextOffset !== null) && (
+          <span
+            className="tool-read-badge tool-read-badge-warn"
+            title="条目过多，当前仅返回部分结果"
+          >
+            <WarningCircle size={12} weight="fill" aria-hidden="true" />
+            <span>已截断{nextOffset !== null ? ` (下一页: ${nextOffset})` : ""}</span>
+          </span>
+        )}
+
+        {scanTruncated && (
+          <span
+            className="tool-read-badge tool-read-badge-warn"
+            title="目录层级或文件量过大，扫描在达到上限时提前终止"
+          >
+            <WarningCircle size={12} weight="fill" aria-hidden="true" />
+            <span>扫描超出上限</span>
+          </span>
+        )}
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="tool-file-empty">
+          <FolderOpen size={20} weight="regular" aria-hidden="true" />
+          <span>无匹配文件</span>
+        </div>
+      ) : (
+        <div className="tool-file-list-container">
+          <ul className="tool-file-list">
+            {entries.map((entry, idx) => (
+              <FileItemRow key={`${entry.path}-${idx}`} entry={entry} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ToolDisclosure({
   toolName,
   target,
@@ -1465,6 +1692,7 @@ export function ToolDisclosure({
       ? parsedParams.path
       : undefined;
   const isReadFile = toolName === "read_file";
+  const isListFiles = toolName === "list_files";
   const readPath =
     isReadFile ? parameterPath || target : undefined;
   const consoleModel = isConsole
@@ -1653,6 +1881,13 @@ export function ToolDisclosure({
   const canShowReadFile =
     isReadFile &&
     result?.kind === "object" &&
+    (status !== "failed" || !failureReason);
+  const isListFilesResult =
+    isListFiles &&
+    result?.kind === "object" &&
+    Array.isArray(result.record.entries);
+  const canShowListFiles =
+    (isListFilesResult || (isListFiles && isWaiting && !result)) &&
     (status !== "failed" || !failureReason);
 
   return (
@@ -1907,6 +2142,12 @@ export function ToolDisclosure({
               ) : canShowReadFile && result?.kind === "object" ? (
                 <ReadFileResultView
                   record={result.record}
+                  isWaiting={isWaiting}
+                />
+              ) : canShowListFiles ? (
+                <ListFilesResultView
+                  record={result?.kind === "object" ? result.record : {}}
+                  parameters={parsedParams}
                   isWaiting={isWaiting}
                 />
               ) : (

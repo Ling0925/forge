@@ -844,4 +844,76 @@ describe("tool disclosure row", () => {
     expect(html).toContain("共 40 行");
     expect(html).toContain("1.0 KB");
   });
+
+  it("renders list_files result with structured file list and badges instead of raw JSON", () => {
+    const rawResult = {
+      entries: [
+        { path: "tests/store/locking.test.ts", kind: "file" },
+        { path: "tests/store/memory.test.ts", kind: "file" },
+        { path: "tests/store/subfolder", kind: "directory" },
+      ],
+      offset: 0,
+      next_offset: null,
+      truncated: false,
+      scan_truncated: false,
+    };
+    const html = render({
+      toolName: "list_files",
+      status: "completed",
+      defaultExpanded: true,
+      parameters: { path: "tests/store", glob: "*.test.ts" },
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("文件列表");
+    expect(html).toContain("2 个文件 · 1 个目录");
+    expect(html).toContain("*.test.ts");
+    expect(html).toContain("tool-file-list");
+    expect(html).toContain("locking.test.ts");
+    expect(html).toContain("tests/store/");
+    expect(html).toContain("subfolder");
+    expect(html).toContain("目录");
+    // Ensure raw JSON key-value dump is not shown
+    expect(html).not.toContain("条目数");
+    expect(html).not.toContain("已截断 false");
+  });
+
+  it("renders list_files warning badges when truncated or scan truncated", () => {
+    const rawResult = {
+      entries: [{ path: "src/a.ts", kind: "file" }],
+      offset: 0,
+      next_offset: 50,
+      truncated: true,
+      scan_truncated: true,
+    };
+    const html = render({
+      toolName: "list_files",
+      status: "completed",
+      defaultExpanded: true,
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("已截断 (下一页: 50)");
+    expect(html).toContain("扫描超出上限");
+  });
+
+  it("renders list_files empty state when no files found", () => {
+    const rawResult = {
+      entries: [],
+      offset: 0,
+      next_offset: null,
+      truncated: false,
+      scan_truncated: false,
+    };
+    const html = render({
+      toolName: "list_files",
+      status: "completed",
+      defaultExpanded: true,
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("0 个项目");
+    expect(html).toContain("无匹配文件");
+  });
 });
+
