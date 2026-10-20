@@ -616,9 +616,11 @@ function renderTimelineEntry(
 
 function ExecutionProcess({
   execution,
+  counts,
   children,
 }: {
   readonly execution: CompletedTurnExecution | undefined;
+  readonly counts?: string | undefined;
   readonly children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -641,6 +643,12 @@ function ExecutionProcess({
         />
         <Check size={13} aria-hidden="true" />
         <span>done</span>
+        {counts && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{counts}</span>
+          </>
+        )}
         <span aria-hidden="true">·</span>
         <span>总耗时 {execution.duration}</span>
         <span aria-hidden="true">·</span>
@@ -754,7 +762,6 @@ export const StoredTranscript = memo(function StoredTranscript({
                 )}
               </article>
             )}
-            {counts && <div className="transcript-execution-counts">{counts}</div>}
             {turn.items.length > 0 && (
               isCollapsed ? (
                 <button
@@ -771,7 +778,7 @@ export const StoredTranscript = memo(function StoredTranscript({
                 </button>
               ) : (
                 <div className="transcript-turn-body">
-                  <ExecutionProcess execution={finalEntry ? execution : undefined}>
+                  <ExecutionProcess execution={finalEntry ? execution : undefined} counts={counts}>
                     {blocks.map((block) => {
                       if (block.kind === "single") {
                         return <Fragment key={block.entry.item.id}>{renderTimelineEntry(block.entry, snapshot, headers, phases, timeline)}</Fragment>;
