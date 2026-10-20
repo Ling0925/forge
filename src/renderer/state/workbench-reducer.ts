@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   ApprovalRequest,
   ErrorInfo,
   Permission,
@@ -78,6 +79,8 @@ export interface WorkbenchState {
   readonly snapshotPersistedAt: string | null;
   readonly isSnapshotLoading: boolean;
   readonly activeRuns: Readonly<Record<string, ActiveRunState>>;
+  /** Cumulative child drafts, never mixed into the parent's transcript or run. */
+  readonly agentProgress: Readonly<Record<string, Extract<AgentEvent, { type: "agent_progress" }>>>;
   readonly isSettingsOpen: boolean;
   readonly isUsageDashboardOpen: boolean;
   readonly isNewSessionOpen: boolean;
@@ -156,6 +159,7 @@ export const initialWorkbenchState: WorkbenchState = {
   snapshotPersistedAt: null,
   isSnapshotLoading: false,
   activeRuns: {},
+  agentProgress: {},
   isSettingsOpen: false,
   isUsageDashboardOpen: false,
   isNewSessionOpen: true,
@@ -443,6 +447,15 @@ export function workbenchReducer(
         !supersedesTerminalRun
       )
         return state;
+      if (event.type === "agent_progress") {
+        const progress = { ...state.agentProgress };
+        delete progress[event.childSessionId];
+        progress[event.childSessionId] = event;
+        // The runtime permits at most 32 children per run. Keep display state
+        // bounded across parent sessions too, without growing persisted events.
+        for (const id of Object.keys(progress).slice(0, -32)) delete progress[id];
+        return { ...state, agentProgress: progress };
+      }
       const run: ActiveRunState = supersedesTerminalRun
         ? {
             // Clean slate for the new turn: nothing is inherited from the old

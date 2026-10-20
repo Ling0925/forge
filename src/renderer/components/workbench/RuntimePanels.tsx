@@ -23,6 +23,7 @@ import {
   resolveMessageByRef,
 } from "./context-memory-parser";
 import { Markdown } from "./Markdown";
+import { SubAgentActivity } from "./SubAgentActivity";
 
 function planProgress(plan: TaskPlan) {
   const completed = plan.steps.filter((step) => step.status === "completed").length;
@@ -284,15 +285,9 @@ export function SubAgentsPanel() {
       </div>
       {children.length ? (
         [...children]
-          .sort(
-            (a, b) =>
-              Number(
-                b.status === "running" || b.status === "awaiting_approval",
-              ) -
-              Number(
-                a.status === "running" || a.status === "awaiting_approval",
-              ),
-          )
+          // Keep cards in creation order: finishing a task must not move the
+          // conversation someone is reading to another place in the list.
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
           .map((child) => (
             <article
               key={child.id}
@@ -330,21 +325,13 @@ export function SubAgentsPanel() {
                   {child.model}
                 </span>
               </div>
-              {updates
-                .filter((update) => update.childSessionId === child.id)
-                .slice(-1)
-                .map((update) => (
-                  <details
-                    open
-                    key={update.childSessionId}
-                    className="wb-disclosure"
-                  >
-                    <summary>查看子任务最新报告</summary>
-                    <div className="wb-disclosure-body">
-                      <Markdown source={update.summary} />
-                    </div>
-                  </details>
-                ))}
+              <SubAgentActivity
+                child={child}
+                cached={state.snapshotCache?.[child.id]?.snapshot}
+                progress={state.agentProgress?.[child.id]}
+                update={updates.findLast(update => update.childSessionId === child.id)}
+                onOpen={selectSession}
+              />
             </article>
           ))
       ) : (

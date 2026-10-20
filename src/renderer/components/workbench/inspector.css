@@ -919,6 +919,91 @@
   font-family: var(--font-mono);
 }
 
+/* Compact child previews stay a fixed height while tokens arrive. Only the
+   explicitly opened conversation scrolls; it never scrolls the inspector. */
+.wb-inspector .child-activity {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-base, var(--surface-soft));
+  overflow-anchor: none;
+}
+
+.wb-inspector .child-activity-heading,
+.wb-inspector .child-conversation-toolbar,
+.wb-inspector .child-activity-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  min-width: 0;
+}
+
+.wb-inspector .child-activity-heading strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wb-inspector .child-activity-heading time,
+.wb-inspector .child-conversation-toolbar,
+.wb-inspector .child-conversation-speaker {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.wb-inspector .child-activity-heading time { white-space: nowrap; }
+
+.wb-inspector .child-activity-preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  height: 4.5em;
+  margin: 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.wb-inspector .child-activity-preview.is-error,
+.wb-inspector .child-activity-error { color: var(--danger, #e76b6b); }
+
+.wb-inspector .child-conversation-scroll {
+  height: 300px;
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+  padding: 8px;
+  border-block: 1px solid var(--border-subtle);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.wb-inspector .child-final-report { height: auto; min-height: 52px; }
+.wb-inspector .child-conversation-message + *,
+.wb-inspector .child-conversation-scroll > * + .child-conversation-message { margin-top: 10px; }
+.wb-inspector .child-conversation-speaker { margin-bottom: 3px; }
+.wb-inspector .child-conversation-speaker span,
+.wb-inspector .child-conversation-current { color: var(--accent); }
+.wb-inspector .child-conversation-scroll .markdown-content { font-size: inherit; }
+.wb-inspector .child-conversation-scroll .tool-disclosure { margin-block: 4px; }
+.wb-inspector .child-conversation-scroll .tool-disclosure-header { padding: 5px; gap: 4px; }
+.wb-inspector .child-conversation-scroll .tool-disclosure-label { font-size: 11px; }
+.wb-inspector .child-conversation-scroll .tool-disclosure-target { font-size: 10px; }
+.wb-inspector .child-conversation-scroll pre { max-width: 100%; overflow: auto; }
+.wb-inspector .child-conversation-scroll p { margin-block: 4px; }
+.wb-inspector .child-activity-actions { justify-content: flex-end; }
+.wb-inspector .child-activity-read-error { padding: 4px 8px; color: var(--text-muted); font-size: 10px; }
+.wb-inspector .child-conversation-latest { width: 100%; }
+
 /* --------------------------------------------------------------------------
    Context & Compaction Controls
    -------------------------------------------------------------------------- */

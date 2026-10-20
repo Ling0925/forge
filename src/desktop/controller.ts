@@ -141,6 +141,13 @@ export function createWorkerController(
       value.type === "provider_retry"
     )
       run.recovery.set(value.type, value);
+    if (value.type === "agent_progress") {
+      const key = `agent-progress:${value.childSessionId}`;
+      const childKeys = [...run.recovery.keys()].filter(key => key.startsWith("agent-progress:"));
+      if (run.recovery.has(key) || childKeys.length < 32) run.recovery.set(key, value);
+    }
+    if (value.type === "agent_update" && !["running", "awaiting_approval"].includes(value.status))
+      run.recovery.delete(`agent-progress:${value.childSessionId}`);
     if (value.type === "tool_call_preview") {
       const key = `tool-preview:${value.previewId}`;
       if (run.recovery.has(key) || run.recovery.size < 264) run.recovery.set(key, value);
@@ -586,7 +593,7 @@ export function createWorkerController(
         }
       }
       for (const [key, event] of run.recovery)
-        if (key.startsWith("tool-preview:")) result.push({ runId, event });
+        if (key.startsWith("tool-preview:") || key.startsWith("agent-progress:")) result.push({ runId, event });
       for (const approval of run.approvals.values()) {
         if (!approval.consumed)
           result.push({ runId, event: { ...base, type: "approval_requested", request: approval.request } });
