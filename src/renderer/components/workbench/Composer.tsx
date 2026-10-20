@@ -117,6 +117,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     }
   }, [drafts]);
   const draftId = isNew ? "new" : (state.activeSessionId ?? "none");
+  // The composer stays mounted during navigation; next-run modes belong to drafts, not the view.
+  const [modes, setModes] = useState<Readonly<Record<string, "build" | "plan">>>({});
+  const mode = modes[draftId] ?? "build";
   const prompt = drafts[draftId] ?? "";
   const manualSend = Boolean(manualDrafts[draftId]) || /[\r\n]/.test(prompt);
   const {
@@ -308,12 +311,19 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       clearImages(submission.images, submission.draftId);
     }
     setSubmission(null);
-    if (submission.draftId === "new") pendingNew.current = null;
+    if (submission.draftId === "new") {
+      pendingNew.current = null;
+      // Adopt the new draft's latest choice only after acceptance, then reset the next new draft.
+      // A choice made directly in the created session while starting takes precedence.
+      setModes(({ new: fresh = "build", ...sessions }) => ({
+        ...sessions,
+        [submission.id]: sessions[submission.id] ?? fresh,
+      }));
+    }
     // Do not steal navigation if the user opened a different session while starting.
     if (submission.draftId === "new" && selectedDraft.current === "new")
       void selectSession(submission.id);
   }, [submission, state.activeRuns, selectSession, clearImages]);
-  const [mode, setMode] = useState<"build" | "plan">("build");
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const pendingNew = useRef<{
@@ -399,7 +409,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     ? (run?.permission ?? permission)
     : permission;
   const changeMode = (next: "build" | "plan") => {
-    setMode(next);
+    setModes((old) => ({ ...old, [draftId]: next }));
   };
   const isConfigured =
     providerSourceId && !providerSource
@@ -1001,7 +1011,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             </ol>
           </div>
         )}
-        {(!isConfigured || mode === "plan" || error || imageError || modelUnlisted) && (
+        {(!isConfigured || error || imageError || modelUnlisted) && (
           <div className="composer-status" aria-live="polite">
             {!isConfigured && (
               <span className="wb-muted">
@@ -1019,11 +1029,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             {modelUnlisted && (
               <span className="wb-muted composer-plan-note">
                 当前模型 {model} 不在来源 {providerSource?.label} 的目录中，调用可能失败。
-              </span>
-            )}
-            {mode === "plan" && (
-              <span className="wb-muted composer-plan-note">
-                规划模式只读，不执行修改或 MCP 操作。
               </span>
             )}
             {error && (

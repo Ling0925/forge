@@ -223,7 +223,7 @@ it("selecting unrestricted permits immediate sending; plan and configuration che
     const summary = picker.locator("summary");
     await summary.click();
     await expect.poll(() => picker.getAttribute("open")).not.toBeNull();
-    await fresh.locator("#run-model").press("Escape");
+    await fresh.getByRole("button", { name: /^选择模型：/ }).press("Escape");
     expect(await picker.getAttribute("open")).toBeNull();
     expect(await fresh.isVisible()).toBe(true);
     expect(

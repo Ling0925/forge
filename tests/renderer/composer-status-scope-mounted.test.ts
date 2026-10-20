@@ -15,7 +15,7 @@ beforeAll(async () => {
         import {Composer} from './src/renderer/components/workbench/Composer';
         import {TestProvider,useWorkbench} from './src/renderer/state/workbench-context';
         const snapshot=id=>({id,model:'test/model',workspace:'/tmp',events:[]});
-        window.calls=[];window.pending={};
+        window.calls=[];window.pending={};window.runInputs=[];window.queuedInputs=[];
         window.forge={
           chooseWorkspace:async()=>'/tmp',
           listModels:async()=>['test/model'],getSession:async id=>snapshot(id),
@@ -60,6 +60,12 @@ beforeAll(async () => {
             return <Context.Provider value={{
               select:setId,selectSession:async id=>setId(id),
               setRun:(id,run)=>setRuns(old=>({...old,[id]:{sessionId:id,runId:id,...run}})),
+              startRun:async(prompt,permission,model,sessionId,mode)=>{
+                window.runInputs.push({prompt,permission,model,sessionId,mode});
+                setRuns(old=>({...old,[sessionId]:{sessionId,runId:sessionId,status:'running',accepted:true,permission}}));
+                return true;
+              },
+              queueInput:input=>{window.queuedInputs.push(input);return true;},
               dispatch:()=>{},loadSessions:async()=>{},updateSettings:async()=>({ok:true}),
               state:{activeSessionId:id==='new'?null:id,isNewSessionOpen:id==='new',
                 activeSnapshot:id==='new'?null:snapshot(id),sessions:[],
@@ -132,6 +138,87 @@ it("keeps command status, duplicate guards and out-of-order results with their s
     expect(await executing.count()).toBe(0);
     await page.getByRole("button", { name: "Session B", exact: true }).click();
     expect(await message()).toBe("b diagnostics failed");
+  } finally { await page.close(); }
+});
+
+it("scopes mode controls, submissions and queued inputs to each session without a redundant plan banner", async () => {
+  const page = await mount();
+  try {
+    const input = page.locator("textarea");
+    const mode = page.getByRole("button", { name: "运行模式", exact: true });
+    const permission = page.getByRole("button", { name: "执行权限", exact: true });
+    const select = async (name: string) => {
+      await page.getByRole("button", { name, exact: true }).click();
+    };
+    const expectMode = async (value: "Plan" | "Build") => {
+      await expect.poll(() => mode.getAttribute("title")).toBe(`运行模式：${value}`);
+      expect(await page.locator(".composer-mode-arrow").getAttribute("class")).toContain(`is-${value.toLowerCase()}`);
+    };
+    const runInputs = () => page.evaluate(() => (window as unknown as { runInputs: unknown[] }).runInputs);
+    const queuedInputs = () => page.evaluate(() => (window as unknown as { queuedInputs: unknown[] }).queuedInputs);
+
+    await input.fill("plan A");
+    await input.press("Shift+Tab");
+    await expectMode("Plan");
+    expect(await permission.isDisabled()).toBe(true);
+    expect(await page.locator("#run-permission").inputValue()).toBe("readonly");
+    expect(await page.getByText("规划模式只读，不执行修改或 MCP 操作。", { exact: true }).count()).toBe(0);
+    expect(await page.locator(".composer-status").count()).toBe(0);
+
+    await select("Session B");
+    await expectMode("Build");
+    expect(await permission.isDisabled()).toBe(false);
+    expect(await page.locator("#run-permission").inputValue()).toBe("workspace");
+    await input.fill("build B");
+    await input.press("Enter");
+    await expect.poll(runInputs).toEqual([
+      { sessionId: "b", prompt: "build B", model: "test/model", mode: "build", permission: "workspace" },
+    ]);
+    await expect.poll(() => input.inputValue()).toBe("");
+    await input.fill("queued build B");
+    await input.press("Enter");
+    await expect.poll(queuedInputs).toEqual([
+      { sessionId: "b", prompt: "queued build B", model: "test/model", mode: "build", permission: "workspace" },
+    ]);
+
+    await select("Session A");
+    await expectMode("Plan");
+    expect(await input.inputValue()).toBe("plan A");
+    await input.press("Enter");
+    await expect.poll(runInputs).toEqual([
+      { sessionId: "b", prompt: "build B", model: "test/model", mode: "build", permission: "workspace" },
+      { sessionId: "a", prompt: "plan A", model: "test/model", mode: "plan", permission: "readonly" },
+    ]);
+    await expect.poll(() => input.inputValue()).toBe("");
+    await input.press("Shift+Tab");
+    await expectMode("Build");
+    // Choosing the next mode does not change the already-running plan's permission.
+    expect(await page.locator("#run-permission").inputValue()).toBe("readonly");
+
+    await select("Session B");
+    await expectMode("Build");
+    await mode.click();
+    await page.getByRole("menuitemradio", { name: /^Plan/ }).click();
+    await expectMode("Plan");
+    await input.fill("queued plan B");
+    await input.press("Enter");
+    await expect.poll(queuedInputs).toEqual([
+      { sessionId: "b", prompt: "queued build B", model: "test/model", mode: "build", permission: "workspace" },
+      { sessionId: "b", prompt: "queued plan B", model: "test/model", mode: "plan", permission: "readonly" },
+    ]);
+    await select("Session A");
+    await expectMode("Build");
+    await select("New session");
+    await expectMode("Build");
+    await input.fill("/mode plan");
+    await input.press("Enter");
+    await expectMode("Plan");
+    await select("Session A");
+    await expectMode("Build");
+    await select("Session B");
+    await expectMode("Plan");
+    await select("New session");
+    await expectMode("Plan");
   } finally { await page.close(); }
 });
 

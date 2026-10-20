@@ -16,7 +16,7 @@ it("new conversation is inline, preserves drafts and retries in the same session
       const snapshot = (id,title) => ({version:1,id,title,workspace:'/tmp/project',model:'fixture/model',status:'idle',createdAt:'2026-01-01T00:00:00.000Z',updatedAt:'2026-01-01T00:00:00.000Z',messages:[],events:[],changes:[]});
       const sessions = [snapshot(oldId,'Existing conversation')];
       const listeners = new Set();
-      window.counts = {create:0,start:0};
+      window.counts = {create:0,start:0};window.runInputs = [];
       window.forge = {
         getSettings: async () => ({...defaultPublicSettings,model:'fixture/model',isConfigured:true}),
         listSessions: async () => [...sessions],
@@ -27,8 +27,8 @@ it("new conversation is inline, preserves drafts and retries in the same session
         getProjectContext: async () => ({instructionSources:[],skills:[],warnings:[],counts:{instructions:0,skills:0,warnings:0}}),
         getDiagnostics: async () => ({transcriptChars:0,projectedChars:0,messageCount:0,summaryFallback:false}),
         createSession: async () => {window.counts.create++;const s=snapshot(newId,'New conversation');sessions.unshift(s);return s},
-        startRun: async () => {window.counts.start++;if(window.counts.start===1)throw Error('fixture start failure');
-          setTimeout(()=>listeners.forEach(l=>l({runId,event:{type:'run_started',sessionId:newId,model:'fixture/model',permission:'workspace',timestamp:new Date().toISOString()}})),20);
+        startRun: async (input) => {window.runInputs.push(input);window.counts.start++;if(window.counts.start===1)throw Error('fixture start failure');
+          setTimeout(()=>listeners.forEach(l=>l({runId,event:{type:'run_started',sessionId:newId,model:'fixture/model',permission:input.permission,timestamp:new Date().toISOString()}})),20);
           return {runId,sessionId:newId};},
       };
       createRoot(document.getElementById('root')).render(<App/>);
@@ -50,11 +50,17 @@ it("new conversation is inline, preserves drafts and retries in the same session
     await fresh.waitFor();
     expect(await page.locator("dialog[open]").count()).toBe(0);
     await fresh.fill("new draft");
+    const mode = page.getByRole("button", { name: "运行模式", exact: true });
+    await mode.click();
+    await page.getByRole("menuitemradio", { name: /^Plan/ }).click();
+    expect(await mode.getAttribute("title")).toBe("运行模式：Plan");
     await page.locator(".session-item-main").filter({ hasText: "Existing conversation" }).click();
+    expect(await mode.getAttribute("title")).toBe("运行模式：Build");
     const existing = page.getByRole("textbox", { name: "继续任务" });
     await existing.fill("existing draft");
     await page.getByRole("button", { name: "新建会话", exact: true }).click();
     expect(await fresh.inputValue()).toBe("new draft");
+    expect(await mode.getAttribute("title")).toBe("运行模式：Plan");
     expect(await fresh.evaluate((node) => node === document.activeElement)).toBe(true);
     await page.locator(".session-item-main").filter({ hasText: "Existing conversation" }).click();
     expect(await existing.inputValue()).toBe("existing draft");
@@ -62,12 +68,21 @@ it("new conversation is inline, preserves drafts and retries in the same session
     await page.getByRole("button", { name: "发送并开始会话" }).click();
     await page.getByText("未能开始对话，草稿已保留。请检查错误详情后重试。", { exact: true }).waitFor();
     expect(await fresh.inputValue()).toBe("new draft");
+    expect(await mode.getAttribute("title")).toBe("运行模式：Plan");
     expect(await page.evaluate(() => (window as unknown as { counts: { create: number } }).counts.create)).toBe(1);
     await page.getByRole("button", { name: "发送并开始会话" }).click();
     await page.getByRole("heading", { name: "New conversation", exact: true }).waitFor();
     expect(await page.evaluate(() => (window as unknown as { counts: { create: number; start: number } }).counts)).toEqual({ create: 1, start: 2 });
+    expect(await mode.getAttribute("title")).toBe("运行模式：Plan");
+    expect(await page.evaluate(() => (window as unknown as { runInputs: { mode: string; permission: string }[] }).runInputs.map(({ mode, permission }) => ({ mode, permission })))).toEqual([
+      { mode: "plan", permission: "readonly" },
+      { mode: "plan", permission: "readonly" },
+    ]);
     await page.getByRole("button", { name: "新建会话", exact: true }).click();
     expect(await fresh.inputValue()).toBe("");
+    expect(await mode.getAttribute("title")).toBe("运行模式：Build");
+    await page.locator(".session-item-main").filter({ hasText: "New conversation" }).click();
+    expect(await mode.getAttribute("title")).toBe("运行模式：Plan");
     expect(await page.locator("dialog[open]").count()).toBe(0);
     expect(warnings).toEqual([]);
   } finally { await browser.close(); }
