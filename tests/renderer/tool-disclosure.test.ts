@@ -340,6 +340,89 @@ describe("tool disclosure row", () => {
     expect(html).toContain("命令仍在运行，输出尚未生成。");
   });
 
+  it("unwraps nested command envelope JSON inside command_task output cleanly", () => {
+    const innerEnvelope = {
+      stdout: "1 failed | 23 passed\nFAIL tests/core/memory.test.ts",
+      stderr: "ExperimentalWarning: SQLite is an experimental feature",
+      exit_code: 1,
+      duration_ms: 1965,
+    };
+    const html = render({
+      toolName: "command_task",
+      status: "failed",
+      parameters: JSON.stringify({
+        action: "wait",
+        id: "aa118abe-d428-4184-bd72-c45459a6eb79",
+      }),
+      output: JSON.stringify({
+        id: "aa118abe-d428-4184-bd72-c45459a6eb79",
+        status: "failed",
+        output_available: true,
+        exit_code: 1,
+        output_id: "0d64fdcb-e750-4f0d-9180-7139ed89991d",
+        preview_truncated: false,
+        result_is_error: true,
+        offset: 0,
+        offset_units: "utf16_code_units",
+        output: JSON.stringify(innerEnvelope),
+      }),
+      defaultExpanded: true,
+    });
+
+    // Inner stdout is rendered cleanly with genuine lines, not escaped JSON quotes
+    expect(html).toContain("1 failed | 23 passed\nFAIL tests/core/memory.test.ts");
+    expect(html).not.toContain("&quot;stdout&quot;");
+    // Inner stderr is extracted into its own stream
+    expect(html).toContain("标准错误");
+    expect(html).toContain("ExperimentalWarning: SQLite is an experimental feature");
+    // Exit code is surfaced
+    expect(html).toContain("退出码 1");
+    // Facts show duration and short task id, but omit internal protocol clutter
+    expect(html).toContain("2.0s");
+    expect(html).toContain("#aa118abe");
+    expect(html).not.toContain("0d64fdcb-e750-4f0d-9180-7139ed89991d");
+    expect(html).not.toContain("offset_units");
+    expect(html).not.toContain("result_is_error");
+    // Target is formatted cleanly with action and short id
+    expect(html).toContain("等待完成 · #aa118abe");
+  });
+
+  it("renders command_task list view with structured task cards", () => {
+    const html = render({
+      toolName: "command_task",
+      status: "completed",
+      parameters: JSON.stringify({ action: "list" }),
+      output: JSON.stringify({
+        tasks: [
+          {
+            id: "task-abc12345-6789",
+            status: "completed",
+            title: "npm test",
+            exit_code: 0,
+            duration_ms: 1200,
+          },
+          {
+            id: "task-def98765-4321",
+            status: "failed",
+            title: "cargo build",
+            exit_code: 101,
+            duration_ms: 3400,
+          },
+        ],
+        pending_ids: [],
+      }),
+      defaultExpanded: true,
+    });
+
+    expect(html).toContain('class="command-tasks-view"');
+    expect(html).toContain("#task-abc");
+    expect(html).toContain("已完成");
+    expect(html).toContain("npm test");
+    expect(html).toContain("#task-def");
+    expect(html).toContain("失败");
+    expect(html).toContain("cargo build");
+  });
+
   it("default-expands a file edit and shows the diff", () => {
     const html = render({
       toolName: "edit_file",

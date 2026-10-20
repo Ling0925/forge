@@ -1213,6 +1213,93 @@
   overflow-y: auto;
 }
 
+/* Background command task listing */
+.command-tasks-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.command-task-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-2-5);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.command-task-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.command-task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: var(--leading-2xs);
+}
+
+.command-task-badge.status-completed {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.command-task-badge.status-running,
+.command-task-badge.status-starting {
+  background: var(--surface-elevated);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.command-task-badge.status-failed {
+  background: var(--surface-elevated);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.command-task-badge.status-cancelled {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+.command-task-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.command-task-title {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-task-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.command-task-duration {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* Sub-agent reports */
 .agent-reports-view {
   display: flex;

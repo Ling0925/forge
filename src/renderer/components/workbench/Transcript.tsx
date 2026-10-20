@@ -381,22 +381,79 @@ function computeTurnSummary(items: readonly TurnEntry[]): string {
   return parts.length > 0 ? parts.join(" · ") : "本轮已完成";
 }
 
+function findBackgroundCommand(
+  taskId: string,
+  timeline: readonly TimelineItem[],
+): { command: string; cwd: string } | undefined {
+  if (!taskId) return undefined;
+  for (const item of timeline) {
+    if (item.kind !== "tool" || item.call.function.name !== "run_command") continue;
+    try {
+      const output = JSON.parse(item.output);
+      if (output && typeof output === "object" && output.id === taskId) {
+        return commandActivity(item.call);
+      }
+    } catch {
+      // Non-JSON output
+    }
+  }
+  return undefined;
+}
+
 function renderToolCard(
   item: Extract<TimelineItem, { readonly kind: "tool" }>,
   index: number,
   phases: readonly number[],
+  timeline?: readonly TimelineItem[],
 ) {
-  const argvActivity =
+  let command =
     item.call.function.name === "run_command"
-      ? commandActivity(item.call)
+      ? commandActivity(item.call).command || undefined
       : undefined;
+  let cwd =
+    item.call.function.name === "run_command"
+      ? commandActivity(item.call).cwd || undefined
+      : undefined;
+  let target = toolActivity(item.call).target || undefined;
+
+  if (item.call.function.name === "command_task") {
+    let taskId: string | undefined;
+    let taskAction: string | undefined;
+    try {
+      const args = JSON.parse(item.call.function.arguments);
+      if (args && typeof args === "object") {
+        if (typeof args.id === "string") taskId = args.id;
+        if (typeof args.action === "string") taskAction = args.action;
+      }
+    } catch {
+      // Malformed arguments
+    }
+
+    if (taskId && timeline) {
+      const bg = findBackgroundCommand(taskId, timeline);
+      if (bg?.command) {
+        command = bg.command;
+        cwd = bg.cwd || undefined;
+        const actionPrefix =
+          taskAction === "wait"
+            ? "等待"
+            : taskAction === "read"
+              ? "读取"
+              : taskAction === "stop"
+                ? "终止"
+                : "";
+        target = actionPrefix ? `${actionPrefix} · ${bg.command}` : bg.command;
+      }
+    }
+  }
+
   return (
     <ToolDisclosure
       key={item.id}
       toolName={item.call.function.name}
-      target={toolActivity(item.call).target || undefined}
-      command={argvActivity?.command || undefined}
-      cwd={argvActivity?.cwd || undefined}
+      target={target}
+      command={command}
+      cwd={cwd}
       parameters={item.call.function.arguments.slice(0, 12000)}
       output={item.output.slice(0, 24000)}
       truncated={
@@ -419,6 +476,7 @@ function renderTimelineEntry(
   snapshot: SessionSnapshot,
   headers: readonly (TranscriptStage | null)[],
   phases: readonly number[],
+  timeline?: readonly TimelineItem[],
 ) {
   const { item, index } = entry;
   if (item.kind === "error" && item.historical) return null;
@@ -551,7 +609,7 @@ function renderTimelineEntry(
   return (
     <Fragment key={item.id}>
       {headers[index] && <StageHeader stage={headers[index]} />}
-      {renderToolCard(item, index, phases)}
+      {renderToolCard(item, index, phases, timeline)}
     </Fragment>
   );
 }
@@ -722,14 +780,14 @@ export const StoredTranscript = memo(function StoredTranscript({
                       const heading = step !== undefined && step !== priorStep
                         ? <div className="transcript-execution-counts" data-step={step}>执行第 {step} 步</div> : null;
                       if (block.kind === "single") {
-                        return <Fragment key={block.entry.item.id}>{heading}{renderTimelineEntry(block.entry, snapshot, headers, phases)}</Fragment>;
+                        return <Fragment key={block.entry.item.id}>{heading}{renderTimelineEntry(block.entry, snapshot, headers, phases, timeline)}</Fragment>;
                       }
                       return (
                         <div className="tool-call-group" key={block.id}>
                           {heading}
                           {block.entries.map(({ item, index }) =>
                             item.kind === "tool"
-                              ? renderToolCard(item, index, phases)
+                              ? renderToolCard(item, index, phases, timeline)
                               : null,
                           )}
                         </div>
@@ -740,7 +798,7 @@ export const StoredTranscript = memo(function StoredTranscript({
                     {finalEntry.item.step !== undefined && processItems.at(-1)?.item.step !== finalEntry.item.step && (
                       <div className="transcript-execution-counts" data-step={finalEntry.item.step}>执行第 {finalEntry.item.step} 步</div>
                     )}
-                    {renderTimelineEntry(finalEntry, snapshot, headers, phases)}
+                    {renderTimelineEntry(finalEntry, snapshot, headers, phases, timeline)}
                   </>}
                   <PublishedFiles sessionId={snapshot.id} files={files} />
                 </div>
