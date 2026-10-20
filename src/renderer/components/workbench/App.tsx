@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useGlobalModalShortcuts } from "../../state/modal-shortcuts";
 import { WorkbenchProvider, useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
 import { ErrorState } from "../primitives/ErrorState";
+import { DeferredPanel } from "../primitives/DeferredPanel";
 import { Composer } from "./Composer";
 import { Inspector } from "./Inspector";
-import { Settings } from "./Settings";
 import { Sidebar } from "./Sidebar";
 import { Transcript } from "./Transcript";
-import { UsageDashboard } from "./UsageDashboard";
 import { Welcome } from "./Welcome";
 import { WorkbenchHeader } from "./WorkbenchHeader";
 import "./workbench.css";
@@ -19,11 +18,15 @@ import "./new-session.css";
 import "./inspector.css";
 import "../../styles/motion.css";
 
+const Settings = lazy(() => import("./Settings").then((module) => ({ default: module.Settings })));
+const UsageDashboard = lazy(() => import("./UsageDashboard").then((module) => ({ default: module.UsageDashboard })));
+
 function Workbench() {
   const {
     state,
     openNewSession,
     openSettings,
+    openUsageDashboard,
     setMobileTab,
     setMobileSidebar,
     clearAlert,
@@ -149,8 +152,12 @@ function Workbench() {
           </div>
         </div>
       </div>
-      <Settings />
-      <UsageDashboard />
+      <DeferredPanel open={state.isSettingsOpen} label="设置" onClose={() => openSettings(false)}>
+        <Settings />
+      </DeferredPanel>
+      <DeferredPanel open={state.isUsageDashboardOpen} label="用量看板" onClose={() => openUsageDashboard(false)}>
+        <UsageDashboard />
+      </DeferredPanel>
     </>
   );
 }

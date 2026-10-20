@@ -57,6 +57,8 @@ it("loads the packaged mobile workbench, pairs and reconnects to a desktop-owned
     await phone.locator(".welcome-task").first().click();
     await expect.poll(() => phone.locator("body").innerText(), { timeout: 10_000 }).toContain("shared runtime output");
     expect((await second.evaluate(id => window.forge.getSession(id), session.id)).status).toBe("running");
+    // On mobile the settings entry is inside the collapsed session drawer.
+    await phone.getByRole("button", { name: "打开会话列表", exact: true }).click();
     await phone.getByRole("button", { name: "设置", exact: true }).click();
     await phone.getByRole("button", { name: "手机连接", exact: true }).click();
     await phone.locator("img.phone-pairing-qr").waitFor();

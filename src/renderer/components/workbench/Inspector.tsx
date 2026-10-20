@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
 } from "@phosphor-icons/react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { permissionLabels } from "../../state/permission-labels";
 import { useWorkbench } from "../../state/workbench-context";
 import { ApprovalPanel } from "../primitives/ApprovalPanel";
 import { Button } from "../primitives/Button";
@@ -23,7 +24,6 @@ import {
   PlanProgressPanel,
   SubAgentsPanel,
 } from "./RuntimePanels";
-import { permissionLabels } from "./Settings";
 import { WorkspaceFileManager } from "./WorkspaceFileManager";
 import "./inspector.css";
 

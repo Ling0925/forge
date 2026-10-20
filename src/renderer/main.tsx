@@ -1,12 +1,13 @@
-import { StrictMode, useEffect, useState } from "react";
+import { lazy, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./components/workbench/App";
-import { PrimitiveShowcase } from "./showcase/PrimitiveShowcase";
+import { DeferredPanel } from "./components/primitives/DeferredPanel";
 import "./styles/global.css";
 import "./styles/workspace-theme.css";
-import "./styles/settings-models.css";
 import "./styles/sidebar-compact.css";
 import { installWebHost } from "./web-host";
+
+const PrimitiveShowcase = lazy(() => import("./showcase/PrimitiveShowcase").then((module) => ({ default: module.PrimitiveShowcase })));
 
 function Root() {
   const [isShowcase, setIsShowcase] = useState(() => {
@@ -37,7 +38,18 @@ function Root() {
   }, []);
 
   if (isShowcase) {
-    return <PrimitiveShowcase />;
+    return (
+      <DeferredPanel open label="组件展示" onClose={() => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("showcase");
+        url.hash = "";
+        if (url.pathname.endsWith("/showcase")) url.pathname = url.pathname.slice(0, -8);
+        window.history.replaceState(null, "", url);
+        setIsShowcase(false);
+      }}>
+        <PrimitiveShowcase />
+      </DeferredPanel>
+    );
   }
 
   return <App />;

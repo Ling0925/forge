@@ -20,6 +20,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { defaultPublicSettings } from "../../../shared/schemas";
 import { isMobileAppHost } from "../../state/mobile-connection";
+import { permissionLabels } from "../../state/permission-labels";
 import { buildSettingsUpdate, createSettingsDraft, type SettingsDraft } from "../../state/settings-draft";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
@@ -31,12 +32,7 @@ import { McpPanel } from "./McpPanel";
 import { PhonePairing } from "./PhonePairing";
 import { ServerConnection } from "./ServerConnection";
 import "./settings-page.css";
-
-export const permissionLabels = {
-  readonly: "只读 · 不修改文件或执行命令",
-  workspace: "工作区文件 · 命令逐次批准",
-  unrestricted: "无限制 · 可执行命令（非 OS 沙箱）",
-};
+import "../../styles/settings-models.css";
 
 const sections = [
   { id: "connection", title: "模型连接", description: "连接你的模型服务，选择协议与默认模型。", keywords: "API 端点 密钥 model reasoning 思考强度", icon: Plugs },
