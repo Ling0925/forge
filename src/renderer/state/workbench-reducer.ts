@@ -57,6 +57,8 @@ export interface ActiveRunState {
   readonly streamingText: string;
   readonly streamingTruncated?: boolean;
   readonly streamingTurn?: number;
+  readonly streamTurn?: number;
+  readonly streamStep?: number;
   readonly accepted?: boolean;
   readonly approvalQueue?: readonly ApprovalRequest[];
   readonly pendingApproval?: ApprovalRequest | undefined;
@@ -96,6 +98,8 @@ function retainOutput(
     truncated: Boolean(run.streamingTruncated),
     afterMessage: run.streamStartMessage ?? 0,
     toolCallId,
+    ...(run.streamTurn === undefined ? {} : { turn: run.streamTurn }),
+    ...(run.streamStep === undefined ? {} : { step: run.streamStep }),
   };
   return outputSaved(output, snapshot?.id === run.sessionId ? snapshot : null)
     ? pending
@@ -308,6 +312,8 @@ export function workbenchReducer(
               text: run.streamingText,
               truncated: Boolean(run.streamingTruncated),
               afterMessage: run.streamStartMessage ?? 0,
+              ...(run.streamTurn === undefined ? {} : { turn: run.streamTurn }),
+              ...(run.streamStep === undefined ? {} : { step: run.streamStep }),
             },
             selectedSnapshot,
           );
@@ -502,6 +508,7 @@ export function workbenchReducer(
           accepted: true,
           permission: event.permission,
           toolPreviews: [],
+          ...(event.turn === undefined ? {} : { streamTurn: event.turn }),
           streamStartMessage: messageCount,
           reasoningStartMessage: messageCount,
         };
@@ -537,6 +544,8 @@ export function workbenchReducer(
       if (event.type === "text_delta")
         next = {
           ...run,
+          ...(event.turn === undefined ? {} : { streamTurn: event.turn }),
+          ...(event.step === undefined ? {} : { streamStep: event.step }),
           streamStartMessage: run.streamingText
             ? (run.streamStartMessage ?? 0)
             : state.activeSnapshot?.id === event.sessionId

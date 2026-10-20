@@ -10,6 +10,7 @@ import type {
   SessionSnapshot,
 } from "../../shared-types";
 import { reduceTimeline, type TimelineItem } from "../../state/timeline";
+import type { PendingOutput } from "../../state/transcript-sync";
 import { completedTurnExecutions, type CompletedTurnExecution } from "../../state/turn-execution";
 import { TranscriptScrollState } from "../../state/transcript-scroll";
 import { useWorkbench } from "../../state/workbench-context";
@@ -473,7 +474,7 @@ function renderTimelineEntry(
           {item.role === "user" && <div className="message-header">你</div>}
           {item.role === "assistant" && (
             <div className="message-header message-author-row">
-              <span>Forge</span>
+              <span>{item.incomplete ? "Forge · 未完成回复" : "Forge"}</span>
               {item.content && <MessageCopyButton text={item.content} />}
             </div>
           )}
@@ -483,7 +484,10 @@ function renderTimelineEntry(
           {item.reasoning && (
             <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
           )}
-          {item.content && <div className="message-body"><Markdown source={item.content} /></div>}
+          {item.content && <div className="message-body">
+            {item.truncated && <p className="wb-muted">实时预览已达显示上限，完整内容以同步后的记录为准。</p>}
+            <Markdown source={item.content} />
+          </div>}
           {item.webSearchDetails && <div className="message-body"><Markdown source={item.webSearchDetails} /></div>}
         </article>
       </Fragment>
@@ -593,8 +597,9 @@ function ExecutionProcess({
 
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
-}: { readonly snapshot: SessionSnapshot }) {
-  const timeline = reduceTimeline(snapshot);
+  pendingOutputs,
+}: { readonly snapshot: SessionSnapshot; readonly pendingOutputs?: readonly PendingOutput[] | undefined }) {
+  const timeline = reduceTimeline(snapshot, pendingOutputs);
   const { phases, headers } = transcriptStages(timeline);
   const [collapsedTurns, setCollapsedTurns] = useState<Record<string, boolean>>({});
   const toggleTurn = useCallback((turnId: string) => {
@@ -932,7 +937,7 @@ export function Transcript() {
         <div ref={contentRef} className="conversation-inner">
           {state.isSnapshotLoading && <p className="wb-muted">正在读取会话…</p>}
           {snapshot ? (
-            <StoredTranscript key={snapshot.id} snapshot={snapshot} />
+            <StoredTranscript key={snapshot.id} snapshot={snapshot} pendingOutputs={run?.pendingOutputs} />
           ) : (
             !state.isSnapshotLoading && (
               <EmptyState
@@ -943,21 +948,6 @@ export function Transcript() {
               />
             )
           )}
-          {run?.pendingOutputs?.map((output) => (
-            <article className="message message-assistant" key={output.id}>
-              <div className="message-header message-author message-author-row">
-                <span>Forge · 待同步输出</span>
-              </div>
-              <div className="message-body">
-                {output.truncated && (
-                  <p className="wb-muted">
-                    实时预览已达显示上限，完整内容以同步后的记录为准。
-                  </p>
-                )}
-                <Markdown source={output.text} />
-              </div>
-            </article>
-          ))}
           {/* Reasoning renders before the answer: saved-but-unsynchronized
               thoughts first, then the live block still streaming in. */}
           {run?.pendingReasoning?.map((output) => (
