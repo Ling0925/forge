@@ -100,6 +100,21 @@ describe("Transcript Turn partitioning and grouping", () => {
     expect(blocks[1].kind).toBe("single");
   });
 
+  it("keeps consecutive tools with different steps in the same compact tool_group", () => {
+    const entries = [
+      { item: { ...toolItem("t1"), step: 1 }, index: 0 },
+      { item: { ...toolItem("t2"), step: 2 }, index: 1 },
+      { item: { ...toolItem("t3"), step: 3 }, index: 2 },
+    ];
+    const headers = [null, null, null];
+    const blocks = groupTurnEntries(entries, headers);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].kind).toBe("tool_group");
+    if (blocks[0].kind === "tool_group") {
+      expect(blocks[0].entries).toHaveLength(3);
+    }
+  });
+
   it("computes accurate summary statistics for collapsed turns", () => {
     const items = [
       { item: toolItem("t1"), index: 0 },

@@ -220,7 +220,8 @@ it("mounted narrow inspector wraps a long MCP command and resource paths without
         }, scenario.shellWidth);
       }
 
-      await page.getByRole("tab", { name: "资源" }).click();
+      await page.getByRole("tab", { name: "会话信息", exact: true }).click();
+      await page.getByRole("tab", { name: "项目资源", exact: true }).click();
       const resourcesPanel = page.locator("#tabpanel-inspector-resources");
       await resourcesPanel.waitFor({ state: "visible" });
       await page.waitForFunction(

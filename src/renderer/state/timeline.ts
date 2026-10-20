@@ -4,8 +4,9 @@ import { webSearchDetails } from "../../shared/web-search-display";
 import type { ImageAttachment } from "../../shared/images";
 import { publishedFilesSchema } from "../../shared/published-files";
 import type { FileChange, PublishedFile, SessionSnapshot, ToolCall } from "../shared-types";
+import { outputSaved, retainedOutputs, type PendingOutput } from "./transcript-sync";
 
-export type TimelineItem = { readonly turn?: number; readonly step?: number } & (
+export type TimelineItem = { readonly turn?: number; readonly step?: number; readonly messageIndex?: number } & (
   | {
       readonly kind: "message";
       readonly id: string;
@@ -16,6 +17,8 @@ export type TimelineItem = { readonly turn?: number; readonly step?: number } & 
       readonly reasoning?: string;
       readonly reasoningTruncated?: boolean;
       readonly origin?: "agent_reconciliation";
+      readonly incomplete?: boolean;
+      readonly truncated?: boolean;
     }
   | {
       readonly kind: "tool";
@@ -75,13 +78,35 @@ function toolTiming(
   return { startedAt, durationMs: to - from };
 }
 
+function insertOutputs(
+  timeline: readonly TimelineItem[],
+  outputs: readonly PendingOutput[],
+): readonly TimelineItem[] {
+  if (!outputs.length) return timeline;
+  const result = [...timeline];
+  for (const output of outputs) {
+    const index = result.findIndex(item =>
+      (output.turn !== undefined && item.turn === output.turn && item.kind === "error") ||
+      (item.messageIndex !== undefined && item.messageIndex >= output.afterMessage),
+    );
+    result.splice(index < 0 ? result.length : index, 0, {
+      kind: "message", id: output.id, role: "assistant", content: output.text,
+      incomplete: true, truncated: output.truncated,
+      ...(output.turn === undefined ? {} : { turn: output.turn }),
+      ...(output.step === undefined ? {} : { step: output.step }),
+    });
+  }
+  return result;
+}
+
 /** Native message order is authoritative. IDs are only unique within a call occurrence. */
 const timelineCache = new WeakMap<SessionSnapshot, readonly TimelineItem[]>();
 export function reduceTimeline(
   snapshot: SessionSnapshot,
+  pendingOutputs: readonly PendingOutput[] = [],
 ): readonly TimelineItem[] {
   const cached = timelineCache.get(snapshot);
-  if (cached) return cached;
+  if (cached) return insertOutputs(cached, pendingOutputs.filter(output => !outputSaved(output, snapshot)));
   const items: TimelineItem[] = [];
   const turns = executionTurns(snapshot);
   const positions = new Map<number, { readonly turn: number; readonly step?: number }>();
@@ -111,13 +136,14 @@ export function reduceTimeline(
     snapshot.events.slice(from, to).forEach((event, offset) => {
       const index = from + offset;
       if (event.type === "error") {
+        const errorTurn = event.turn ?? turns[turn]?.turn;
         placedErrors.add(index);
         items.push({
           kind: "error",
           id: `error:${index}`,
           message: event.error.message,
           timestamp: event.timestamp,
-          ...(event.turn === undefined ? {} : { turn: event.turn }),
+          ...(errorTurn === undefined ? {} : { turn: errorTurn }),
           ...(event.step === undefined ? {} : { step: event.step }),
         });
       } else if (
@@ -171,6 +197,7 @@ export function reduceTimeline(
         items.push({
           kind: "message",
           id: `message:${index}`,
+          messageIndex: index,
           ...positions.get(index),
           role: message.role,
           content: message.content ?? "",
@@ -259,6 +286,7 @@ export function reduceTimeline(
           items.push({
             kind: "tool",
             id: `tool:${call.id}:${occurrence}`,
+            messageIndex: index,
             ...positions.get(index),
             call,
             status: finish
@@ -419,6 +447,7 @@ export function reduceTimeline(
     const last = result.findLastIndex(item => item.turn === error.turn);
     result.splice(last < 0 ? result.length : last + 1, 0, error);
   }
-  timelineCache.set(snapshot, result);
-  return result;
+  const restored = insertOutputs(result, retainedOutputs(snapshot));
+  timelineCache.set(snapshot, restored);
+  return insertOutputs(restored, pendingOutputs.filter(output => !outputSaved(output, snapshot)));
 }

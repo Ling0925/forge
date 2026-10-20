@@ -164,7 +164,10 @@ it("unifies navigation and opens recent tasks without loading their histories up
       await page.evaluate(() => Reflect.get(window, "fixture").reads.length),
     ).toBe(readCount + 1);
     expect(await page.locator(".workbench-main").isVisible()).toBe(true);
+    expect(await details.isVisible()).toBe(false);
+    expect((await page.locator(".workbench-inspector").boundingBox())?.y).toBe(0);
     await page.getByRole("button", { name: "收起详情", exact: true }).click();
+    expect(await details.isVisible()).toBe(true);
     expect(await details.evaluate(el => el === document.activeElement)).toBe(true);
     await page.setViewportSize({ width: 320, height: 900 });
     expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);

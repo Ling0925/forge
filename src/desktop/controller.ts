@@ -1,6 +1,11 @@
+import { QueueAdmissionError } from "../shared/input-queue";
 import { randomUUID } from "node:crypto";
 import { HOST_PROTOCOL_VERSION, type HostState } from "../shared/host";
 import type { HarnessService } from "../shared/contracts";
+import {
+  listWorkspaceDirectory,
+  readWorkspaceFilePreview,
+} from "../core/workspace-files";
 import { ForgeError, toErrorInfo } from "../shared/errors";
 import {
   type RpcRequest,
@@ -214,13 +219,13 @@ export function createWorkerController(
     void service.inputQueue?.finished(run.input.sessionId, terminal.status).catch(() => undefined);
     return terminal.status;
   };
-  const startRun = (input: RunInput, providedRunId?: RunId, providerBinding?: string) => {
+  const startRun = (input: RunInput, providedRunId?: RunId, providerBinding?: string, acknowledgedPredecessor?: string) => {
     if (
       [...runs.values()].some(
         (run) => run.input.sessionId === input.sessionId,
       )
     )
-      throw new ForgeError(
+      throw providerBinding ? new QueueAdmissionError() : new ForgeError(
         "busy",
         "This session already has an active run.",
         true,
@@ -294,21 +299,25 @@ export function createWorkerController(
             },
             onSteeringApplied: () => {
               for (const request of run.applyingSteering.splice(0)) respond(request, null);
-            }, getPermission: () => run.permission, ...(providerBinding ? { providerBinding } : {}) },
+            }, getPermission: () => run.permission, ...(providerBinding ? { providerBinding } : {}), ...(acknowledgedPredecessor ? { acknowledgedPredecessor } : {}) },
         ),
       )
       .then(
         () => finish(runId),
-        (error) => finish(runId, toErrorInfo(error)),
+        (error) => {
+          const status = finish(runId, toErrorInfo(error));
+          if (error instanceof QueueAdmissionError) throw error;
+          return status;
+        },
       );
     run.completion = operation;
     operations.add(operation);
-    void operation.finally(() => operations.delete(operation));
+    void operation.finally(() => operations.delete(operation)).catch(() => undefined);
     return { handle: { runId, sessionId: input.sessionId }, operation };
   };
   const queueReady = service.inputQueue?.attach({
     isBusy: sessionId => [...runs.values()].some(run => run.input.sessionId === sessionId),
-    start: (input, runId, binding) => startRun(input, runIdSchema.parse(runId), binding).operation,
+    start: (input, runId, binding, predecessor) => startRun(input, runIdSchema.parse(runId), binding, predecessor).operation,
   });
   void queueReady?.catch(() => undefined);
   const queue = async () => {
@@ -431,6 +440,39 @@ export function createWorkerController(
           if (!service.getUsageStats) throw new ForgeError("not_found", "Usage statistics are unavailable on this host.");
           respond(request, await service.getUsageStats(request.filter));
           break;
+        case "listWorkspaceEntries": {
+          if (service.listWorkspaceEntries) {
+            respond(
+              request,
+              await service.listWorkspaceEntries(
+                request.sessionId,
+                request.path,
+              ),
+            );
+            break;
+          }
+          const session = await service.getSession(request.sessionId);
+          respond(
+            request,
+            await listWorkspaceDirectory(session.workspace, request.path),
+          );
+          break;
+        }
+        case "readWorkspaceFile": {
+          if (service.readWorkspaceFile) {
+            respond(
+              request,
+              await service.readWorkspaceFile(request.sessionId, request.path),
+            );
+            break;
+          }
+          const session = await service.getSession(request.sessionId);
+          respond(
+            request,
+            await readWorkspaceFilePreview(session.workspace, request.path),
+          );
+          break;
+        }
         case "compactSession":
           respond(request, await service.compactSession(request.sessionId));
           break;
@@ -560,7 +602,7 @@ export function createWorkerController(
   const dispatch = (raw: unknown): Promise<void> => {
     const operation = handle(raw);
     operations.add(operation);
-    void operation.finally(() => operations.delete(operation));
+    void operation.finally(() => operations.delete(operation)).catch(() => undefined);
     return operation;
   };
   const recoveryEvents = (): RunEvent[] => {

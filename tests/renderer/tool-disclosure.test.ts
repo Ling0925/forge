@@ -340,6 +340,89 @@ describe("tool disclosure row", () => {
     expect(html).toContain("命令仍在运行，输出尚未生成。");
   });
 
+  it("unwraps nested command envelope JSON inside command_task output cleanly", () => {
+    const innerEnvelope = {
+      stdout: "1 failed | 23 passed\nFAIL tests/core/memory.test.ts",
+      stderr: "ExperimentalWarning: SQLite is an experimental feature",
+      exit_code: 1,
+      duration_ms: 1965,
+    };
+    const html = render({
+      toolName: "command_task",
+      status: "failed",
+      parameters: JSON.stringify({
+        action: "wait",
+        id: "aa118abe-d428-4184-bd72-c45459a6eb79",
+      }),
+      output: JSON.stringify({
+        id: "aa118abe-d428-4184-bd72-c45459a6eb79",
+        status: "failed",
+        output_available: true,
+        exit_code: 1,
+        output_id: "0d64fdcb-e750-4f0d-9180-7139ed89991d",
+        preview_truncated: false,
+        result_is_error: true,
+        offset: 0,
+        offset_units: "utf16_code_units",
+        output: JSON.stringify(innerEnvelope),
+      }),
+      defaultExpanded: true,
+    });
+
+    // Inner stdout is rendered cleanly with genuine lines, not escaped JSON quotes
+    expect(html).toContain("1 failed | 23 passed\nFAIL tests/core/memory.test.ts");
+    expect(html).not.toContain("&quot;stdout&quot;");
+    // Inner stderr is extracted into its own stream
+    expect(html).toContain("标准错误");
+    expect(html).toContain("ExperimentalWarning: SQLite is an experimental feature");
+    // Exit code is surfaced
+    expect(html).toContain("退出码 1");
+    // Facts show duration and short task id, but omit internal protocol clutter
+    expect(html).toContain("2.0s");
+    expect(html).toContain("#aa118abe");
+    expect(html).not.toContain("0d64fdcb-e750-4f0d-9180-7139ed89991d");
+    expect(html).not.toContain("offset_units");
+    expect(html).not.toContain("result_is_error");
+    // Target is formatted cleanly with action and short id
+    expect(html).toContain("等待完成 · #aa118abe");
+  });
+
+  it("renders command_task list view with structured task cards", () => {
+    const html = render({
+      toolName: "command_task",
+      status: "completed",
+      parameters: JSON.stringify({ action: "list" }),
+      output: JSON.stringify({
+        tasks: [
+          {
+            id: "task-abc12345-6789",
+            status: "completed",
+            title: "npm test",
+            exit_code: 0,
+            duration_ms: 1200,
+          },
+          {
+            id: "task-def98765-4321",
+            status: "failed",
+            title: "cargo build",
+            exit_code: 101,
+            duration_ms: 3400,
+          },
+        ],
+        pending_ids: [],
+      }),
+      defaultExpanded: true,
+    });
+
+    expect(html).toContain('class="command-tasks-view"');
+    expect(html).toContain("#task-abc");
+    expect(html).toContain("已完成");
+    expect(html).toContain("npm test");
+    expect(html).toContain("#task-def");
+    expect(html).toContain("失败");
+    expect(html).toContain("cargo build");
+  });
+
   it("default-expands a file edit and shows the diff", () => {
     const html = render({
       toolName: "edit_file",
@@ -761,4 +844,76 @@ describe("tool disclosure row", () => {
     expect(html).toContain("共 40 行");
     expect(html).toContain("1.0 KB");
   });
+
+  it("renders list_files result with structured file list and badges instead of raw JSON", () => {
+    const rawResult = {
+      entries: [
+        { path: "tests/store/locking.test.ts", kind: "file" },
+        { path: "tests/store/memory.test.ts", kind: "file" },
+        { path: "tests/store/subfolder", kind: "directory" },
+      ],
+      offset: 0,
+      next_offset: null,
+      truncated: false,
+      scan_truncated: false,
+    };
+    const html = render({
+      toolName: "list_files",
+      status: "completed",
+      defaultExpanded: true,
+      parameters: { path: "tests/store", glob: "*.test.ts" },
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("文件列表");
+    expect(html).toContain("2 个文件 · 1 个目录");
+    expect(html).toContain("*.test.ts");
+    expect(html).toContain("tool-file-list");
+    expect(html).toContain("locking.test.ts");
+    expect(html).toContain("tests/store/");
+    expect(html).toContain("subfolder");
+    expect(html).toContain("目录");
+    // Ensure raw JSON key-value dump is not shown
+    expect(html).not.toContain("条目数");
+    expect(html).not.toContain("已截断 false");
+  });
+
+  it("renders list_files warning badges when truncated or scan truncated", () => {
+    const rawResult = {
+      entries: [{ path: "src/a.ts", kind: "file" }],
+      offset: 0,
+      next_offset: 50,
+      truncated: true,
+      scan_truncated: true,
+    };
+    const html = render({
+      toolName: "list_files",
+      status: "completed",
+      defaultExpanded: true,
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("已截断 (下一页: 50)");
+    expect(html).toContain("扫描超出上限");
+  });
+
+  it("renders list_files empty state when no files found", () => {
+    const rawResult = {
+      entries: [],
+      offset: 0,
+      next_offset: null,
+      truncated: false,
+      scan_truncated: false,
+    };
+    const html = render({
+      toolName: "list_files",
+      status: "completed",
+      defaultExpanded: true,
+      output: JSON.stringify(rawResult),
+    });
+
+    expect(html).toContain("0 个项目");
+    expect(html).toContain("无匹配文件");
+  });
 });
+

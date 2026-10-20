@@ -10,6 +10,7 @@ import type {
   SessionSnapshot,
 } from "../../shared-types";
 import { reduceTimeline, type TimelineItem } from "../../state/timeline";
+import type { PendingOutput } from "../../state/transcript-sync";
 import { completedTurnExecutions, type CompletedTurnExecution } from "../../state/turn-execution";
 import { TranscriptScrollState } from "../../state/transcript-scroll";
 import { useWorkbench } from "../../state/workbench-context";
@@ -338,7 +339,7 @@ function groupTurnEntries(
       currentTools = null;
       blocks.push({ kind: "single", entry });
     } else if (isTool && !hasHeader) {
-      if (!currentTools || currentTools.at(-1)?.item.step !== entry.item.step) {
+      if (!currentTools) {
         currentTools = [];
         blocks.push({
           kind: "tool_group",
@@ -380,22 +381,79 @@ function computeTurnSummary(items: readonly TurnEntry[]): string {
   return parts.length > 0 ? parts.join(" · ") : "本轮已完成";
 }
 
+function findBackgroundCommand(
+  taskId: string,
+  timeline: readonly TimelineItem[],
+): { command: string; cwd: string } | undefined {
+  if (!taskId) return undefined;
+  for (const item of timeline) {
+    if (item.kind !== "tool" || item.call.function.name !== "run_command") continue;
+    try {
+      const output = JSON.parse(item.output);
+      if (output && typeof output === "object" && output.id === taskId) {
+        return commandActivity(item.call);
+      }
+    } catch {
+      // Non-JSON output
+    }
+  }
+  return undefined;
+}
+
 function renderToolCard(
   item: Extract<TimelineItem, { readonly kind: "tool" }>,
   index: number,
   phases: readonly number[],
+  timeline?: readonly TimelineItem[],
 ) {
-  const argvActivity =
+  let command =
     item.call.function.name === "run_command"
-      ? commandActivity(item.call)
+      ? commandActivity(item.call).command || undefined
       : undefined;
+  let cwd =
+    item.call.function.name === "run_command"
+      ? commandActivity(item.call).cwd || undefined
+      : undefined;
+  let target = toolActivity(item.call).target || undefined;
+
+  if (item.call.function.name === "command_task") {
+    let taskId: string | undefined;
+    let taskAction: string | undefined;
+    try {
+      const args = JSON.parse(item.call.function.arguments);
+      if (args && typeof args === "object") {
+        if (typeof args.id === "string") taskId = args.id;
+        if (typeof args.action === "string") taskAction = args.action;
+      }
+    } catch {
+      // Malformed arguments
+    }
+
+    if (taskId && timeline) {
+      const bg = findBackgroundCommand(taskId, timeline);
+      if (bg?.command) {
+        command = bg.command;
+        cwd = bg.cwd || undefined;
+        const actionPrefix =
+          taskAction === "wait"
+            ? "等待"
+            : taskAction === "read"
+              ? "读取"
+              : taskAction === "stop"
+                ? "终止"
+                : "";
+        target = actionPrefix ? `${actionPrefix} · ${bg.command}` : bg.command;
+      }
+    }
+  }
+
   return (
     <ToolDisclosure
       key={item.id}
       toolName={item.call.function.name}
-      target={toolActivity(item.call).target || undefined}
-      command={argvActivity?.command || undefined}
-      cwd={argvActivity?.cwd || undefined}
+      target={target}
+      command={command}
+      cwd={cwd}
       parameters={item.call.function.arguments.slice(0, 12000)}
       output={item.output.slice(0, 24000)}
       truncated={
@@ -418,6 +476,7 @@ function renderTimelineEntry(
   snapshot: SessionSnapshot,
   headers: readonly (TranscriptStage | null)[],
   phases: readonly number[],
+  timeline?: readonly TimelineItem[],
 ) {
   const { item, index } = entry;
   if (item.kind === "error" && item.historical) return null;
@@ -473,7 +532,7 @@ function renderTimelineEntry(
           {item.role === "user" && <div className="message-header">你</div>}
           {item.role === "assistant" && (
             <div className="message-header message-author-row">
-              <span>Forge</span>
+              <span>{item.incomplete ? "Forge · 未完成回复" : "Forge"}</span>
               {item.content && <MessageCopyButton text={item.content} />}
             </div>
           )}
@@ -483,7 +542,10 @@ function renderTimelineEntry(
           {item.reasoning && (
             <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
           )}
-          {item.content && <div className="message-body"><Markdown source={item.content} /></div>}
+          {item.content && <div className="message-body">
+            {item.truncated && <p className="wb-muted">实时预览已达显示上限，完整内容以同步后的记录为准。</p>}
+            <Markdown source={item.content} />
+          </div>}
           {item.webSearchDetails && <div className="message-body"><Markdown source={item.webSearchDetails} /></div>}
         </article>
       </Fragment>
@@ -547,16 +609,18 @@ function renderTimelineEntry(
   return (
     <Fragment key={item.id}>
       {headers[index] && <StageHeader stage={headers[index]} />}
-      {renderToolCard(item, index, phases)}
+      {renderToolCard(item, index, phases, timeline)}
     </Fragment>
   );
 }
 
 function ExecutionProcess({
   execution,
+  counts,
   children,
 }: {
   readonly execution: CompletedTurnExecution | undefined;
+  readonly counts?: string | undefined;
   readonly children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -579,6 +643,12 @@ function ExecutionProcess({
         />
         <Check size={13} aria-hidden="true" />
         <span>done</span>
+        {counts && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{counts}</span>
+          </>
+        )}
         <span aria-hidden="true">·</span>
         <span>总耗时 {execution.duration}</span>
         <span aria-hidden="true">·</span>
@@ -593,8 +663,9 @@ function ExecutionProcess({
 
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
-}: { readonly snapshot: SessionSnapshot }) {
-  const timeline = reduceTimeline(snapshot);
+  pendingOutputs,
+}: { readonly snapshot: SessionSnapshot; readonly pendingOutputs?: readonly PendingOutput[] | undefined }) {
+  const timeline = reduceTimeline(snapshot, pendingOutputs);
   const { phases, headers } = transcriptStages(timeline);
   const [collapsedTurns, setCollapsedTurns] = useState<Record<string, boolean>>({});
   const toggleTurn = useCallback((turnId: string) => {
@@ -691,7 +762,6 @@ export const StoredTranscript = memo(function StoredTranscript({
                 )}
               </article>
             )}
-            {counts && <div className="transcript-execution-counts">{counts}</div>}
             {turn.items.length > 0 && (
               isCollapsed ? (
                 <button
@@ -708,35 +778,23 @@ export const StoredTranscript = memo(function StoredTranscript({
                 </button>
               ) : (
                 <div className="transcript-turn-body">
-                  <ExecutionProcess execution={finalEntry ? execution : undefined}>
-                    {blocks.map((block, blockIndex) => {
-                      const first = block.kind === "single" ? block.entry : block.entries[0];
-                      const previous = blocks[blockIndex - 1];
-                      const priorStep = previous?.kind === "single" ? previous.entry.item.step : previous?.entries.at(-1)?.item.step;
-                      const step = first?.item.step;
-                      const heading = step !== undefined && step !== priorStep
-                        ? <div className="transcript-execution-counts" data-step={step}>执行第 {step} 步</div> : null;
+                  <ExecutionProcess execution={finalEntry ? execution : undefined} counts={counts}>
+                    {blocks.map((block) => {
                       if (block.kind === "single") {
-                        return <Fragment key={block.entry.item.id}>{heading}{renderTimelineEntry(block.entry, snapshot, headers, phases)}</Fragment>;
+                        return <Fragment key={block.entry.item.id}>{renderTimelineEntry(block.entry, snapshot, headers, phases, timeline)}</Fragment>;
                       }
                       return (
                         <div className="tool-call-group" key={block.id}>
-                          {heading}
                           {block.entries.map(({ item, index }) =>
                             item.kind === "tool"
-                              ? renderToolCard(item, index, phases)
+                              ? renderToolCard(item, index, phases, timeline)
                               : null,
                           )}
                         </div>
                       );
                     })}
                   </ExecutionProcess>
-                  {finalEntry && <>
-                    {finalEntry.item.step !== undefined && processItems.at(-1)?.item.step !== finalEntry.item.step && (
-                      <div className="transcript-execution-counts" data-step={finalEntry.item.step}>执行第 {finalEntry.item.step} 步</div>
-                    )}
-                    {renderTimelineEntry(finalEntry, snapshot, headers, phases)}
-                  </>}
+                  {finalEntry && renderTimelineEntry(finalEntry, snapshot, headers, phases, timeline)}
                   <PublishedFiles sessionId={snapshot.id} files={files} />
                 </div>
               )
@@ -932,7 +990,7 @@ export function Transcript() {
         <div ref={contentRef} className="conversation-inner">
           {state.isSnapshotLoading && <p className="wb-muted">正在读取会话…</p>}
           {snapshot ? (
-            <StoredTranscript key={snapshot.id} snapshot={snapshot} />
+            <StoredTranscript key={snapshot.id} snapshot={snapshot} pendingOutputs={run?.pendingOutputs} />
           ) : (
             !state.isSnapshotLoading && (
               <EmptyState
@@ -943,21 +1001,6 @@ export function Transcript() {
               />
             )
           )}
-          {run?.pendingOutputs?.map((output) => (
-            <article className="message message-assistant" key={output.id}>
-              <div className="message-header message-author message-author-row">
-                <span>Forge · 待同步输出</span>
-              </div>
-              <div className="message-body">
-                {output.truncated && (
-                  <p className="wb-muted">
-                    实时预览已达显示上限，完整内容以同步后的记录为准。
-                  </p>
-                )}
-                <Markdown source={output.text} />
-              </div>
-            </article>
-          ))}
           {/* Reasoning renders before the answer: saved-but-unsynchronized
               thoughts first, then the live block still streaming in. */}
           {run?.pendingReasoning?.map((output) => (

@@ -738,6 +738,153 @@
 }
 
 /* --------------------------------------------------------------------------
+   4b. List Files Result view
+   -------------------------------------------------------------------------- */
+.tool-file-list-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-file-meta {
+  margin-bottom: var(--space-2);
+}
+
+.tool-file-list-container {
+  max-height: 360px;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--surface-soft);
+}
+
+.tool-file-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-file-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background-color var(--duration-fast, 120ms) var(--ease-out, ease-out);
+}
+
+.tool-file-item:last-child {
+  border-bottom: none;
+}
+
+.tool-file-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.tool-file-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-file-icon .file-icon-dir {
+  color: #e5a93b;
+}
+
+.tool-file-icon .file-icon-file {
+  color: var(--text-muted);
+}
+
+.tool-file-path {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.tool-file-dir {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.tool-file-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.tool-file-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.tool-file-type-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background-color: var(--surface-raised, rgba(255, 255, 255, 0.06));
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: var(--leading-none);
+}
+
+.tool-file-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast, 120ms) var(--ease-out, ease-out),
+              background-color var(--duration-fast, 120ms) var(--ease-out, ease-out),
+              color var(--duration-fast, 120ms) var(--ease-out, ease-out);
+}
+
+.tool-file-item:hover .tool-file-copy-btn,
+.tool-file-copy-btn.is-copied,
+.tool-file-copy-btn:focus-visible {
+  opacity: 1;
+}
+
+.tool-file-copy-btn:hover {
+  background-color: var(--surface-active, rgba(255, 255, 255, 0.1));
+  color: var(--text-primary);
+}
+
+.tool-file-copy-btn.is-copied {
+  color: var(--success);
+}
+
+.tool-file-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-subtle);
+  background-color: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* --------------------------------------------------------------------------
    5. File diff grouping
    -------------------------------------------------------------------------- */
 .tool-diffs {
@@ -1211,6 +1358,93 @@
   word-break: break-word;
   max-height: 320px;
   overflow-y: auto;
+}
+
+/* Background command task listing */
+.command-tasks-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.command-task-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-2-5);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.command-task-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.command-task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: var(--leading-2xs);
+}
+
+.command-task-badge.status-completed {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.command-task-badge.status-running,
+.command-task-badge.status-starting {
+  background: var(--surface-elevated);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.command-task-badge.status-failed {
+  background: var(--surface-elevated);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.command-task-badge.status-cancelled {
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+
+.command-task-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.command-task-title {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-task-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.command-task-duration {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 /* Sub-agent reports */
