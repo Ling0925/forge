@@ -1,4 +1,4 @@
-import { CaretDown, CaretRight, Check, Copy, WarningCircle } from "@phosphor-icons/react";
+import { ArrowDown, CaretDown, CaretRight, Check, Copy, WarningCircle } from "@phosphor-icons/react";
 import { Fragment, memo, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Collapsible } from "../primitives/Collapsible";
 import { commandActivity, toolActivity } from "../../../shared/tool-activity";
@@ -1059,7 +1059,12 @@ export function Transcript() {
       </div>
       {hasNewContent && (
         <div className="transcript-latest" aria-live="polite">
-          <Button size="sm" onClick={jumpToLatest}>
+          <Button
+            size="sm"
+            className="transcript-latest-btn"
+            onClick={jumpToLatest}
+            icon={<ArrowDown size={13} weight="bold" aria-hidden="true" />}
+          >
             查看最新消息
           </Button>
         </div>

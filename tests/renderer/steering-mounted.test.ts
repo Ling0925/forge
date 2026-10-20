@@ -123,14 +123,36 @@ it("uses pinned sources, retains unacknowledged drafts and runs only confirmed s
     });
     expect(reboundAnim.colClass).toContain("is-rebounding");
     expect(reboundAnim.btnAnim).toContain("composer-cancel-shift-right");
-    await input.fill("follow one");
+    await input.fill("follow one draft");
     await page.locator(".composer-btn-steer-hold").click();
     await expect.poll(() => input.inputValue()).toBe("");
-    expect(await page.locator(".composer-queue").innerText()).toBe("待发 1 条：follow one");
+    expect(await page.locator(".composer-queue-title").innerText()).toBe("待发 1 条");
+    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual(["follow one draft"]);
     expect(await page.locator(".composer-queue-hint").count()).toBe(0);
     expect(await page.locator(".composer-slash-message").count()).toBe(0);
+    // Edit queued item in place
+    await page.getByRole("button", { name: "编辑第 1 条待发消息", exact: true }).click();
+    const editBox = page.locator(".composer-queue-edit-input");
+    await editBox.fill("follow one");
+    await editBox.press("Enter");
+    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual(["follow one"]);
+    // Add second and third items, test drag reorder and cancel
+    await input.fill("to be cancelled"); await input.press("Control+Enter");
+    await expect.poll(() => input.inputValue()).toBe("");
     await input.fill("follow two\nsecond line"); await input.press("Control+Enter");
     await expect.poll(() => input.inputValue()).toBe("");
+    expect(await page.locator(".composer-queue-item").count()).toBe(3);
+    await page.locator(".composer-queue-item").nth(2).dragTo(page.locator(".composer-queue-item").nth(1));
+    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual([
+      "follow one",
+      "follow two\nsecond line",
+      "to be cancelled",
+    ]);
+    await page.getByRole("button", { name: "取消第 3 条待发消息", exact: true }).click();
+    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual([
+      "follow one",
+      "follow two\nsecond line",
+    ]);
     await page.evaluate(() => Reflect.get(window, "fixture").finish('11111111-1111-4111-8111-111111111111', 'cancelled'));
     await expect.poll(() => page.locator(".composer-status").innerText()).toContain("已暂停");
     const inputRect2 = await input.boundingBox();

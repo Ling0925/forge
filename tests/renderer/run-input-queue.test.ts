@@ -37,3 +37,25 @@ it("restores reloads as paused input without silently executing it", () => {
   restored.resume(a);
   expect(restored.peek(a)?.prompt).toBe("keep me");
 });
+it("supports removing, editing in place, and reordering queued items while preserving keys", () => {
+  const queue = new RunInputQueue();
+  const first = queue.add({ sessionId: a, prompt: "one", model: "m1", mode: "plan", permission: "readonly" });
+  const second = queue.add({ sessionId: a, prompt: "two", model: "m2" });
+  const third = queue.add({ sessionId: a, prompt: "three", model: "m3" });
+  const firstKey = queue.keyOf(first);
+  const secondKey = queue.keyOf(second);
+  const thirdKey = queue.keyOf(third);
+
+  const updated = queue.updateAt(a, 0, "one updated");
+  expect(updated).toMatchObject({ prompt: "one updated", model: "m1", mode: "plan", permission: "readonly" });
+  if (!updated) throw new Error("Expected updated item");
+  expect(queue.keyOf(updated)).toBe(firstKey);
+
+  expect(queue.reorder(a, 2, 0)).toBe(true);
+  expect(queue.items(a).map(item => item.prompt)).toEqual(["three", "one updated", "two"]);
+  expect(queue.items(a).map(item => queue.keyOf(item))).toEqual([thirdKey, firstKey, secondKey]);
+
+  const removed = queue.removeAt(a, 1);
+  expect(removed?.prompt).toBe("one updated");
+  expect(queue.items(a).map(item => item.prompt)).toEqual(["three", "two"]);
+});

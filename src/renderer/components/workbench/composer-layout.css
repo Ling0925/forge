@@ -328,7 +328,7 @@
 
 @media (pointer: coarse), (max-width: 768px) {
   .wb-app .composer-split .composer-activity-slot.is-visible {
-    min-height: 44px;
+    min-height: 24px;
   }
 }
 

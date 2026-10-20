@@ -1,16 +1,20 @@
 import {
   ArrowUp,
+  Check,
   Compass,
+  DotsSixVertical,
   Images,
   Lightning,
   Lock,
+  PencilSimple,
   ShieldCheck,
   ShieldWarning,
   Stop,
+  X,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { type DragEvent as ReactDragEvent, useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { permissionSchema, settingsFields } from "../../../shared/schemas";
+import { permissionSchema, type RunInput, settingsFields } from "../../../shared/schemas";
 import type { SessionId } from "../../shared-types";
 import {
   type ImageAttachment,
@@ -86,6 +90,10 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     queueInput,
     pendingInputs = [],
     inputQueuePaused = false,
+    queueItemKey,
+    removeQueuedInput,
+    updateQueuedInput,
+    reorderQueuedInputs,
     resumeInputs,
     clearInputs,
   } = useWorkbench();
@@ -668,16 +676,110 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setModelError(errors.join("；"));
     setListing(false);
   };
-  const queuedSummary = (() => {
-    const first = pendingInputs[0];
-    if (!first) return "";
-    const trimmed = first.prompt.trim();
-    if (trimmed) return trimmed.slice(0, 80);
-    if (first.images && first.images.length > 0) {
-      return `图片 ${first.images.length} 张`;
+  const [editingQueueItem, setEditingQueueItem] = useState<RunInput | null>(null);
+  const [editingQueueText, setEditingQueueText] = useState("");
+  const queueEditInputRef = useRef<HTMLTextAreaElement>(null);
+  const dragQueueIndexRef = useRef<number | null>(null);
+  const [draggingQueueIndex, setDraggingQueueIndex] = useState<number | null>(null);
+  const [dragOverQueueIndex, setDragOverQueueIndex] = useState<number | null>(null);
+  useEffect(() => {
+    setEditingQueueItem(null);
+    setEditingQueueText("");
+    dragQueueIndexRef.current = null;
+    setDraggingQueueIndex(null);
+    setDragOverQueueIndex(null);
+  }, [draftId]);
+  useEffect(() => {
+    if (editingQueueItem && !pendingInputs.includes(editingQueueItem)) {
+      setEditingQueueItem(null);
+      setEditingQueueText("");
     }
-    return "";
-  })();
+  }, [editingQueueItem, pendingInputs]);
+  useEffect(() => {
+    if (!editingQueueItem) return;
+    const node = queueEditInputRef.current;
+    if (node) {
+      node.focus();
+      const len = node.value.length;
+      node.setSelectionRange(len, len);
+    }
+  }, [editingQueueItem]);
+  const startQueueEdit = (item: RunInput) => {
+    setEditingQueueItem(item);
+    setEditingQueueText(item.prompt);
+  };
+  const cancelQueueEdit = () => {
+    setEditingQueueItem(null);
+    setEditingQueueText("");
+  };
+  const saveQueueEdit = (index: number, item: RunInput) => {
+    const trimmed = editingQueueText.trim();
+    if (!trimmed && (!item.images || item.images.length === 0)) return;
+    const ok = updateQueuedInput ? updateQueuedInput(index, editingQueueText) : false;
+    if (ok) {
+      setEditingQueueItem(null);
+      setEditingQueueText("");
+    }
+  };
+  const handleQueueDragStart = (
+    event: ReactDragEvent<HTMLLIElement>,
+    index: number,
+    item: RunInput,
+  ) => {
+    if (pendingInputs.length <= 1 || editingQueueItem === item) {
+      event.preventDefault();
+      return;
+    }
+    dragQueueIndexRef.current = index;
+    setDraggingQueueIndex(index);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      try {
+        event.dataTransfer.setData("text/plain", String(index));
+      } catch {
+        /* ignore restricted dataTransfer in synthetic events */
+      }
+    }
+  };
+  const handleQueueDragOver = (
+    event: ReactDragEvent<HTMLLIElement>,
+    index: number,
+  ) => {
+    if (pendingInputs.length <= 1) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+    if (dragOverQueueIndex !== index) {
+      setDragOverQueueIndex(index);
+    }
+  };
+  const handleQueueDrop = (
+    event: ReactDragEvent<HTMLLIElement>,
+    toIndex: number,
+  ) => {
+    event.preventDefault();
+    let fromIndex = dragQueueIndexRef.current;
+    if (fromIndex === null && event.dataTransfer) {
+      try {
+        const parsed = Number.parseInt(event.dataTransfer.getData("text/plain"), 10);
+        if (!Number.isNaN(parsed)) fromIndex = parsed;
+      } catch {
+        /* ignore */
+      }
+    }
+    dragQueueIndexRef.current = null;
+    setDraggingQueueIndex(null);
+    setDragOverQueueIndex(null);
+    if (fromIndex !== null && fromIndex >= 0 && fromIndex !== toIndex) {
+      reorderQueuedInputs?.(fromIndex, toIndex);
+    }
+  };
+  const handleQueueDragEnd = () => {
+    dragQueueIndexRef.current = null;
+    setDraggingQueueIndex(null);
+    setDragOverQueueIndex(null);
+  };
   return (
     <form
       className={`workbench-composer composer${isNew ? " composer-fresh" : ""}`}
@@ -728,11 +830,176 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           )}
         </div>
         {pendingInputs.length > 0 && (
-          <output className="composer-status composer-queue">
-            <span className="composer-queue-text">
-              待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : ""}：{queuedSummary}
-            </span>
-          </output>
+          <div
+            className="composer-status composer-queue"
+            role="region"
+            aria-label="待发消息队列"
+          >
+            <div className="composer-queue-header">
+              <span className="composer-queue-title">
+                待发 {pendingInputs.length} 条{inputQueuePaused ? " · 已暂停" : ""}
+              </span>
+              {pendingInputs.length > 1 && (
+                <span className="composer-queue-tip">拖动可调整顺序</span>
+              )}
+              <div className="composer-queue-header-btns">
+                {inputQueuePaused && !running && (
+                  <button
+                    type="button"
+                    className="composer-queue-link-btn"
+                    onClick={() => resumeInputs()}
+                  >
+                    继续发送
+                  </button>
+                )}
+                {pendingInputs.length > 1 && (
+                  <button
+                    type="button"
+                    className="composer-queue-link-btn is-danger"
+                    onClick={() => clearInputs()}
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
+            </div>
+            <ol className="composer-queue-list" aria-label="待发消息列表">
+              {pendingInputs.map((item, index) => {
+                const isEditing = editingQueueItem === item;
+                const isDragging = draggingQueueIndex === index;
+                const isDragOver =
+                  dragOverQueueIndex === index &&
+                  draggingQueueIndex !== null &&
+                  draggingQueueIndex !== index;
+                const itemText = item.prompt.trim();
+                const imageCount = item.images?.length ?? 0;
+                const displaySummary =
+                  itemText || (imageCount > 0 ? `图片 ${imageCount} 张` : "");
+                return (
+                  <li
+                    key={queueItemKey ? queueItemKey(item) : `${index}-${item.prompt.slice(0, 24)}`}
+                    className={`composer-queue-item${isDragging ? " is-dragging" : ""}${isDragOver ? " is-drag-over" : ""}${isEditing ? " is-editing" : ""}`}
+                    draggable={pendingInputs.length > 1 && !isEditing}
+                    onDragStart={(event) => handleQueueDragStart(event, index, item)}
+                    onDragOver={(event) => handleQueueDragOver(event, index)}
+                    onDragLeave={() => {
+                      if (dragOverQueueIndex === index) setDragOverQueueIndex(null);
+                    }}
+                    onDrop={(event) => handleQueueDrop(event, index)}
+                    onDragEnd={handleQueueDragEnd}
+                    onKeyDown={(event) => {
+                      if (isEditing) return;
+                      if (event.altKey && event.key === "ArrowUp" && index > 0) {
+                        event.preventDefault();
+                        reorderQueuedInputs?.(index, index - 1);
+                      } else if (
+                        event.altKey &&
+                        event.key === "ArrowDown" &&
+                        index < pendingInputs.length - 1
+                      ) {
+                        event.preventDefault();
+                        reorderQueuedInputs?.(index, index + 1);
+                      }
+                    }}
+                  >
+                    {isEditing ? (
+                      <div className="composer-queue-edit-row">
+                        <span className="composer-queue-index" aria-hidden="true">
+                          {index + 1}
+                        </span>
+                        <textarea
+                          ref={queueEditInputRef}
+                          className="composer-queue-edit-input"
+                          rows={1}
+                          aria-label={`编辑第 ${index + 1} 条待发消息内容`}
+                          value={editingQueueText}
+                          onChange={(event) => setEditingQueueText(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              cancelQueueEdit();
+                            } else if (
+                              event.key === "Enter" &&
+                              !event.shiftKey &&
+                              !event.nativeEvent.isComposing &&
+                              event.nativeEvent.keyCode !== 229
+                            ) {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              saveQueueEdit(index, item);
+                            }
+                          }}
+                        />
+                        <div className="composer-queue-item-btns">
+                          <button
+                            type="button"
+                            className="composer-queue-icon-btn is-confirm"
+                            aria-label={`保存第 ${index + 1} 条待发消息`}
+                            title="保存 (Enter)"
+                            disabled={!editingQueueText.trim() && imageCount === 0}
+                            onClick={() => saveQueueEdit(index, item)}
+                          >
+                            <Check size={13} weight="bold" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="composer-queue-icon-btn"
+                            aria-label="取消编辑"
+                            title="取消编辑 (Esc)"
+                            onClick={cancelQueueEdit}
+                          >
+                            <X size={13} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <span
+                          className={`composer-queue-handle${pendingInputs.length > 1 ? " is-draggable" : ""}`}
+                          title={pendingInputs.length > 1 ? "拖动调整顺序" : undefined}
+                          aria-hidden="true"
+                        >
+                          <DotsSixVertical size={14} weight="bold" />
+                        </span>
+                        <span className="composer-queue-index" aria-hidden="true">
+                          {index + 1}
+                        </span>
+                        <span
+                          className="composer-queue-text"
+                          title={item.prompt}
+                          onDoubleClick={() => startQueueEdit(item)}
+                        >
+                          {displaySummary}
+                          {itemText && imageCount > 0 ? ` · 图片 ${imageCount} 张` : ""}
+                        </span>
+                        <div className="composer-queue-item-btns">
+                          <button
+                            type="button"
+                            className="composer-queue-icon-btn"
+                            aria-label={`编辑第 ${index + 1} 条待发消息`}
+                            title="编辑"
+                            onClick={() => startQueueEdit(item)}
+                          >
+                            <PencilSimple size={13} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="composer-queue-icon-btn is-danger"
+                            aria-label={`取消第 ${index + 1} 条待发消息`}
+                            title="取消此条待发消息"
+                            onClick={() => removeQueuedInput?.(index)}
+                          >
+                            <X size={13} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
         )}
         {(!isConfigured || mode === "plan" || error || imageError || modelUnlisted) && (
           <div className="composer-status" aria-live="polite">

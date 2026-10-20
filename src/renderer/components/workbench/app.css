@@ -795,11 +795,68 @@
   scroll-behavior: auto;
 }
 .transcript-latest {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-2, 8px);
+  transform: translateX(-50%);
+  z-index: 25;
   display: flex;
   justify-content: center;
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface-body);
+  padding: 0;
+  background: transparent;
   border-top: none;
+  pointer-events: none;
+}
+
+.transcript-latest .btn {
+  pointer-events: auto;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-control);
+  box-shadow: var(--shadow-overlay, 0 8px 24px rgba(0, 0, 0, 0.22));
+  padding: 0 var(--space-3-5, 14px);
+  height: 30px;
+  min-height: 30px;
+  font-size: var(--text-xs, 12px);
+  font-weight: 500;
+  gap: 6px;
+  white-space: nowrap;
+  animation: transcript-latest-float-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.transcript-latest .btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.transcript-latest .btn:active:not(:disabled) {
+  background: var(--surface-active);
+}
+
+@keyframes transcript-latest-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (pointer: coarse) {
+  .transcript-latest .btn {
+    min-height: var(--touch-min-target, 44px);
+    height: var(--touch-min-target, 44px);
+    padding: 0 var(--space-4, 16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transcript-latest .btn {
+    animation: none;
+  }
 }
 
 /* Child task titles are task-derived prose, not single-line toolbar labels. */

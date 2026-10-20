@@ -34,7 +34,7 @@
   --reading-measure: 760px;
   --welcome-title-size: 22px;
   --radius-composer: 18px;
-  --composer-inset: 12px 32px 16px;
+  --composer-inset: 6px 32px 16px;
 }
 
 [data-theme="dark"] {

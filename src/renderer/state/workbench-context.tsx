@@ -429,6 +429,44 @@ function useController() {
     queueInput,
     pendingInputs: state.activeSessionId ? inputQueue.current.items(state.activeSessionId) : [],
     inputQueuePaused: state.activeSessionId ? inputQueue.current.isPaused(state.activeSessionId) : false,
+    queueItemKey: (item: RunInput) => inputQueue.current.keyOf(item),
+    removeQueuedInput: (index: number): boolean => {
+      const id = current.current.activeSessionId;
+      if (!id) return false;
+      const target = inputQueue.current.items(id)[index];
+      if (!target || queuedStarts.current.get(id) === target) return false;
+      const removed = inputQueue.current.removeAt(id, index);
+      if (!removed) return false;
+      updateQueue();
+      return true;
+    },
+    updateQueuedInput: (index: number, prompt: string): boolean => {
+      const id = current.current.activeSessionId;
+      if (!id) return false;
+      const target = inputQueue.current.items(id)[index];
+      if (!target || queuedStarts.current.get(id) === target) return false;
+      try {
+        const updated = inputQueue.current.updateAt(id, index, prompt);
+        if (!updated) return false;
+        updateQueue(true);
+        return true;
+      } catch (error) {
+        fail(error);
+        return false;
+      }
+    },
+    reorderQueuedInputs: (fromIndex: number, toIndex: number): boolean => {
+      const id = current.current.activeSessionId;
+      if (!id) return false;
+      const inFlight = queuedStarts.current.get(id);
+      const items = inputQueue.current.items(id);
+      if (inFlight && (items[fromIndex] === inFlight || items[toIndex] === inFlight)) {
+        return false;
+      }
+      const moved = inputQueue.current.reorder(id, fromIndex, toIndex);
+      if (moved) updateQueue();
+      return moved;
+    },
     resumeInputs: () => {
       const id = current.current.activeSessionId;
       if (id) { inputQueue.current.resume(id); updateQueue(); void runQueued(id); }
