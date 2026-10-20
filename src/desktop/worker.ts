@@ -10,7 +10,7 @@ import {
   validLanEndpoint,
 } from "../web/lan";
 import { shutdownRequestSchema } from "./control";
-import { createRuntimeHub } from "./runtime";
+import { createRuntimeHub } from "../host/runtime";
 
 const lanIpv4Schema = z
   .string()
