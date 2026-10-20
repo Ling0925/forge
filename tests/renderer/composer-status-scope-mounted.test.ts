@@ -14,7 +14,11 @@ beforeAll(async () => {
         import {createRoot} from 'react-dom/client';
         import {Composer} from './src/renderer/components/workbench/Composer';
         import {TestProvider,useWorkbench} from './src/renderer/state/workbench-context';
-        const snapshot=id=>({id,model:'test/model',workspace:'/tmp',events:[]});
+        const snapshot=id=>({id,model:'test/model',workspace:'/tmp',events:[
+          {type:'provider_attempt',sessionId:id,timestamp:'2026-10-20T10:00:00.000Z',selection:{
+            sourceId:'source-11oqzl71nrtig4',model:'gpt-6-astra',credentialId:'default',apiMode:'responses',
+            attempt:1,reason:'direct',outcome:'succeeded',timestamp:'2026-10-20T10:00:00.000Z'}}
+        ]});
         window.calls=[];window.pending={};window.runInputs=[];window.queuedInputs=[];
         window.forge={
           chooseWorkspace:async()=>'/tmp',
@@ -50,7 +54,11 @@ beforeAll(async () => {
           import {createContext,useContext,useState,useLayoutEffect} from 'react';
           import {defaultPublicSettings} from './src/shared/schemas';
           const Context=createContext(null);export const useWorkbench=()=>useContext(Context);
-          const snapshot=id=>({id,model:'test/model',workspace:'/tmp',events:[]});
+          const snapshot=id=>({id,model:'test/model',workspace:'/tmp',events:[
+          {type:'provider_attempt',sessionId:id,timestamp:'2026-10-20T10:00:00.000Z',selection:{
+            sourceId:'source-11oqzl71nrtig4',model:'gpt-6-astra',credentialId:'default',apiMode:'responses',
+            attempt:1,reason:'direct',outcome:'succeeded',timestamp:'2026-10-20T10:00:00.000Z'}}
+        ]});
           export function TestProvider({children}){
             const [id,setId]=useState('a');const [runs,setRuns]=useState({});
             useLayoutEffect(()=>{
@@ -92,6 +100,17 @@ async function mount(): Promise<Page> {
   await page.addScriptTag({ content: js });
   return page;
 }
+
+it("keeps provider request details out of the composer", async () => {
+  const page = await mount();
+  try {
+    await expect.poll(() => page.locator("textarea").count()).toBe(1);
+    expect(await page.locator(".composer-provider-attempt").count()).toBe(0);
+    expect(await page.locator("body").innerText()).not.toContain("实际 source-11oqzl71nrtig4");
+    await page.getByRole("button", { name: "Session B", exact: true }).click();
+    expect(await page.locator("body").innerText()).not.toContain("实际 source-11oqzl71nrtig4");
+  } finally { await page.close(); }
+});
 
 it("keeps command status, duplicate guards and out-of-order results with their session", async () => {
   const page = await mount();

@@ -1,0 +1,208 @@
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { build } from "esbuild";
+import { chromium, type Browser, type Page } from "playwright";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { aggregateUsageStats, computeSessionUsage } from "../../src/core/usage-stats";
+import type { UsageFilter } from "../../src/shared/ipc";
+import { sessionIdSchema, type AgentEvent, type SessionSnapshot } from "../../src/shared/schemas";
+
+let browser: Browser;
+let js: string;
+let css: string;
+const now = Date.now();
+const stamp = (hours: number) => new Date(now + hours * 3600000).toISOString();
+const sessionA = sessionIdSchema.parse("00000000-0000-0000-0000-000000000001");
+const sessionB = sessionIdSchema.parse("00000000-0000-0000-0000-000000000002");
+const event = (outcome: "started" | "succeeded" | "failed", hours: number, step: number, extra = {}): AgentEvent => ({
+  type: "provider_attempt", sessionId: sessionA, timestamp: stamp(hours), turn: 1, step,
+  selection: { sourceId: "source-a", model: "gpt-6-astra", credentialId: "default", groupId: "r1",
+    apiMode: "responses", reason: "order:first", attempt: 1, timestamp: stamp(hours), outcome, ...extra },
+});
+const makeSnapshot = (events: readonly AgentEvent[], overrides: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
+  version: 1, id: sessionA, title: "会话 A", workspace: "/workspace/a", model: "gpt-6-astra", status: "running",
+  createdAt: stamp(-240), updatedAt: stamp(0), messages: [], changes: [], events, ...overrides,
+});
+const fixtures = [
+  computeSessionUsage(makeSnapshot([
+    event("started", -2, 1), event("succeeded", -2 + 2 / 3600, 1, {
+      usage: { promptTokens: 120, completionTokens: 80, cachedPromptTokens: 30, totalTokens: 200 },
+    }),
+    event("started", -1, 2), event("failed", -1 + 1 / 3600, 2, { errorCode: "rate_limit" }),
+    event("started", -0.5, 3),
+  ])),
+  computeSessionUsage(makeSnapshot([event("succeeded", -192, 1, {
+    sourceId: "deleted-source", credentialId: "old-key", groupId: undefined, model: "old/model",
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  })], { id: sessionB, title: "会话 B", workspace: "/workspace/b", status: "completed" })),
+];
+
+beforeAll(async () => {
+  const bundle = await build({
+    stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
+      import {createRoot} from 'react-dom/client';
+      import {UsageDashboard} from './src/renderer/components/workbench/UsageDashboard';
+      import {TestProvider} from './src/renderer/state/workbench-context';
+      import './src/renderer/styles/global.css';
+      window.filters=[]; window.selected=[];
+      window.forge={getUsageStats:async filter=>{
+        window.filters.push(filter);
+        if(window.failNext){window.failNext=false;throw new Error('fixture load failed');}
+        const data=await window.fixtureStats(filter);
+        if(window.bulk){data.requests=Array.from({length:55},(_,i)=>({...data.requests[0],id:'bulk-'+i}));}
+        if(window.legacy){delete data.requests;}
+        if(window.holdSeven&&filter.days===7){await new Promise(resolve=>{window.releaseSeven=resolve;});}
+        return data;
+      }};
+      createRoot(document.getElementById('root')).render(<TestProvider><UsageDashboard/></TestProvider>);
+    ` },
+    bundle: true, write: false, format: "iife", jsx: "automatic", outfile: "usage-requests.js",
+    loader: { ".woff2": "dataurl" }, define: { "process.env.NODE_ENV": '"development"' },
+    plugins: [{ name: "usage-state", setup(api) {
+      api.onLoad({ filter: /workbench-context\.tsx$/ }, () => ({
+        resolveDir: resolve("."), loader: "tsx", contents: `
+          import {createContext,useContext,useState} from 'react';
+          const C=createContext(null);export const useWorkbench=()=>useContext(C);
+          export function TestProvider({children}){
+            const [open,setOpen]=useState(true);
+            const state={isUsageDashboardOpen:open,sessions:[{workspace:'/workspace/a'},{workspace:'/workspace/b'}],settings:{
+              providerSources:[{id:'source-a',label:'供应商 A',credentials:[{id:'default',label:'主密钥'}]}],
+              routeGroups:[{id:'r1',label:'路由 A'}]}};
+            return <C.Provider value={{state,openUsageDashboard:setOpen,selectSession:async id=>{window.selected.push(id)}}}>{children}</C.Provider>;
+          }
+        `,
+      }));
+    } }],
+  });
+  js = bundle.outputFiles.find(file => file.path.endsWith(".js"))!.text;
+  css = bundle.outputFiles.find(file => file.path.endsWith(".css"))!.text;
+  browser = await chromium.launch({ headless: true,
+    ...(process.env.FORGE_BROWSER_EXECUTABLE ? { executablePath: process.env.FORGE_BROWSER_EXECUTABLE } : {}),
+  });
+}, 30000);
+
+afterAll(async () => { await browser?.close(); });
+
+async function mount(): Promise<Page> {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.setDefaultTimeout(5000);
+  await page.exposeFunction("fixtureStats", (filter: UsageFilter) => aggregateUsageStats(fixtures, filter));
+  await page.route("https://forge.test/**", route => route.fulfill({ contentType: "text/html", body: '<div id="root"></div>' }));
+  await page.goto("https://forge.test/");
+  await page.addStyleTag({ content: css });
+  await page.addScriptTag({ content: js });
+  await expect.poll(() => page.locator(".usage-summary").count()).toBe(1);
+  return page;
+}
+
+it("moves individual request metadata into a tab with details and session navigation", async () => {
+  const page = await mount();
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  try {
+    const summary = page.getByRole("tab", { name: "用量统计", exact: true });
+    const requests = page.getByRole("tab", { name: "请求记录", exact: true });
+    expect(await summary.getAttribute("aria-selected")).toBe("true");
+    expect(await page.locator(".usage-dashboard-subtitle").count()).toBe(0);
+    expect(await page.locator(".usage-request-row").count()).toBe(0);
+    await requests.click();
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(4);
+    expect(await page.locator(".usage-summary").count()).toBe(0);
+    const rows = page.locator(".usage-request-row");
+    expect(await rows.nth(0).innerText()).toContain("请求中");
+    expect(await rows.nth(1).innerText()).toContain("失败");
+    expect(await rows.nth(1).innerText()).toContain("rate_limit");
+    expect(await rows.nth(1).locator("td").nth(6).innerText()).toBe("—");
+    expect(await rows.nth(2).innerText()).toContain("供应商 A");
+    expect(await rows.nth(2).innerText()).toContain("gpt-6-astra");
+    expect(await rows.nth(2).innerText()).toContain("主密钥");
+    expect(await rows.nth(2).innerText()).toContain("成功");
+    expect(await rows.nth(2).locator("td").nth(4).innerText()).toBe("120 / 80");
+    expect(await rows.nth(2).locator("td").nth(5).innerText()).toBe("30");
+    expect(await rows.nth(2).locator("td").nth(7).innerText()).toBe("2.00 s");
+    expect(await rows.nth(3).innerText()).toContain("deleted-source");
+    expect(await rows.nth(3).locator("td").nth(6).innerText()).toBe("0");
+    expect(await rows.nth(3).locator("td").nth(7).innerText()).toBe("—");
+
+    await rows.nth(2).getByRole("button", { name: "详情", exact: true }).click();
+    const detail = page.locator(".usage-request-details");
+    await expect.poll(() => detail.count()).toBe(1);
+    const text = await detail.innerText();
+    for (const value of ["source-a", "default", "路由 A (r1)", "responses", "order:first", "/workspace/a"]) {
+      expect(text).toContain(value);
+    }
+    await mkdir(".build/usage-requests/browser", { recursive: true });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(value => document.documentElement.setAttribute("data-theme", value), theme);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
+        const bounds = await page.getByRole("dialog").boundingBox();
+        expect(bounds?.width).toBeLessThanOrEqual(width);
+        await page.screenshot({ path: `.build/usage-requests/browser/${theme}-${width}.png` });
+      }
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await requests.focus();
+    await requests.press("ArrowLeft");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => summary.getAttribute("aria-selected")).toBe("true");
+    await requests.click();
+    await rows.nth(2).getByRole("button", { name: "详情", exact: true }).click();
+    await detail.getByRole("button", { name: "会话 A", exact: true }).click();
+    expect(await page.getByRole("dialog").count()).toBe(0);
+    expect(await page.evaluate(() => (window as unknown as { selected: string[] }).selected)).toEqual([sessionA]);
+    expect(errors).toEqual([]);
+  } finally { await page.close(); }
+}, 30000);
+
+it("shares time/workspace filters and ignores an older response arriving late", async () => {
+  const page = await mount();
+  try {
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    await page.getByLabel("时间周期筛选").selectOption("7");
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(3);
+    await page.getByLabel("工作区筛选").selectOption("/workspace/b");
+    await expect.poll(() => page.getByText("暂无请求记录", { exact: true }).count()).toBe(1);
+    await page.getByLabel("时间周期筛选").selectOption("");
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(1);
+    await page.getByLabel("工作区筛选").selectOption("");
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(4);
+    await page.evaluate(() => { (window as unknown as { holdSeven: boolean }).holdSeven = true; });
+    await page.getByLabel("时间周期筛选").selectOption("7");
+    await expect.poll(() => page.evaluate(() => typeof (window as unknown as { releaseSeven?: () => void }).releaseSeven)).toBe("function");
+    await page.getByLabel("时间周期筛选").selectOption("");
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(4);
+    await page.evaluate(async () => {
+      (window as unknown as { releaseSeven: () => void }).releaseSeven();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(await page.locator(".usage-request-row").count()).toBe(4);
+    expect(await page.getByRole("tab", { name: "请求记录", exact: true }).getAttribute("aria-selected")).toBe("true");
+  } finally { await page.close(); }
+});
+
+it("refreshes, retries failures, paginates without dropping records and handles older empty responses", async () => {
+  const page = await mount();
+  try {
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    await page.evaluate(() => { (window as unknown as { failNext: boolean }).failNext = true; });
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    await expect.poll(() => page.getByText("fixture load failed", { exact: true }).count()).toBe(1);
+    await page.getByRole("button", { name: "重试", exact: true }).click();
+    await expect.poll(() => page.getByText("fixture load failed", { exact: true }).count()).toBe(0);
+    expect(await page.locator(".usage-request-row").count()).toBe(4);
+    await page.evaluate(() => { (window as unknown as { bulk: boolean }).bulk = true; });
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(50);
+    expect(await page.getByRole("button", { name: "上一页", exact: true }).isDisabled()).toBe(true);
+    await page.getByRole("button", { name: "下一页", exact: true }).click();
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(5);
+    expect(await page.getByRole("button", { name: "下一页", exact: true }).isDisabled()).toBe(true);
+    await page.getByRole("button", { name: "上一页", exact: true }).click();
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(50);
+    await page.evaluate(() => { (window as unknown as { legacy: boolean }).legacy = true; });
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    await expect.poll(() => page.getByText("暂无请求记录", { exact: true }).count()).toBe(1);
+  } finally { await page.close(); }
+});

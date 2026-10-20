@@ -7,11 +7,18 @@ import {
   Lightning,
   X,
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UsageFilter, UsageStatsDto } from "../../shared-types";
 import { compactTokens } from "../../state/session-usage";
 import { useWorkbench } from "../../state/workbench-context";
+import { Tabs } from "../primitives/Tabs";
+import { UsageRequests } from "./UsageRequests";
 import "./usage-dashboard.css";
+
+const usageTabs = [
+  { id: "usage-summary", label: "用量统计" },
+  { id: "usage-requests", label: "请求记录" },
+];
 
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
 
@@ -20,6 +27,8 @@ export function UsageDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<UsageStatsDto | null>(null);
+  const [activeTab, setActiveTab] = useState("usage-summary");
+  const requestVersion = useRef(0);
   const routeGroups = state.settings?.routeGroups ?? [];
 
   const [daysFilter, setDaysFilter] = useState<number | undefined>(undefined);
@@ -38,6 +47,7 @@ export function UsageDashboard() {
 
   const fetchStats = useCallback(async () => {
     if (!window.forge?.getUsageStats) return;
+    const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
     try {
@@ -46,21 +56,23 @@ export function UsageDashboard() {
         workspace: workspaceFilter,
       };
       const res = await window.forge.getUsageStats(filter);
-      setData(res);
+      if (version === requestVersion.current) setData(res);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "获取用量统计数据失败，请重试。",
-      );
+      if (version === requestVersion.current) {
+        setError(err instanceof Error ? err.message : "获取用量统计数据失败，请重试。");
+      }
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [daysFilter, workspaceFilter]);
 
   // Fetch when dashboard is opened or filters change
   useEffect(() => {
     if (state.isUsageDashboardOpen) {
+      setData(null);
       void fetchStats();
     }
+    return () => { requestVersion.current += 1; };
   }, [state.isUsageDashboardOpen, fetchStats]);
 
   // Handle escape key
@@ -103,9 +115,6 @@ export function UsageDashboard() {
             </div>
             <div className="usage-dashboard-title-text">
               <h2>用量看板</h2>
-              <p className="usage-dashboard-subtitle">
-                监控工作台 Token 消耗、缓存利用率与模型分布
-              </p>
             </div>
           </div>
 
@@ -168,8 +177,11 @@ export function UsageDashboard() {
           </div>
         </header>
 
+        <Tabs tabs={usageTabs} activeId={activeTab} onChange={setActiveTab}
+          ariaLabel="用量看板" className="usage-dashboard-tabs" />
+
         {/* Body */}
-        <div className="usage-dashboard-body">
+        <div className="usage-dashboard-body" aria-busy={loading}>
           {error && (
             <div className="usage-empty-state" style={{ color: "#ef4444" }}>
               <p>{error}</p>
@@ -183,8 +195,14 @@ export function UsageDashboard() {
             </div>
           )}
 
-          {data && (
-            <>
+          {loading && !data && <div className="usage-empty-state" role="status">加载中…</div>}
+          {data && activeTab === "usage-requests" && (
+            <div id="tabpanel-usage-requests" role="tabpanel" aria-labelledby="tab-btn-usage-requests">
+              <UsageRequests requests={data.requests ?? []} />
+            </div>
+          )}
+          {data && activeTab === "usage-summary" && (
+            <div id="tabpanel-usage-summary" role="tabpanel" aria-labelledby="tab-btn-usage-summary" className="usage-summary">
               {/* KPI Cards */}
               <div className="usage-kpi-grid">
                 <div className="usage-kpi-card">
@@ -459,7 +477,7 @@ export function UsageDashboard() {
                   <div className="usage-section-header">
                     <span className="usage-section-title">
                       <ArrowsClockwise size={15} />
-                      来源调用记录
+                      来源调用统计
                     </span>
                     <span className="usage-kpi-badge">
                       {data.routes.length} 条
@@ -525,7 +543,7 @@ export function UsageDashboard() {
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

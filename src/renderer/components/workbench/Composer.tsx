@@ -28,7 +28,6 @@ import { Button } from "../primitives/Button";
 import { WorkspacePicker } from "./WorkspacePicker";
 import { ComposerDropdown } from "./ComposerDropdown";
 import { ModelPicker } from "./ModelPicker";
-import { ProviderAttemptNote } from "./ModelAccessPanels";
 import { UsagePopover } from "./UsagePopover";
 import { OutputSpeed } from "./OutputSpeed";
 import {
@@ -1101,14 +1100,6 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               </span>
             )}
           </div>
-        )}
-        {!isNew && state.activeSnapshot?.id === state.activeSessionId && (
-          <ProviderAttemptNote
-            sessionId={state.activeSessionId}
-            events={state.activeSnapshot.events}
-            routeGroupId={selectedRoute?.id ?? routeChoice}
-            routeGroupLabel={selectedRoute?.label}
-          />
         )}
         <ImageAttachments
           images={images}

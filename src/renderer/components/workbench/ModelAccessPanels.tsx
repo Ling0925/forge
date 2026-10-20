@@ -19,7 +19,7 @@ import type {
   ModelCatalog,
   ModelCatalogEntry,
 } from "../../../shared/model-catalog";
-import type { AgentEvent, PublicProviderSource } from "../../../shared/schemas";
+import type { PublicProviderSource } from "../../../shared/schemas";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
@@ -2119,56 +2119,5 @@ export function RouteGroupsPanel({
         </Dialog>
       )}
     </section>
-  );
-}
-
-export function ProviderAttemptNote({
-  sessionId,
-  events,
-  routeGroupId,
-  routeGroupLabel,
-}: {
-  readonly sessionId: string | null | undefined;
-  readonly events: readonly AgentEvent[] | undefined;
-  readonly routeGroupId: string | undefined;
-  readonly routeGroupLabel: string | undefined;
-}) {
-  type AttemptSelection = Extract<
-    AgentEvent,
-    { type: "provider_attempt" }
-  >["selection"];
-  const [latest, setLatest] = useState<AttemptSelection | undefined>(undefined);
-  useEffect(() => {
-    let found: AttemptSelection | undefined;
-    for (const event of [...(events ?? [])].reverse()) {
-      if (event.type !== "provider_attempt") continue;
-      found = event.selection;
-      break;
-    }
-    setLatest(found);
-  }, [events, sessionId]);
-  useEffect(() => {
-    if (!sessionId || !window.forge.onEvent) return;
-    return window.forge.onEvent((runEvent) => {
-      if (runEvent.event.sessionId !== sessionId) return;
-      if (runEvent.event.type !== "provider_attempt") return;
-      setLatest(runEvent.event.selection);
-    });
-  }, [sessionId]);
-  if (!latest) return null;
-  const outcome =
-    latest.outcome === "succeeded"
-      ? "成功"
-      : latest.outcome === "failed"
-        ? `失败${latest.errorCode ? ` · ${latest.errorCode}` : ""}`
-        : "请求中";
-  return (
-    <div className="composer-provider-attempt" aria-live="polite">
-      {routeGroupId && <span>选择 {routeGroupLabel ?? routeGroupId}</span>}
-      <span>
-        实际 {latest.sourceId}/{latest.model} ·{" "}
-        {latest.credentialId ?? "默认凭据"} · {outcome}
-      </span>
-    </div>
   );
 }

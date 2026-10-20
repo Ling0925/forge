@@ -13,7 +13,6 @@ it("imports sources, manages routes and credentials, logs in and reads quota", a
         import {createRoot} from 'react-dom/client';
         import {ProviderSources} from './src/renderer/components/workbench/ProviderSources';
         import {providerPresets} from './src/provider/presets';
-        import {ProviderAttemptNote} from './src/renderer/components/workbench/ModelAccessPanels';
         import {TestProvider} from './src/renderer/state/workbench-context';
         import './src/renderer/styles/global.css';
         import './src/renderer/components/workbench/model-access.css';
@@ -53,12 +52,7 @@ it("imports sources, manages routes and credentials, logs in and reads quota", a
           },
           openExternal: async url => { window.external.push(url); }
         };
-        createRoot(document.getElementById('root')).render(<TestProvider><ProviderSources onBusy={()=>{}}/>
-          <ProviderAttemptNote sessionId="s-attempt" events={[
-            {type:'provider_attempt',timestamp:'2026-01-01T00:00:00.000Z',sessionId:'s-attempt',selection:{sourceId:'a',model:'a/one',apiMode:'chat-completions',groupId:'r1',attempt:1,reason:'selected',outcome:'succeeded',timestamp:'2026-01-01T00:00:00.000Z',credentialId:'codex-1'}}
-          ]} routeGroupId="r1" routeGroupLabel="路由 A"/>
-          <ProviderAttemptNote sessionId="s-none" events={[]} routeGroupId="r1" routeGroupLabel="路由 A"/>
-        </TestProvider>);
+        createRoot(document.getElementById('root')).render(<TestProvider><ProviderSources onBusy={()=>{}}/></TestProvider>);
       `,
     },
     bundle: true,
@@ -167,17 +161,6 @@ it("imports sources, manages routes and credentials, logs in and reads quota", a
       .toBe(1);
     const card = page.locator(".model-access-route-card");
     await expect.poll(() => card.innerText()).toContain("源 A / a/one / 默认");
-
-    // The attempt note distinguishes the chosen route from the actual request,
-    // and renders nothing when no provider attempt has been observed.
-    await expect
-      .poll(() => page.locator(".composer-provider-attempt").count())
-      .toBe(1);
-    const attempt = page.locator(".composer-provider-attempt");
-    await expect.poll(() => attempt.innerText()).toContain("选择 路由 A");
-    await expect
-      .poll(() => attempt.innerText())
-      .toContain("实际 a/a/one · codex-1 · 成功");
 
     // URL/JSON import previews into selectable sources with operation warnings.
     await page.locator("details.model-access-import > summary").click();
@@ -508,7 +491,7 @@ it("shows actual route, source and credential usage in the stats panel", async (
 
     const section = page
       .locator(".usage-dashboard-section")
-      .filter({ hasText: "来源调用记录" });
+      .filter({ hasText: "来源调用统计" });
     await expect.poll(() => section.count()).toBe(1);
     const text = await section.innerText();
     // The route group resolves to its label; the actual source, credential,

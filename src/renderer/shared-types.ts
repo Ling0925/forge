@@ -30,6 +30,7 @@ export type {
   RunId,
   UsageFilter,
   UsageStatsDto,
+  UsageRequest,
   ModelUsageStat,
   DailyUsageStat,
   SessionUsageStat,
