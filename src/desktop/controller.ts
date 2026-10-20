@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { HOST_PROTOCOL_VERSION, type HostState } from "../shared/host";
 import type { HarnessService } from "../shared/contracts";
 import { ForgeError, toErrorInfo } from "../shared/errors";
 import {
@@ -37,6 +38,7 @@ export function createWorkerController(
   service: HarnessService,
   send: (message: WorkerMessage) => void,
 ) {
+  const hostId = randomUUID();
   const runs = new Map<
     RunId,
     {
@@ -51,6 +53,7 @@ export function createWorkerController(
       applyingSteering: Extract<RpcRequest, { method: "steerRun" }>[];
       acceptingSteering: boolean;
       terminal?: Extract<AgentEvent, { type: "run_finished" }>;
+      completion?: Promise<unknown>;
     }
   >();
   const pending = new Map<string, RpcRequest>();
@@ -298,6 +301,7 @@ export function createWorkerController(
         () => finish(runId),
         (error) => finish(runId, toErrorInfo(error)),
       );
+    run.completion = operation;
     operations.add(operation);
     void operation.finally(() => operations.delete(operation));
     return { handle: { runId, sessionId: input.sessionId }, operation };
@@ -312,6 +316,13 @@ export function createWorkerController(
     await queueReady;
     return service.inputQueue;
   };
+  const hostState = (): HostState => ({ hostId, protocolVersion: HOST_PROTOCOL_VERSION, runs: [...runs].map(([runId, run]) => {
+    const state = run.recovery.get("state_changed");
+    return { runId, sessionId: run.input.sessionId,
+      status: state?.type === "state_changed" ? state.status : "running",
+      stopping: run.abort.signal.aborted, ...(run.permission ? { permission: run.permission } : {}),
+      pendingApprovals: [...run.approvals.values()].filter(item => !item.consumed).map(item => item.request) };
+  }) });
   const handle = async (raw: unknown): Promise<void> => {
     const parsed = workerRequestSchema.safeParse(raw);
     if (!parsed.success) return;
@@ -331,6 +342,9 @@ export function createWorkerController(
     }
     try {
       switch (request.method) {
+        case "getHostState":
+          respond(request, hostState());
+          break;
         case "getSettings":
           respond(request, await service.getSettings());
           break;
@@ -498,6 +512,7 @@ export function createWorkerController(
               "The run or approval is no longer active.",
             );
           run.abort.abort();
+          if (request.wait) await run.completion;
           respond(request, null);
           break;
         }
@@ -578,5 +593,5 @@ export function createWorkerController(
     }
     return result;
   };
-  return { handle: dispatch, dispose, recoveryEvents };
+  return { handle: dispatch, dispose, recoveryEvents, hostState };
 }

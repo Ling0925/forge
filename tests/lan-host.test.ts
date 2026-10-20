@@ -179,6 +179,25 @@ async function stream(origin: string, clientId: string): Promise<RunEvent[]> {
 }
 
 describe("LAN host", () => {
+  it("exposes the shared host identity and confirms cancellation after runtime cleanup", async () => {
+    const { directory, service, runtime } = await setup();
+    const port = await freePort();
+    const origin = `http://127.0.0.1:${port}`;
+    const lan = await startLanServer({ runtime, host: "127.0.0.1", port, workspace: directory,
+      restrictWorkspace: true, rendererRoot: await emptyRenderer(directory) });
+    cleanup.push(() => lan.close());
+    const session = await service.createSession({ workspace: directory, title: "Shared host" });
+    const started = await runtime.request({ id: randomUUID(), method: "startRun", input: { sessionId: session.id, prompt: "wait for lan stop" } });
+    if (!started.ok || started.method !== "startRun") throw new Error("Missing run");
+    const handshake = await connect(origin);
+    const post = async (data: object) => (await call(`${origin}/api/rpc`, { method: "POST", headers: headers(origin, handshake.clientId),
+      body: JSON.stringify({ id: randomUUID(), ...data }) })).json();
+    expect(await post({ method: "getHostState" })).toMatchObject({ ok: true, result: { hostId: runtime.hostState().hostId,
+      runs: [{ runId: started.result.runId, sessionId: session.id }] } });
+    expect(await post({ method: "cancelRun", runId: started.result.runId, wait: true })).toMatchObject({ ok: true });
+    expect(runtime.hostState().runs).toEqual([]);
+  });
+
   it("only accepts a concrete IPv4 address and a legal port", () => {
     expect(validLanEndpoint("192.168.1.5", 5173)).toBe(true);
     expect(validLanEndpoint("127.0.0.1", 1024)).toBe(true);

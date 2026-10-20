@@ -1,3 +1,4 @@
+import type { HostState } from "../shared/host";
 import type { HarnessService } from "../shared/contracts";
 import type {
   RpcRequest,
@@ -28,6 +29,7 @@ export interface DesktopRuntime {
   request(request: RpcRequest): Promise<RpcResponse>;
   subscribe(listener: (message: WorkerMessage) => void): () => void;
   recoveryEvents(): RunEvent[];
+  hostState(): HostState;
   dispose(): Promise<void>;
 }
 
@@ -123,6 +125,7 @@ export function createRuntimeHub(service: HarnessService): DesktopRuntime {
       return () => listeners.delete(listener);
     },
     recoveryEvents: () => controller.recoveryEvents(),
+    hostState: () => controller.hostState(),
     dispose,
   };
 }

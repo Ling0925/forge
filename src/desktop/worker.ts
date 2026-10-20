@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { parentPort } from "node:worker_threads";
 import { z } from "zod";
 import { createHarness } from "../core/harness";
+import { createLocalHost } from "../host/local-server";
 import {
   createLanHostController,
   shutdownSharedRuntime,
@@ -42,6 +43,10 @@ export async function startWorker(): Promise<void> {
   // Packaged layout is dist/desktop/worker.cjs + dist/renderer.
   const rendererRoot = join(__dirname, "../renderer");
   const runtime = createRuntimeHub(await createHarness());
+  let local: Awaited<ReturnType<typeof createLocalHost>> | undefined;
+  try {
+    if (process.env.FORGE_HOST_SOCKET) local = await createLocalHost({ runtime, socketPath: process.env.FORGE_HOST_SOCKET });
+  } catch (error) { await runtime.dispose(); throw error; }
   const unsubscribe = runtime.subscribe((message) => port.postMessage(message));
   const lan = createLanHostController({
     report: (message) => console.error(message),
@@ -85,7 +90,11 @@ export async function startWorker(): Promise<void> {
       // A LAN close failure is reported as an unclean shutdown; it must never
       // skip runtime disposal or hide a socket that stayed open.
       void shutdownSharedRuntime({
-        closeLan: () => lan.dispose(),
+        closeLan: async () => {
+          const results = await Promise.allSettled([lan.dispose(), local?.close()]);
+          const errors = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+          if (errors.length) throw new AggregateError(errors.map(result => result.reason), "Host listeners did not close cleanly.");
+        },
         disposeRuntime: () => runtime.dispose(),
         report: (message) => console.error(message),
       }).then((clean) => {
