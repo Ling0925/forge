@@ -182,9 +182,9 @@ export function createWorkerController(
       approved,
     });
   };
-  const finish = (runId: RunId, error?: ErrorInfo): void => {
+  const finish = (runId: RunId, error?: ErrorInfo): "completed" | "failed" | "cancelled" | "interrupted" => {
     const run = runs.get(runId);
-    if (!run) return;
+    if (!run) return "interrupted";
     const base = {
       sessionId: run.input.sessionId,
       timestamp: new Date().toISOString(),
@@ -208,6 +208,109 @@ export function createWorkerController(
     for (const approval of run.approvals.values()) approval.resolve?.(false);
     runs.delete(runId);
     emit({ kind: "event", data: { runId, event: terminal } });
+    void service.inputQueue?.finished(run.input.sessionId, terminal.status).catch(() => undefined);
+    return terminal.status;
+  };
+  const startRun = (input: RunInput, providedRunId?: RunId, providerBinding?: string) => {
+    if (
+      [...runs.values()].some(
+        (run) => run.input.sessionId === input.sessionId,
+      )
+    )
+      throw new ForgeError(
+        "busy",
+        "This session already has an active run.",
+        true,
+      );
+    const runId = providedRunId ?? runIdSchema.parse(randomUUID());
+    const run: NonNullable<ReturnType<typeof runs.get>> = {
+      input,
+      abort: new AbortController(),
+      approvals: new Map<string, Approval>(),
+      finished: false,
+      permission: undefined,
+      permissionChanged: false,
+      recovery: new Map<string, AgentEvent>(),
+      steering: [],
+      applyingSteering: [],
+      acceptingSteering: true,
+    };
+    runs.set(runId, run);
+    // The response is posted before even synchronous service callbacks execute.
+    const operation = Promise.resolve()
+      .then(() =>
+        service.run(
+          input,
+          (value) => event(runId, value),
+          (rawApproval, signal) => {
+            const approval = approvalRequestSchema.parse(rawApproval);
+            if (
+              signal.aborted ||
+              run.abort.signal.aborted ||
+              disposed ||
+              run.finished
+            )
+              return Promise.resolve(false);
+            const entry = run.approvals.get(approval.id);
+            if (
+              !entry ||
+              JSON.stringify(entry.request) !==
+                JSON.stringify(approval) ||
+              entry.claimed
+            )
+              throw new ForgeError(
+                "invalid_input",
+                "Approval does not match the pending action.",
+              );
+            entry.claimed = true;
+            if (entry.consumed)
+              return Promise.resolve(entry.answer === true);
+            return new Promise<boolean>((resolve) => {
+              const settle = (answer: boolean): void => {
+                entry.consumed = true;
+                entry.answer = answer;
+                signal.removeEventListener("abort", abort);
+                run.abort.signal.removeEventListener("abort", abort);
+                resolve(answer);
+              };
+              const abort = (): void => settle(false);
+              entry.resolve = settle;
+              signal.addEventListener("abort", abort, { once: true });
+              run.abort.signal.addEventListener("abort", abort, {
+                once: true,
+              });
+            });
+          },
+          run.abort.signal,
+          { drainSteering: (final) => {
+              const requests = run.steering.splice(0);
+              run.applyingSteering.push(...requests);
+              if (final && requests.length === 0) run.acceptingSteering = false;
+              return requests.map(request => request.images?.length
+                ? { prompt: request.prompt, images: request.images } : request.prompt);
+            },
+            onSteeringApplied: () => {
+              for (const request of run.applyingSteering.splice(0)) respond(request, null);
+            }, getPermission: () => run.permission, ...(providerBinding ? { providerBinding } : {}) },
+        ),
+      )
+      .then(
+        () => finish(runId),
+        (error) => finish(runId, toErrorInfo(error)),
+      );
+    operations.add(operation);
+    void operation.finally(() => operations.delete(operation));
+    return { handle: { runId, sessionId: input.sessionId }, operation };
+  };
+  const queueReady = service.inputQueue?.attach({
+    isBusy: sessionId => [...runs.values()].some(run => run.input.sessionId === sessionId),
+    start: (input, runId, binding) => startRun(input, runIdSchema.parse(runId), binding).operation,
+  });
+  void queueReady?.catch(() => undefined);
+  const queue = async () => {
+    if (!service.inputQueue) throw new ForgeError("not_found", "Durable inputs are unavailable on this host.");
+    await queueReady;
+    return service.inputQueue;
   };
   const handle = async (raw: unknown): Promise<void> => {
     const parsed = workerRequestSchema.safeParse(raw);
@@ -338,96 +441,14 @@ export function createWorkerController(
         case "getDiagnostics":
           respond(request, await service.getDiagnostics(request.sessionId));
           break;
+        case "enqueueInput": respond(request, await (await queue()).enqueue(request.input)); break;
+        case "listInputs": respond(request, await (await queue()).list(request.sessionId)); break;
+        case "cancelInput": respond(request, await (await queue()).cancel(request.sessionId, request.inputId)); break;
+        case "pauseInputs": respond(request, await (await queue()).pause(request.sessionId)); break;
+        case "resumeInputs": respond(request, await (await queue()).resume(request.sessionId)); break;
         case "startRun": {
-          if (
-            [...runs.values()].some(
-              (run) => run.input.sessionId === request.input.sessionId,
-            )
-          )
-            throw new ForgeError(
-              "busy",
-              "This session already has an active run.",
-              true,
-            );
-          const runId = runIdSchema.parse(randomUUID());
-          const run: NonNullable<ReturnType<typeof runs.get>> = {
-            input: request.input,
-            abort: new AbortController(),
-            approvals: new Map<string, Approval>(),
-            finished: false,
-            permission: undefined,
-            permissionChanged: false,
-            recovery: new Map<string, AgentEvent>(),
-            steering: [],
-            applyingSteering: [],
-            acceptingSteering: true,
-          };
-          runs.set(runId, run);
-          respond(request, { runId, sessionId: request.input.sessionId });
-          // The response is posted before even synchronous service callbacks execute.
-          const operation = Promise.resolve()
-            .then(() =>
-              service.run(
-                request.input,
-                (value) => event(runId, value),
-                (rawApproval, signal) => {
-                  const approval = approvalRequestSchema.parse(rawApproval);
-                  if (
-                    signal.aborted ||
-                    run.abort.signal.aborted ||
-                    disposed ||
-                    run.finished
-                  )
-                    return Promise.resolve(false);
-                  const entry = run.approvals.get(approval.id);
-                  if (
-                    !entry ||
-                    JSON.stringify(entry.request) !==
-                      JSON.stringify(approval) ||
-                    entry.claimed
-                  )
-                    throw new ForgeError(
-                      "invalid_input",
-                      "Approval does not match the pending action.",
-                    );
-                  entry.claimed = true;
-                  if (entry.consumed)
-                    return Promise.resolve(entry.answer === true);
-                  return new Promise<boolean>((resolve) => {
-                    const settle = (answer: boolean): void => {
-                      entry.consumed = true;
-                      entry.answer = answer;
-                      signal.removeEventListener("abort", abort);
-                      run.abort.signal.removeEventListener("abort", abort);
-                      resolve(answer);
-                    };
-                    const abort = (): void => settle(false);
-                    entry.resolve = settle;
-                    signal.addEventListener("abort", abort, { once: true });
-                    run.abort.signal.addEventListener("abort", abort, {
-                      once: true,
-                    });
-                  });
-                },
-                run.abort.signal,
-                { drainSteering: (final) => {
-                    const requests = run.steering.splice(0);
-                    run.applyingSteering.push(...requests);
-                    if (final && requests.length === 0) run.acceptingSteering = false;
-                    return requests.map(request => request.images?.length
-                      ? { prompt: request.prompt, images: request.images } : request.prompt);
-                  },
-                  onSteeringApplied: () => {
-                    for (const request of run.applyingSteering.splice(0)) respond(request, null);
-                  }, getPermission: () => run.permission },
-              ),
-            )
-            .then(
-              () => finish(runId),
-              (error) => finish(runId, toErrorInfo(error)),
-            );
-          operations.add(operation);
-          void operation.finally(() => operations.delete(operation));
+          const run = startRun(request.input);
+          respond(request, run.handle);
           break;
         }
         case "steerRun": {
