@@ -47,6 +47,7 @@
 | 计划展示 | [CLI 计划固定](PLAN_PINNING_REQUIREMENTS.md)、[前端计划展示](FRONTEND_PLAN_REQUIREMENTS.md) |
 | 界面 | [Markdown 渲染](MARKDOWN_REQUIREMENTS.md)、[动效](FRONTEND_MOTION_REQUIREMENTS.md)、[对话区动画与焦点优化计划](TRANSCRIPT_MOTION_AND_FOCUS_PLAN.md)、[思考自动收起与工具时序归并计划](TRANSCRIPT_ORDERING_AND_REASONING_PLAN.md)、[Web 布局](WEB_UI_LAYOUT_SPEC.md) |
 | 前端改进方案 | [前端架构分析与优化方案](FRONTEND_IMPROVEMENTS.md) |
+| 模型接入 | [参考 Magpie 的原生 TypeScript 重写规划](MODEL_ACCESS_TS_PLAN.md) |
 
 ## 变更、迁移与历史记录
 
