@@ -159,6 +159,7 @@ export interface PlanStageDividerProps {
   readonly completed?: number;
   readonly total?: number;
   readonly percent?: number;
+  readonly inProgress?: number;
   readonly plan?: PlanItemData | null;
 }
 
@@ -172,6 +173,7 @@ export function PlanStageDivider({
   completed,
   total,
   percent: propPercent,
+  inProgress,
   plan,
 }: PlanStageDividerProps) {
   const [expanded, setExpanded] = useState(false);
@@ -184,6 +186,27 @@ export function PlanStageDivider({
     (actualTotal > 0
       ? Math.round((actualCompleted / actualTotal) * 100)
       : 0);
+  const planInProgress = plan
+    ? plan.steps.filter((s) => s.status === "in_progress").length
+    : undefined;
+  const actualInProgress =
+    inProgress ??
+    (planInProgress !== undefined
+      ? planInProgress > 0
+        ? planInProgress
+        : actualCompleted < actualTotal
+          ? 1
+          : 0
+      : actualCompleted < actualTotal
+        ? 1
+        : 0);
+  const activePercent =
+    actualTotal > 0 && actualInProgress > 0 && percent < 100
+      ? Math.min(
+          100 - percent,
+          Math.round((actualInProgress / actualTotal) * 100),
+        )
+      : 0;
   const countText =
     actualTotal > 0 ? `${actualCompleted}/${actualTotal}` : "";
 
@@ -219,6 +242,12 @@ export function PlanStageDivider({
             className="transcript-stage-fill"
             style={{ width: `${percent}%` }}
           />
+          {activePercent > 0 && (
+            <div
+              className="transcript-stage-fill-active"
+              style={{ width: `${activePercent}%` }}
+            />
+          )}
         </div>
         {countText && (
           <span className="transcript-stage-count" aria-hidden="true">
@@ -257,6 +286,7 @@ function StageHeader({ stage }: { readonly stage: TranscriptStage }) {
       completed={stage.completed}
       total={stage.total}
       percent={stage.percent}
+      inProgress={stage.inProgress}
     />
   );
 }

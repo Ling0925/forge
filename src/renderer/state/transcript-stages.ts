@@ -7,6 +7,7 @@ export interface TranscriptStage {
   readonly completed?: number;
   readonly total?: number;
   readonly percent?: number;
+  readonly inProgress?: number;
 }
 
 /** Stage names come only from successful AI plan updates, never guessed prose. */
@@ -41,13 +42,21 @@ export function transcriptStages(timeline: readonly TimelineItem[]) {
       if (!result.success) continue;
       const total = result.data.steps.length;
       const completed = result.data.steps.filter((step) => step.status === "completed").length;
-      const inProgress = result.data.steps.find((step) => step.status === "in_progress");
+      const inProgressSteps = result.data.steps.filter((step) => step.status === "in_progress");
+      const inProgress = inProgressSteps[0];
       const title =
         inProgress?.step ??
         (completed === total ? (result.data.title || "全部步骤已完成") : (result.data.explanation || result.data.title || "计划步骤"));
       const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
       if (title !== current.title || completed !== current.completed) {
-        current = { id: current.id + 1, title, completed, total, percent };
+        current = {
+          id: current.id + 1,
+          title,
+          completed,
+          total,
+          percent,
+          inProgress: inProgressSteps.length,
+        };
         // The update_plan tool itself directly renders the inline stage divider,
         // so we mark it announced immediately to avoid duplicated stage headers below it.
         announced = true;

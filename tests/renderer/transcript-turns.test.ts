@@ -175,9 +175,50 @@ describe("Transcript Turn partitioning and grouping", () => {
     expect(html).toContain("修订文档中的关联、去重、交接与验证方案");
     expect(html).toContain('class="transcript-stage-track"');
     expect(html).toContain('class="transcript-stage-fill"');
+    expect(html).toContain('class="transcript-stage-fill-active"');
     expect(html).toContain('style="width:33%"');
     expect(html).toContain('class="transcript-stage-count"');
     expect(html).toContain("1/3");
+  });
+
+  it("renders animated active progress segment for in-progress stage at 0/3 and omits it when all steps are completed", () => {
+    const initialHtml = renderToStaticMarkup(
+      createElement(PlanStageDivider, {
+        title: "检查模型发现调用链、存储约定及相关测试，确定最小实现范围",
+        completed: 0,
+        total: 3,
+        plan: {
+          steps: [
+            { step: "检查模型发现调用链、存储约定及相关测试，确定最小实现范围", status: "in_progress" },
+            { step: "实现按来源隔离的模型元数据持久缓存并接通刷新入口", status: "pending" },
+            { step: "运行聚焦功能测试并编译 CLI，检查 diff 后提交本轮修改", status: "pending" },
+          ],
+        },
+      }),
+    );
+
+    expect(initialHtml).toContain('class="transcript-stage-fill" style="width:0%"');
+    expect(initialHtml).toContain('class="transcript-stage-fill-active" style="width:33%"');
+    expect(initialHtml).toContain("0/3");
+
+    const completedHtml = renderToStaticMarkup(
+      createElement(PlanStageDivider, {
+        title: "全部步骤已完成",
+        completed: 3,
+        total: 3,
+        plan: {
+          steps: [
+            { step: "步骤 1", status: "completed" },
+            { step: "步骤 2", status: "completed" },
+            { step: "步骤 3", status: "completed" },
+          ],
+        },
+      }),
+    );
+
+    expect(completedHtml).toContain('class="transcript-stage-fill" style="width:100%"');
+    expect(completedHtml).not.toContain("transcript-stage-fill-active");
+    expect(completedHtml).toContain("3/3");
   });
 
   it.each(["create_plan", "update_plan"])("separates %s tool entries as single blocks between surrounding tools", (name) => {
