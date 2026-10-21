@@ -356,7 +356,14 @@ function useController() {
   const sendSteering = async (prompt: string, id: SessionId, images?: readonly ImageAttachment[]): Promise<boolean> => {
     const run = current.current.activeRuns[id];
     if (!run?.runId) return false;
-    try { await window.forge.steerRun(run.runId, prompt, images); await refreshSession(id); return true; }
+    try {
+      // steerRun resolves once the message is durable. Refresh the transcript
+      // in the background so the composer can clear and accept the next write
+      // without waiting on a read that is only cosmetic.
+      await window.forge.steerRun(run.runId, prompt, images);
+      void refreshSession(id);
+      return true;
+    }
     catch (error) { fail(error); return false; }
   };
   const cancelRun = async (target?: SessionId) => {

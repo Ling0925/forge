@@ -40,6 +40,13 @@ import "./composer-activity.css";
 import "./composer-layout.css";
 import "./composer-live-input.css";
 
+type PendingSubmission = {
+  readonly id: SessionId;
+  readonly draftId: string;
+  readonly prompt: string;
+  readonly images?: readonly ImageAttachment[];
+};
+
 const taskSchema = z
   .object({
     workspace: z
@@ -304,52 +311,85 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     if (!permissionTouched.current && state.settings)
       setPermission(state.settings.defaultPermission);
   }, [state.settings]);
-  const [submission, setSubmission] = useState<{
-    id: SessionId;
-    draftId: string;
-    prompt: string;
-    images?: readonly ImageAttachment[];
-  } | null>(null);
+  // The composer stays mounted while sessions change, so submission state is
+  // owned by a draft/session rather than by the component instance. One
+  // session's pending write must never disable or clear another session.
+  const [submissions, setSubmissions] = useState<
+    Readonly<Record<string, PendingSubmission>>
+  >({});
+  const submission = submissions[draftId];
   useEffect(() => {
-    if (!submission) return;
-    const submittedRun = state.activeRuns[submission.id];
-    if (!submittedRun?.accepted) {
-      if (
-        !submittedRun ||
-        !["running", "awaiting_approval"].includes(submittedRun.status)
-      ) {
-        setSubmission(null);
-        setError("消息未被接收，草稿已保留。请检查错误详情后重试。");
+    const entries = Object.entries(submissions);
+    if (entries.length === 0) return;
+    const settled = new Set<string>();
+    for (const [key, entry] of entries) {
+      const submittedRun = state.activeRuns[entry.id];
+      if (!submittedRun?.accepted) {
+        if (
+          !submittedRun ||
+          !["running", "awaiting_approval"].includes(submittedRun.status)
+        ) {
+          settled.add(key);
+          if (selectedDraft.current === entry.draftId)
+            setError("消息未被接收，草稿已保留。请检查错误详情后重试。");
+        }
+        continue;
       }
-      return;
+      settled.add(key);
+      // Clear only this submission's own draft, and only while it still holds
+      // exactly the text that was submitted. A newer edit always survives.
+      if (draftsRef.current[entry.draftId] === entry.prompt) {
+        setManualDrafts((old) =>
+          old[entry.draftId] ? { ...old, [entry.draftId]: false } : old,
+        );
+        setDrafts((old) =>
+          old[entry.draftId] === entry.prompt
+            ? { ...old, [entry.draftId]: "" }
+            : old,
+        );
+      }
+      if (entry.images && entry.images.length > 0) {
+        clearImages(entry.images, entry.draftId);
+      }
+      if (entry.draftId === "new") {
+        pendingNew.current = null;
+        // Adopt the new draft's latest choice only after acceptance, then reset the next new draft.
+        // A choice made directly in the created session while starting takes precedence.
+        setModes(({ new: fresh = "build", ...sessions }) => ({
+          ...sessions,
+          [entry.id]: sessions[entry.id] ?? fresh,
+        }));
+        // Do not steal navigation if the user opened a different session while starting.
+        if (selectedDraft.current === "new") void selectSession(entry.id);
+      }
     }
-    if (draftsRef.current[submission.draftId] === submission.prompt) {
-      setManualDrafts((old) => ({ ...old, [submission.draftId]: false }));
-    }
-    setDrafts((old) =>
-      old[submission.draftId] === submission.prompt
-        ? { ...old, [submission.draftId]: "" }
-        : old,
-    );
-    if (submission.images && submission.images.length > 0) {
-      clearImages(submission.images, submission.draftId);
-    }
-    setSubmission(null);
-    if (submission.draftId === "new") {
-      pendingNew.current = null;
-      // Adopt the new draft's latest choice only after acceptance, then reset the next new draft.
-      // A choice made directly in the created session while starting takes precedence.
-      setModes(({ new: fresh = "build", ...sessions }) => ({
-        ...sessions,
-        [submission.id]: sessions[submission.id] ?? fresh,
-      }));
-    }
-    // Do not steal navigation if the user opened a different session while starting.
-    if (submission.draftId === "new" && selectedDraft.current === "new")
-      void selectSession(submission.id);
-  }, [submission, state.activeRuns, selectSession, clearImages]);
-  const [busy, setBusy] = useState(false);
-  const submitting = useRef(false);
+    if (settled.size === 0) return;
+    // Remove only the entries this pass observed. A newer submission for the
+    // same draft must never be erased by an older completion.
+    setSubmissions((old) => {
+      let next: Record<string, PendingSubmission> | null = null;
+      for (const [key, entry] of entries) {
+        if (!settled.has(key) || old[key] !== entry) continue;
+        next ??= { ...old };
+        delete next[key];
+      }
+      return next ?? old;
+    });
+  }, [submissions, state.activeRuns, selectSession, clearImages]);
+  const [busyDrafts, setBusyDrafts] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const busy = busyDrafts.has(draftId);
+  const setDraftBusy = (target: string, value: boolean) => {
+    setBusyDrafts((old) => {
+      if (old.has(target) === value) return old;
+      const next = new Set(old);
+      if (value) next.add(target);
+      else next.delete(target);
+      return next;
+    });
+  };
+  const submitting = useRef(new Set<string>());
   const pendingNew = useRef<{
     id: SessionId;
     workspace: string;
@@ -550,39 +590,67 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       await slash.execute();
       return;
     }
+    const targetDraftId = draftId;
     if (
-      submitting.current ||
-      effortSaving.current ||
-      submission ||
+      submitting.current.has(targetDraftId) ||
+      busyDrafts.has(targetDraftId) ||
+      submissions[targetDraftId] ||
       slash.executing ||
+      effortSaving.current ||
       reading
     )
       return;
     if (running && state.activeSessionId && (prompt.trim() || images.length > 0)) {
       const id = state.activeSessionId;
-      const capturedDraftId = draftId;
+      const capturedDraftId = targetDraftId;
       const capturedPrompt = prompt;
       const capturedImages = images;
-      submitting.current = true;
-      setBusy(true);
+      submitting.current.add(capturedDraftId);
+      setDraftBusy(capturedDraftId, true);
       setError("");
-      const accepted = kind === "follow-up"
-        ? queueInput({ sessionId: id, prompt: capturedPrompt, permission: mode === "plan" ? "readonly" : permission, mode,
-          ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
-          ...(selectedRoute
-            ? { routeGroupId: selectedRoute.id }
-            : { model, ...(providerSourceId ? { providerSourceId } : {}) }) })
-        : await sendSteering(capturedPrompt, id, capturedImages.length > 0 ? capturedImages : undefined);
-      submitting.current = false;
-      if (!alive.current) return;
-      setBusy(false);
-      if (accepted) {
-        setDrafts(old => old[capturedDraftId] === capturedPrompt ? { ...old, [capturedDraftId]: "" } : old);
-        setManualDrafts(old => ({ ...old, [capturedDraftId]: false }));
-        if (capturedImages.length > 0) {
-          clearImages(capturedImages, capturedDraftId);
-        }
-      } else if (selectedDraft.current === capturedDraftId) setError("消息未确认写入，草稿已保留。请核对会话后手动发送。");
+      try {
+        const accepted =
+          kind === "follow-up"
+            ? queueInput({
+                sessionId: id,
+                prompt: capturedPrompt,
+                permission: mode === "plan" ? "readonly" : permission,
+                mode,
+                ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
+                ...(selectedRoute
+                  ? { routeGroupId: selectedRoute.id }
+                  : {
+                      model,
+                      ...(providerSourceId ? { providerSourceId } : {}),
+                    }),
+              })
+            : await sendSteering(
+                capturedPrompt,
+                id,
+                capturedImages.length > 0 ? capturedImages : undefined,
+              );
+        if (!alive.current) return;
+        if (accepted) {
+          // Success clears this draft immediately, but never overwrites text the
+          // user typed while the write was in flight.
+          if (draftsRef.current[capturedDraftId] === capturedPrompt) {
+            setDrafts((old) =>
+              old[capturedDraftId] === capturedPrompt
+                ? { ...old, [capturedDraftId]: "" }
+                : old,
+            );
+            setManualDrafts((old) => ({ ...old, [capturedDraftId]: false }));
+          }
+          if (capturedImages.length > 0) {
+            clearImages(capturedImages, capturedDraftId);
+          }
+        } else if (selectedDraft.current === capturedDraftId)
+          setError("消息未确认写入，草稿已保留。请核对会话后手动发送。");
+      } finally {
+        // Release only this draft's own lock; a concurrent sibling keeps its own.
+        submitting.current.delete(capturedDraftId);
+        if (alive.current) setDraftBusy(capturedDraftId, false);
+      }
       return;
     }
     if (!isConfigured) {
@@ -604,7 +672,8 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       setError("请选择一个模型；来源会随模型自动切换。");
       return;
     }
-    const capturedDraftId = draftId;
+    const capturedDraftId = targetDraftId;
+    const capturedPrompt = prompt;
     const capturedImages = images;
     const capturedRouteId = selectedRoute?.id;
     const parsed = taskSchema.safeParse({
@@ -621,64 +690,72 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       setError("请选择一个模型。");
       return;
     }
-    submitting.current = true;
-    setBusy(true);
+    submitting.current.add(capturedDraftId);
+    setDraftBusy(capturedDraftId, true);
     setError("");
-    let id = isNew ? null : state.activeSessionId;
-    if (isNew) {
-      const pending = pendingNew.current;
-      if (
-        pending &&
-        pending.workspace === parsed.data.workspace &&
-        pending.model === (parsed.data.model ?? "") &&
-        pending.routeGroupId === capturedRouteId
-      )
-        id = pending.id;
-      else {
-        const snapshot = await createSession(
-          capturedRouteId
-            ? { workspace: parsed.data.workspace, routeGroupId: capturedRouteId }
-            : {
-                workspace: parsed.data.workspace,
-                ...(parsed.data.model ? { model: parsed.data.model } : {}),
-                ...(providerSourceId ? { providerSourceId } : {}),
-              },
-          false,
-        );
-        id = snapshot?.id ?? null;
-        if (id)
-          pendingNew.current = {
-            id,
-            workspace: parsed.data.workspace,
-            model: parsed.data.model ?? "",
-            ...(capturedRouteId ? { routeGroupId: capturedRouteId } : {}),
-          };
-      }
-    }
-    const ok = id
-      ? await startRun(
-          parsed.data.prompt,
-          mode === "plan" ? "readonly" : permission,
-          parsed.data.model,
-          id,
-          mode,
-          providerSourceId,
-          capturedImages.length > 0 ? capturedImages : undefined,
-          capturedRouteId,
+    try {
+      let id = isNew ? null : state.activeSessionId;
+      if (isNew) {
+        const pending = pendingNew.current;
+        if (
+          pending &&
+          pending.workspace === parsed.data.workspace &&
+          pending.model === (parsed.data.model ?? "") &&
+          pending.routeGroupId === capturedRouteId
         )
-      : false;
-    submitting.current = false;
-    if (!alive.current) return;
-    setBusy(false);
-    if (ok && id) {
-      setSubmission({
-        id,
-        draftId: capturedDraftId,
-        prompt,
-        ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
-      });
-    } else if (selectedDraft.current === capturedDraftId)
-      setError("未能开始对话，草稿已保留。请检查错误详情后重试。");
+          id = pending.id;
+        else {
+          const snapshot = await createSession(
+            capturedRouteId
+              ? { workspace: parsed.data.workspace, routeGroupId: capturedRouteId }
+              : {
+                  workspace: parsed.data.workspace,
+                  ...(parsed.data.model ? { model: parsed.data.model } : {}),
+                  ...(providerSourceId ? { providerSourceId } : {}),
+                },
+            false,
+          );
+          id = snapshot?.id ?? null;
+          if (id)
+            pendingNew.current = {
+              id,
+              workspace: parsed.data.workspace,
+              model: parsed.data.model ?? "",
+              ...(capturedRouteId ? { routeGroupId: capturedRouteId } : {}),
+            };
+        }
+      }
+      const ok = id
+        ? await startRun(
+            parsed.data.prompt,
+            mode === "plan" ? "readonly" : permission,
+            parsed.data.model,
+            id,
+            mode,
+            providerSourceId,
+            capturedImages.length > 0 ? capturedImages : undefined,
+            capturedRouteId,
+          )
+        : false;
+      if (!alive.current) return;
+      if (ok && id) {
+        // Acceptance settles this draft only; a sibling session may still be
+        // submitting or waiting on its own run.
+        setSubmissions((old) => ({
+          ...old,
+          [capturedDraftId]: {
+            id,
+            draftId: capturedDraftId,
+            prompt: capturedPrompt,
+            ...(capturedImages.length > 0 ? { images: capturedImages } : {}),
+          },
+        }));
+      } else if (selectedDraft.current === capturedDraftId)
+        setError("未能开始对话，草稿已保留。请检查错误详情后重试。");
+    } finally {
+      submitting.current.delete(capturedDraftId);
+      if (alive.current) setDraftBusy(capturedDraftId, false);
+    }
   };
   const handleSendPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0 && e.pointerType === "mouse") return;

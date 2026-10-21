@@ -926,7 +926,7 @@ export function Transcript() {
   // pulled into view like any new message.
   // Reasoning deltas grow the live tail too, so they must count as arriving
   // content or the follow-scroll would stall while the model is still thinking.
-  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning?.length ?? 0}:${run?.streamingText?.length ?? 0}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
+  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.pendingSteering?.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning?.length ?? 0}:${run?.streamingText?.length ?? 0}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
   // Has this turn produced answer prose yet? Either the live draft is still
   // streaming, or the snapshot already persisted it and the draft was cleared
   // on sync. Both mean the model has left its reasoning phase.
@@ -1036,6 +1036,13 @@ export function Transcript() {
               />
             )
           )}
+          {snapshot?.pendingSteering?.map((message, index) => message.role === "user" && (
+            <article className="message message-user" key={`steering:${snapshot.id}:${index}`}>
+              <div className="message-header">你</div>
+              {!!message.images?.length && <ImageAttachments images={message.images} />}
+              {message.content && <div className="message-body"><Markdown source={message.content} /></div>}
+            </article>
+          ))}
           {/* Reasoning renders before the answer: saved-but-unsynchronized
               thoughts first, then the live block still streaming in. */}
           {run?.pendingReasoning?.map((output) => (
