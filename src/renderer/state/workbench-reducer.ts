@@ -669,6 +669,7 @@ export function workbenchReducer(
       if (event.type === "text_delta" || event.type === "reasoning_delta")
         next = { ...next, unreportedOutputTokens: (run.unreportedOutputTokens ?? 0) + estimateTokens(event.text) };
       if (event.type === "run_started" || event.type === "run_finished" || event.type === "retry_reset" ||
+        (event.type === "provider_attempt" && event.selection.outcome === "started") ||
         (event.type === "context_usage" && event.usage.basis !== "projected" && event.usage.completionTokens !== undefined))
         next = { ...next, unreportedOutputTokens: 0 };
       const result = putRun(state, next);

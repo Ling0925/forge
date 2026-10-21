@@ -13,20 +13,19 @@ export function OutputSpeed({
   readonly events?: readonly AgentEvent[];
 }) {
   const { speed } = sessionUsage(events);
-  const active = run?.status === "running" || run?.status === "awaiting_approval";
+  // Tick only during a provider request, never while tools/approval/children run.
+  // Inactive interrupted transcripts must not accumulate time since page close.
+  const live = run?.status === "running" && speed.requestStartedAt !== undefined;
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (!active) return;
+    if (!live) return;
     setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
-  }, [active, run?.sessionId]);
+  }, [live, run?.sessionId, speed.requestStartedAt]);
 
-  // Only matched, currently active runs contribute live time. Unmatched starts in
-  // old interrupted transcripts must not count the days since the page was closed.
-  const live = active && speed.runStartedAt !== undefined;
-  const liveTokens = live ? speed.pendingTokens + (run?.unreportedOutputTokens ?? 0) : 0;
-  const durationMs = speed.durationMs + (live ? Math.max(0, now - speed.runStartedAt!) : 0);
+  const liveTokens = live ? (run?.unreportedOutputTokens ?? 0) : 0;
+  const durationMs = speed.durationMs + (live ? Math.max(0, now - speed.requestStartedAt!) : 0);
   const outputTokens = speed.outputTokens + liveTokens;
   const rate = durationMs > 0 ? outputTokens * 1000 / durationMs : 0;
   const estimated = speed.partial || (live && (run?.unreportedOutputTokens ?? 0) > 0);
@@ -38,7 +37,7 @@ export function OutputSpeed({
     <span
       className="composer-output-speed"
       aria-live="off"
-      title={`本会话平均输出速度：累计输出 token ÷ 各轮运行总耗时（含工具执行与等待，不含两次提问间的空闲，不含子会话）${estimated ? "；含估算或部分用量" : ""}`}
+      title={`本会话平均输出速度：累计已计时请求的输出 token ÷ 请求总耗时（从请求发出到回复结束，含首 token 等待；不含工具执行、审批、重试间隔、两次提问间的空闲及子会话）${estimated ? "；含估算或仅部分请求有计时与用量" : ""}`}
     >
       平均 {value}
     </span>

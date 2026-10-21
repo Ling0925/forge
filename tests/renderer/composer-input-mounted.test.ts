@@ -65,7 +65,9 @@ it("composer grows to six lines and requires explicit submission for multiline d
             switchSession:()=>setId(v=>v==='a'?'b':'a'),selectSession:()=>{},
             state:{activeSessionId:id,activeSnapshot:{id,model:'provider/model',workspace:'/tmp',events:[
                 {type:'run_started',timestamp:'2026-01-01T00:00:00Z'},
-                {type:'run_finished',timestamp:'2026-01-01T00:00:10Z',usage:{promptTokens:100,completionTokens:200,totalTokens:300},usageComplete:true}
+                {type:'provider_attempt',timestamp:'2026-01-01T00:00:02Z',selection:{sourceId:'test',model:'test',apiMode:'responses',attempt:0,reason:'direct',outcome:'started',timestamp:'2026-01-01T00:00:02Z'}},
+                {type:'provider_attempt',timestamp:'2026-01-01T00:00:12Z',selection:{sourceId:'test',model:'test',apiMode:'responses',attempt:0,reason:'direct',outcome:'succeeded',timestamp:'2026-01-01T00:00:12Z',usage:{promptTokens:100,completionTokens:200,totalTokens:300}}},
+                {type:'run_finished',timestamp:'2026-01-01T00:01:10Z',turns:1,usage:{promptTokens:100,completionTokens:200,totalTokens:300},usageComplete:true}
               ]},sessions:[],
               settings:{...defaultPublicSettings,model:'provider/model',isConfigured:true,reasoningEffort:effort},activeRuns:runs}}}>{children}</Context.Provider>
         }

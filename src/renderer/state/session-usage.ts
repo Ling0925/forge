@@ -19,7 +19,8 @@ function emptyState() {
     speedTokens: 0,
     speedDurationMs: 0,
     speedPartial: false,
-    runStartedAt: undefined as number | undefined,
+    request: undefined as { key: string; startedAt: number } | undefined,
+    runHasRequests: false,
     latestCache: undefined as number | undefined,
     cacheInput: 0,
     cacheRead: 0,
@@ -34,11 +35,53 @@ function emptyState() {
 }
 type UsageState = ReturnType<typeof emptyState>;
 
+const requestBoundaries = new Set([
+  "run_started", "run_finished", "step_started", "step_finished", "tool_started", "approval_requested",
+]);
+
+function accumulateSpeed(state: UsageState, event: AgentEvent) {
+  // Attempt numbers restart at every step/run. Never carry an unmatched request
+  // into tools, approval, another step or an idle gap in an interrupted transcript.
+  if (requestBoundaries.has(event.type)) {
+    state.speedPartial ||= state.request !== undefined;
+    state.request = undefined;
+  }
+  if (event.type === "run_started") state.runHasRequests = false;
+  if (event.type === "run_finished") {
+    state.speedPartial ||= event.usageComplete === false ||
+      (!state.runHasRequests && (event.turns > 0 || state.pendingReports > 0));
+  }
+  if (event.type !== "provider_attempt") return;
+  state.runHasRequests = true;
+  const selection = event.selection;
+  const key = JSON.stringify([
+    event.sessionId, event.turn, event.step, selection.attempt,
+    selection.groupId, selection.sourceId, selection.credentialId, selection.model, selection.apiMode,
+  ]);
+  const timestamp = Date.parse(selection.timestamp);
+  if (selection.outcome === "started") {
+    state.speedPartial ||= state.request !== undefined || !Number.isFinite(timestamp);
+    state.request = Number.isFinite(timestamp) ? { key, startedAt: timestamp } : undefined;
+    return;
+  }
+  const duration = state.request?.key === key ? timestamp - state.request.startedAt : NaN;
+  if (state.request?.key === key) state.request = undefined;
+  const output = selection.usage?.completionTokens;
+  // Match the numerator and denominator to the same measured requests. Missing
+  // usage/timing is unknown, not zero, and run wall time is never a substitute.
+  if (Number.isFinite(duration) && duration > 0 && output !== undefined &&
+      Number.isFinite(output) && output >= 0) {
+    state.speedTokens += output;
+    state.speedDurationMs += duration;
+  } else {
+    state.speedPartial = true;
+  }
+}
+
 function accumulate(state: UsageState, event: AgentEvent) {
   state.display = advanceContextDisplay(state.display, event);
+  accumulateSpeed(state, event);
   if (event.type === "run_started") {
-    // An unmatched old start is not allowed to leak into a later run.
-    state.runStartedAt = Number.isFinite(Date.parse(event.timestamp)) ? Date.parse(event.timestamp) : undefined;
     state.pending = emptyTotals();
     state.pendingReports = 0;
   }
@@ -72,14 +115,6 @@ function accumulate(state: UsageState, event: AgentEvent) {
         state.cacheReports++;
       }
     }
-    const duration = Date.parse(event.timestamp) - (state.runStartedAt ?? NaN);
-    const output = event.usage?.completionTokens ?? (state.pendingReports ? state.pending.completionTokens : undefined);
-    if (Number.isFinite(duration) && duration > 0 && output !== undefined) {
-      state.speedTokens += output;
-      state.speedDurationMs += duration;
-      state.speedPartial ||= !event.usage || event.usageComplete === false;
-    }
-    state.runStartedAt = undefined;
     state.total = add(state.total, event.usage ?? state.pending);
     state.reports += event.usage ? 1 : state.pendingReports;
     state.partial ||= !event.usage || event.usageComplete === false;
@@ -107,8 +142,7 @@ function summarize(state: UsageState) {
       outputTokens: state.speedTokens,
       durationMs: state.speedDurationMs,
       partial: state.speedPartial,
-      runStartedAt: state.runStartedAt,
-      pendingTokens: state.pending.completionTokens,
+      requestStartedAt: state.request?.startedAt,
     },
   };
 }
@@ -139,7 +173,8 @@ export function appendSessionEvent(
 ): readonly AgentEvent[] {
   const previous = entry(events);
   const next = [...events, event];
-  if (event.type !== "context_usage" && event.type !== "run_finished" && event.type !== "context_compacted" && event.type !== "run_started")
+  if (event.type !== "context_usage" && event.type !== "context_compacted" &&
+      event.type !== "provider_attempt" && !requestBoundaries.has(event.type))
     cache.set(next, previous);
   else {
     const state = { ...previous.state };

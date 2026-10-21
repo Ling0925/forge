@@ -668,7 +668,7 @@ function ExecutionProcess({
         aria-expanded={expanded}
         aria-label={expanded ? "收起本轮执行过程" : "展开本轮执行过程"}
         onClick={() => setExpanded((value) => !value)}
-        title="本轮总耗时含工具执行与等待；速度 = 本轮输出 token ÷ 总耗时，不含子会话用量"
+        title="本轮总耗时含工具执行与等待；速度 = 已计时请求的输出 token ÷ 请求总耗时（从请求发出到回复结束，含首 token 等待，不含工具执行、审批、重试间隔及子会话）"
       >
         <CaretRight
           size={13}
