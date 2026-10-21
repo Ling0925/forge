@@ -103,41 +103,6 @@
   background-color: var(--run-active);
 }
 
-/* Workspace selector card */
-.sidebar-workspace-box {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 5px var(--space-2);
-  border-radius: var(--radius-sm);
-  background-color: var(--surface-soft);
-  border: 1px solid var(--border-subtle);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  min-width: 0;
-  transition: background-color var(--transition-fast);
-}
-
-.sidebar-workspace-box:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.wb-workspace-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.sidebar-workspace-path {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: inherit;
-  user-select: text;
-}
-
 /* Search bar */
 .sidebar-search {
   display: flex;

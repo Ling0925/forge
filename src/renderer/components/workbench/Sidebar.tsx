@@ -70,10 +70,6 @@ export function Sidebar() {
       sessions,
     }));
   })();
-  const activeWorkspace =
-    state.activeSnapshot?.workspace ??
-    sessions[0]?.workspace ??
-    "未配置工作区";
   const toggleFolder = (workspace: string) =>
     setCollapsedFolders((previous) => ({
       ...previous,
@@ -122,19 +118,6 @@ export function Sidebar() {
               <X size={15} weight="bold" />
             </button>
           </div>
-        </div>
-
-        <div
-          className="sidebar-workspace-box wb-workspace-context"
-          title={activeWorkspace}
-        >
-          <FolderOpen
-            size={14}
-            weight="regular"
-            aria-hidden="true"
-            className="wb-workspace-icon"
-          />
-          <span className="sidebar-workspace-path">{activeWorkspace}</span>
         </div>
       </div>
 
