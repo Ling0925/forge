@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 import { chromium } from "playwright";
@@ -146,7 +147,9 @@ it("renders floating jump-to-latest button and interactive queue list with cance
       : {}),
   });
   try {
-    const page = await browser.newPage({ viewport: { width: 1024, height: 640 } });
+    const page = await browser.newPage({
+      viewport: { width: 1024, height: 640 },
+    });
     page.setDefaultTimeout(5000);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -157,9 +160,12 @@ it("renders floating jump-to-latest button and interactive queue list with cance
       }),
     );
     await page.goto("http://forge.test");
-    const js = bundle.outputFiles.find((file) => file.path.endsWith(".js"))?.text;
+    const js = bundle.outputFiles.find((file) =>
+      file.path.endsWith(".js"),
+    )?.text;
     if (!js) throw new Error("Missing mounted bundle");
-    const css = bundle.outputFiles.find((file) => file.path.endsWith(".css"))?.text ?? "";
+    const css =
+      bundle.outputFiles.find((file) => file.path.endsWith(".css"))?.text ?? "";
     await page.addStyleTag({ content: css });
     await page.addScriptTag({ content: js });
 
@@ -171,7 +177,11 @@ it("renders floating jump-to-latest button and interactive queue list with cance
     const input = page.locator("textarea.composer-textarea");
     await input.fill("initial task");
     await input.press("Enter");
-    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(1);
+    await expect
+      .poll(() =>
+        page.evaluate(() => Reflect.get(window, "fixture").starts.length),
+      )
+      .toBe(1);
     await page.locator(".composer-activity").waitFor();
 
     // Measure scroll container height before floating button appears
@@ -183,7 +193,9 @@ it("renders floating jump-to-latest button and interactive queue list with cance
       el.scrollTop = 0;
       el.dispatchEvent(new Event("scroll"));
     });
-    await page.evaluate(() => Reflect.get(window, "fixture").streamDelta("新的流式内容到达"));
+    await page.evaluate(() =>
+      Reflect.get(window, "fixture").streamDelta("新的流式内容到达"),
+    );
 
     const latestWrapper = page.locator(".transcript-latest");
     const latestBtn = page.getByRole("button", { name: "查看最新消息" });
@@ -202,70 +214,174 @@ it("renders floating jump-to-latest button and interactive queue list with cance
     expect(latestWrapperStyle.position).toBe("absolute");
     expect(latestWrapperStyle.pointerEvents).toBe("none");
     expect(latestBtnStyle.pointerEvents).toBe("auto");
-    expect(Number.parseFloat(latestBtnStyle.borderRadius)).toBeGreaterThanOrEqual(999);
+    expect(
+      Number.parseFloat(latestBtnStyle.borderRadius),
+    ).toBeGreaterThanOrEqual(999);
     expect(scrollBoxAfter?.height).toBe(scrollBoxBefore.height);
 
     const composerBox = await page.locator(".workbench-composer").boundingBox();
     const latestBtnBox = await latestBtn.boundingBox();
-    if (!composerBox || !latestBtnBox) throw new Error("Missing boxes for floating button check");
-    expect(latestBtnBox.y + latestBtnBox.height).toBeLessThanOrEqual(composerBox.y + 2);
+    if (!composerBox || !latestBtnBox)
+      throw new Error("Missing boxes for floating button check");
+    expect(latestBtnBox.y + latestBtnBox.height).toBeLessThanOrEqual(
+      composerBox.y + 2,
+    );
 
     // Click floating button to jump to latest
     await latestBtn.click();
     await expect.poll(() => latestBtn.count()).toBe(0);
 
-    // Queue 3 items
+    // Queue 1 item first and verify compact inline layout without giant background block
     await input.fill("first queued draft");
     await input.press("Enter");
+    await expect
+      .poll(() => page.locator(".composer-queue-item").count())
+      .toBe(1);
+    const queueOuterStyle = await page
+      .locator(".composer-queue")
+      .evaluate((el) => {
+        const s = window.getComputedStyle(el);
+        return {
+          backgroundColor: s.backgroundColor,
+          borderTopWidth: s.borderTopWidth,
+          flexDirection: s.flexDirection,
+        };
+      });
+    expect(queueOuterStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(queueOuterStyle.borderTopWidth).toBe("0px");
+    expect(queueOuterStyle.flexDirection).toBe("row");
+
+    await mkdir(resolve(".build/queue-ui"), { recursive: true });
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "dark";
+    });
+    await page
+      .locator(".workbench-composer")
+      .screenshot({
+        path: resolve(".build/queue-ui/queue-1-item-dark.png"),
+        animations: "disabled",
+      });
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "light";
+    });
+    await page
+      .locator(".workbench-composer")
+      .screenshot({
+        path: resolve(".build/queue-ui/queue-1-item-light.png"),
+        animations: "disabled",
+      });
+
+    // Queue 2 more items (total 3 items)
     await input.fill("second to cancel");
     await input.press("Enter");
     await input.fill("third to move first");
     await input.press("Enter");
 
-    await expect.poll(() => page.locator(".composer-queue-item").count()).toBe(3);
-    expect(await page.locator(".composer-queue-title").innerText()).toBe("待发 3 条");
-    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual([
+    await expect
+      .poll(() => page.locator(".composer-queue-item").count())
+      .toBe(3);
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "dark";
+    });
+    await page
+      .locator(".workbench-composer")
+      .screenshot({
+        path: resolve(".build/queue-ui/queue-3-items-dark.png"),
+        animations: "disabled",
+      });
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "light";
+    });
+    await page
+      .locator(".workbench-composer")
+      .screenshot({
+        path: resolve(".build/queue-ui/queue-3-items-light.png"),
+        animations: "disabled",
+      });
+    expect(await page.locator(".composer-queue-title").innerText()).toBe(
+      "待发 3 条",
+    );
+    expect(
+      await page
+        .locator(".composer-queue-item .composer-queue-text")
+        .allInnerTexts(),
+    ).toEqual([
       "first queued draft",
       "second to cancel",
       "third to move first",
     ]);
 
     // 1. Edit first item in place
-    await page.getByRole("button", { name: "编辑第 1 条待发消息", exact: true }).click();
+    await page
+      .getByRole("button", { name: "编辑第 1 条待发消息", exact: true })
+      .click();
     const editInput = page.locator(".composer-queue-edit-input");
     await editInput.waitFor();
     expect(await editInput.inputValue()).toBe("first queued draft");
     await editInput.fill("first queued edited");
     await editInput.press("Enter");
-    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual([
+    expect(
+      await page
+        .locator(".composer-queue-item .composer-queue-text")
+        .allInnerTexts(),
+    ).toEqual([
       "first queued edited",
       "second to cancel",
       "third to move first",
     ]);
 
     // 2. Cancel/remove second item
-    await page.getByRole("button", { name: "取消第 2 条待发消息", exact: true }).click();
-    expect(await page.locator(".composer-queue-title").innerText()).toBe("待发 2 条");
-    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual([
-      "first queued edited",
-      "third to move first",
-    ]);
+    await page
+      .getByRole("button", { name: "取消第 2 条待发消息", exact: true })
+      .click();
+    expect(await page.locator(".composer-queue-title").innerText()).toBe(
+      "待发 2 条",
+    );
+    expect(
+      await page
+        .locator(".composer-queue-item .composer-queue-text")
+        .allInnerTexts(),
+    ).toEqual(["first queued edited", "third to move first"]);
 
     // 3. Drag-and-drop reorder: drag item 2 onto item 1
-    await page.locator(".composer-queue-item").nth(1).dragTo(page.locator(".composer-queue-item").nth(0));
-    expect(await page.locator(".composer-queue-item .composer-queue-text").allInnerTexts()).toEqual([
-      "third to move first",
-      "first queued edited",
-    ]);
+    await page
+      .locator(".composer-queue-item")
+      .nth(1)
+      .dragTo(page.locator(".composer-queue-item").nth(0));
+    expect(
+      await page
+        .locator(".composer-queue-item .composer-queue-text")
+        .allInnerTexts(),
+    ).toEqual(["third to move first", "first queued edited"]);
 
     // Finish initial run and verify queued items execute in the new reordered sequence with edited text
-    await page.evaluate(() => Reflect.get(window, "fixture").finish("11111111-1111-4111-8111-111111111111", "completed"));
-    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(2);
-    await page.evaluate(() => Reflect.get(window, "fixture").finish("11111111-1111-4111-8111-111111111111", "completed"));
-    await expect.poll(() => page.evaluate(() => Reflect.get(window, "fixture").starts.length)).toBe(3);
+    await page.evaluate(() =>
+      Reflect.get(window, "fixture").finish(
+        "11111111-1111-4111-8111-111111111111",
+        "completed",
+      ),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => Reflect.get(window, "fixture").starts.length),
+      )
+      .toBe(2);
+    await page.evaluate(() =>
+      Reflect.get(window, "fixture").finish(
+        "11111111-1111-4111-8111-111111111111",
+        "completed",
+      ),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => Reflect.get(window, "fixture").starts.length),
+      )
+      .toBe(3);
 
     const executedPrompts = await page.evaluate(() =>
-      Reflect.get(window, "fixture").starts.map((item: { prompt: string }) => item.prompt),
+      Reflect.get(window, "fixture").starts.map(
+        (item: { prompt: string }) => item.prompt,
+      ),
     );
     expect(executedPrompts).toEqual([
       "initial task",

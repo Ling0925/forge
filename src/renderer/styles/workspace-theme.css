@@ -193,7 +193,7 @@
 .wb-app .composer-project {
   margin-bottom: var(--space-2);
 }
-.wb-app .composer-status {
+.wb-app .composer-status:not(.composer-queue) {
   align-items: center;
   padding-inline: var(--space-1);
 }
