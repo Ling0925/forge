@@ -1,9 +1,7 @@
 import {
   ArrowClockwise,
-  CaretDown,
   PencilSimple,
   Plus,
-  SlidersHorizontal,
   Trash,
 } from "@phosphor-icons/react";
 import {
@@ -256,9 +254,7 @@ export function ProviderSources({
     sourceId: string;
     sessions: readonly string[];
   }> | null>(null);
-  const [expandedSources, setExpandedSources] = useState<
-    Readonly<Record<string, boolean>>
-  >({});
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [cardDrafts, setCardDrafts] = useState<
     Readonly<
       Record<
@@ -279,6 +275,18 @@ export function ProviderSources({
   const alive = useRef(true);
   const closeConfirmation = useRef<HTMLFieldSetElement>(null);
   const id = useId();
+  const effectiveTabId = useMemo(() => {
+    if (activeTabId && sources.some((item) => item.id === activeTabId)) {
+      return activeTabId;
+    }
+    if (
+      settings?.activeSourceId &&
+      sources.some((item) => item.id === settings.activeSourceId)
+    ) {
+      return settings.activeSourceId;
+    }
+    return sources[0]?.id ?? null;
+  }, [activeTabId, sources, settings?.activeSourceId]);
   const source = sources.find((item) => item.id === selected);
   const dirty = baseline
     ? stableDraft(draft) !== stableDraft(baseline)
@@ -677,6 +685,7 @@ export function ProviderSources({
     );
     if (!saved) return;
     setSelected(saved.id);
+    setActiveTabId(saved.id);
     setDraft(accessDraft(saved));
     setBaseline(accessDraft(saved));
   };
@@ -906,149 +915,228 @@ export function ProviderSources({
       </div>
 
       {sources.length > 0 ? (
-        <ul className="provider-source-list" aria-label="已保存的来源">
-          {sources.map((item) => {
-            const isDefault = settings?.activeSourceId === item.id;
-            const loading = catalogLoading[item.id] ?? false;
-            const catalog = catalogs[item.id];
-            const meta = catalogMeta[item.id];
-            const savedSelection = selectionDraft(item);
-            const cardDraft = cardDrafts[item.id];
-            const effectiveModel = cardDraft?.model ?? item.model;
-            const effectiveSelection = cardDraft?.selection ?? savedSelection;
-            const overrideCount = countModelOverrides(
-              effectiveSelection.overrides,
-            );
-            const cardDirty =
-              cardDraft !== undefined &&
-              JSON.stringify({
-                model: cardDraft.model.trim(),
-                selection: modelSelectionObject(cardDraft.selection),
-              }) !==
-                JSON.stringify({
-                  model: item.model.trim(),
-                  selection: modelSelectionObject(savedSelection),
-                });
-            const isModelsExpanded = expandedSources[item.id] ?? isDefault;
-            const toggleModelsExpanded = () => {
-              const next = !isModelsExpanded;
-              setExpandedSources((old) => ({ ...old, [item.id]: next }));
-              if (
-                next &&
-                catalogs[item.id] === undefined &&
-                !catalogLoading[item.id]
-              ) {
-                void loadCatalog(item.id).catch(() => undefined);
-              }
-            };
-            return (
-              <li
-                key={item.id}
-                className={`provider-source-card${isDefault ? " is-current" : ""}${isModelsExpanded ? " is-models-open" : ""}`}
-              >
-                <div className="provider-source-head">
-                  <span className="provider-source-title">
-                    <strong>{item.label}</strong>
-                    {isDefault && (
-                      <span className="provider-current">默认</span>
-                    )}
-                    <span className="provider-tag">
-                      {item.credentials?.length ?? 1} 凭据
-                    </span>
-                    <span className="provider-tag is-muted">
-                      {item.hasApiKey ? "已保存密钥" : "无密钥"}
-                    </span>
-                    {overrideCount > 0 && (
-                      <span className="provider-tag is-customized">
-                        已定制 {overrideCount} 个模型
-                      </span>
-                    )}
-                    {meta?.stale && catalog && catalog.length > 0 && (
-                      <span className="provider-tag is-stale">已过期</span>
-                    )}
+        <div className="provider-sources-tabbed">
+          <div
+            className="provider-source-tabs"
+            role="tablist"
+            aria-label="模型来源切换"
+          >
+            {sources.map((item, index) => {
+              const isTabActive = item.id === effectiveTabId;
+              const isDefault = settings?.activeSourceId === item.id;
+              const savedSelection = selectionDraft(item);
+              const effectiveSelection =
+                cardDrafts[item.id]?.selection ?? savedSelection;
+              const overrideCount = countModelOverrides(
+                effectiveSelection.overrides,
+              );
+              const hasUnsaved = cardDrafts[item.id] !== undefined;
+              return (
+                <button
+                  key={item.id}
+                  id={`${id}-tab-${item.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isTabActive}
+                  aria-controls={`${id}-panel-${item.id}`}
+                  tabIndex={isTabActive ? 0 : -1}
+                  className={`provider-source-tab${isTabActive ? " is-active" : ""}${isDefault ? " is-current" : ""}`}
+                  onClick={() => setActiveTabId(item.id)}
+                  onKeyDown={(event) => {
+                    if (sources.length <= 1) return;
+                    let nextIndex = -1;
+                    if (event.key === "ArrowRight") {
+                      nextIndex = (index + 1) % sources.length;
+                    } else if (event.key === "ArrowLeft") {
+                      nextIndex = (index - 1 + sources.length) % sources.length;
+                    } else if (event.key === "Home") {
+                      nextIndex = 0;
+                    } else if (event.key === "End") {
+                      nextIndex = sources.length - 1;
+                    }
+                    if (nextIndex >= 0) {
+                      event.preventDefault();
+                      const target = sources[nextIndex];
+                      if (target) {
+                        setActiveTabId(target.id);
+                        document
+                          .getElementById(`${id}-tab-${target.id}`)
+                          ?.focus();
+                      }
+                    }
+                  }}
+                >
+                  <span
+                    className={`provider-source-tab-dot${isDefault ? " is-current" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <span className="provider-source-tab-label">
+                    {item.label}
                   </span>
-                  <span className="provider-source-protocol">
-                    {protocolLabel(item.apiMode)}
-                  </span>
-                </div>
-                <p className="provider-source-url">{item.baseUrl}</p>
-                <p className="provider-source-detail">
-                  默认模型 <code>{effectiveModel || "未选择"}</code>
-                  <span className="model-access-separator">·</span>
-                  {effectiveSelection.mode === "all"
-                    ? "全部模型"
-                    : effectiveSelection.mode === "none"
-                      ? "不提供模型"
-                      : `${effectiveSelection.models.length} 个模型`}
-                  {catalogLoading[item.id] && (
-                    <span className="model-access-separator">· 加载中</span>
-                  )}
-                  {catalog && (
-                    <span className="model-access-separator">
-                      · 目录 {catalog.length}
+                  {isDefault && (
+                    <span className="provider-source-tab-badge is-default">
+                      默认
                     </span>
                   )}
-                </p>
-                {catalogErrors[item.id] && (
-                  <p className="provider-feedback provider-error" role="alert">
-                    {catalogErrors[item.id]}
-                  </p>
-                )}
-                <div className="provider-source-actions">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={<PencilSimple size={14} />}
-                    aria-label={`编辑${item.label}`}
-                    disabled={busy}
-                    onClick={() => openEditor(item.id)}
-                  >
-                    编辑
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={<ArrowClockwise size={14} />}
-                    aria-label={`刷新${item.label}的模型`}
-                    loading={loading || catalogLoading[item.id] === true}
-                    disabled={busy}
-                    onClick={() =>
-                      void operation(async () => {
-                        const loaded = await loadCatalog(item.id, true);
-                        return refreshNotice(loaded);
-                      })
-                    }
-                  >
-                    刷新模型
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className={`provider-models-toggle${isModelsExpanded ? " is-open" : ""}`}
-                    icon={<SlidersHorizontal size={14} />}
-                    aria-expanded={isModelsExpanded}
-                    aria-label={`配置${item.label}的模型参数`}
-                    disabled={busy}
-                    onClick={toggleModelsExpanded}
-                  >
-                    {isModelsExpanded ? "收起模型参数" : "模型参数配置"}
-                    <CaretDown size={12} aria-hidden="true" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="provider-delete"
-                    icon={<Trash size={14} />}
-                    disabled={busy}
-                    onClick={() =>
-                      setConfirmRemove({ sourceId: item.id, sessions: [] })
-                    }
-                  >
-                    删除
-                  </Button>
-                </div>
+                  {overrideCount > 0 && (
+                    <span
+                      className="provider-source-tab-badge is-custom"
+                      title={`已定制 ${overrideCount} 个模型`}
+                    >
+                      {overrideCount}
+                    </span>
+                  )}
+                  {hasUnsaved && (
+                    <span
+                      className="provider-source-tab-unsaved"
+                      title="有未保存的模型配置"
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-                {isModelsExpanded && (
+          <ul className="provider-source-list" aria-label="已保存的来源">
+            {sources.map((item) => {
+              const isTabActive = item.id === effectiveTabId;
+              const isDefault = settings?.activeSourceId === item.id;
+              const loading = catalogLoading[item.id] ?? false;
+              const catalog = catalogs[item.id];
+              const meta = catalogMeta[item.id];
+              const savedSelection = selectionDraft(item);
+              const cardDraft = cardDrafts[item.id];
+              const effectiveModel = cardDraft?.model ?? item.model;
+              const effectiveSelection = cardDraft?.selection ?? savedSelection;
+              const overrideCount = countModelOverrides(
+                effectiveSelection.overrides,
+              );
+              const cardDirty =
+                cardDraft !== undefined &&
+                JSON.stringify({
+                  model: cardDraft.model.trim(),
+                  selection: modelSelectionObject(cardDraft.selection),
+                }) !==
+                  JSON.stringify({
+                    model: item.model.trim(),
+                    selection: modelSelectionObject(savedSelection),
+                  });
+
+              return (
+                <li
+                  key={item.id}
+                  id={`${id}-panel-${item.id}`}
+                  hidden={!isTabActive}
+                  className={`provider-source-card${isDefault ? " is-current" : ""}${isTabActive ? " is-active-tab" : ""}`}
+                >
+                  <div className="provider-source-summary-bar">
+                    <div className="provider-source-summary-info">
+                      <div className="provider-source-head">
+                        <span className="provider-source-title">
+                          <strong>{item.label}</strong>
+                          {isDefault && (
+                            <span className="provider-current">默认</span>
+                          )}
+                          <span className="provider-tag">
+                            {item.credentials?.length ?? 1} 凭据
+                          </span>
+                          <span className="provider-tag is-muted">
+                            {item.hasApiKey ? "已保存密钥" : "无密钥"}
+                          </span>
+                          {overrideCount > 0 && (
+                            <span className="provider-tag is-customized">
+                              已定制 {overrideCount} 个模型
+                            </span>
+                          )}
+                          {meta?.stale && catalog && catalog.length > 0 && (
+                            <span className="provider-tag is-stale">
+                              已过期
+                            </span>
+                          )}
+                        </span>
+                        <span className="provider-source-protocol">
+                          {protocolLabel(item.apiMode)}
+                        </span>
+                      </div>
+                      <div className="provider-source-meta-line">
+                        <span className="provider-source-url">
+                          {item.baseUrl}
+                        </span>
+                        <span className="model-access-separator">·</span>
+                        <span className="provider-source-detail">
+                          默认模型 <code>{effectiveModel || "未选择"}</code>
+                          <span className="model-access-separator">·</span>
+                          {effectiveSelection.mode === "all"
+                            ? "全部模型"
+                            : effectiveSelection.mode === "none"
+                              ? "不提供模型"
+                              : `${effectiveSelection.models.length} 个模型`}
+                          {catalogLoading[item.id] && (
+                            <span className="model-access-separator">
+                              · 加载中
+                            </span>
+                          )}
+                          {catalog && (
+                            <span className="model-access-separator">
+                              · 目录 {catalog.length}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="provider-source-actions">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<PencilSimple size={14} />}
+                        aria-label={`编辑${item.label}`}
+                        disabled={busy}
+                        onClick={() => openEditor(item.id)}
+                      >
+                        编辑来源
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={<ArrowClockwise size={14} />}
+                        aria-label={`刷新${item.label}的模型`}
+                        loading={loading || catalogLoading[item.id] === true}
+                        disabled={busy}
+                        onClick={() =>
+                          void operation(async () => {
+                            const loaded = await loadCatalog(item.id, true);
+                            return refreshNotice(loaded);
+                          })
+                        }
+                      >
+                        刷新目录
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="provider-delete"
+                        icon={<Trash size={14} />}
+                        disabled={busy}
+                        onClick={() =>
+                          setConfirmRemove({ sourceId: item.id, sessions: [] })
+                        }
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  </div>
+
+                  {catalogErrors[item.id] && (
+                    <p
+                      className="provider-feedback provider-error"
+                      role="alert"
+                    >
+                      {catalogErrors[item.id]}
+                    </p>
+                  )}
+
                   <SourceCardModelPanel
                     sourceLabel={item.label}
                     catalog={catalog ?? []}
@@ -1098,11 +1186,11 @@ export function ProviderSources({
                     }}
                     onSave={() => void saveCardModelConfig(item)}
                   />
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       ) : (
         <p className="provider-empty">无来源。</p>
       )}

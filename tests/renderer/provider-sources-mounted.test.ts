@@ -393,7 +393,8 @@ it("adds sources from presets, keeps drafts, reports stale catalogs and cancels 
     expect(await page.getByRole("dialog").count()).toBe(0);
     await page.evaluate(() => Reflect.set(window, "conflict", false));
 
-    // A stale refresh keeps the previous catalog and is not reported as success.
+    // Switch back to Source A tab; a stale refresh keeps the previous catalog and is not reported as success.
+    await page.getByRole("tab", { name: /源 A/ }).click();
     await page.evaluate(() => Reflect.set(window, "stale", true));
     await page.getByRole("button", { name: "刷新源 A的模型" }).click();
     await page
@@ -475,11 +476,24 @@ it("adds sources from presets, keeps drafts, reports stale catalogs and cancels 
     await page.getByRole("button", { name: "保存来源" }).click();
     await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
 
-    // Inline source card reflects the saved overrides and allows direct quick/detailed editing.
+    // Tabbed source panel reflects saved overrides, shows only configured model cards by default,
+    // and allows adding another model from the catalog on demand.
     const cardA = page.locator(".provider-source-card", { hasText: "源 A" });
     await expect.poll(() => cardA.innerText()).toContain("已定制 1 个模型");
-    await page.getByLabel("模型 a/two 思考等级").selectOption("xhigh");
-    await page.getByLabel("模型 a/two 上下文预设").selectOption("200000");
+    expect(await cardA.locator(".configured-model-card").count()).toBe(1);
+    await page.getByRole("button", { name: "添加源 A的配置模型" }).click();
+    await page
+      .getByRole("button", { name: "添加模型 a/two 到配置卡片" })
+      .click();
+    expect(await cardA.locator(".configured-model-card").count()).toBe(2);
+    const cardATwo = cardA.locator(".configured-model-card", {
+      hasText: "a/two",
+    });
+    await cardATwo
+      .getByRole("group", { name: "模型 a/two 默认思考等级" })
+      .getByRole("button", { name: "xhigh", exact: true })
+      .click();
+    await cardATwo.getByRole("button", { name: "200K", exact: true }).click();
     await page.getByRole("button", { name: "保存源 A的模型配置" }).click();
     await expect.poll(() => cardA.innerText()).toContain("已定制 2 个模型");
     const lastSavedOverrides = await page.evaluate(() => {
