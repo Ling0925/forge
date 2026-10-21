@@ -112,12 +112,12 @@ beforeAll(async () => {
 
 afterAll(async () => { await browser?.close(); });
 
-async function mount(): Promise<Page> {
+async function mount(snapshots: readonly SessionSnapshot[] = fixtures): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.setDefaultTimeout(5000);
   const store = {
-    list: async () => fixtures,
-    get: async (id: string) => fixtures.find(snapshot => snapshot.id === id),
+    list: async () => snapshots,
+    get: async (id: string) => snapshots.find(snapshot => snapshot.id === id),
   } as unknown as SessionStore;
   const pricing = createModelPricingService({ fetch: async () => Response.json({ vendor: { models: {
     "gpt-6-astra": { cost: { input: 3, output: 15, cache_read: 0.3 } },
@@ -312,3 +312,51 @@ it("renders full-screen usage dashboard charts, cost mode switch, and back butto
   } finally { await page.close(); }
 }, 30000);
 
+it("shows all historical and actual models with exact cost subtotals, unknown prices and partial coverage", async () => {
+  const tokens = { promptTokens: 120, completionTokens: 80, cachedPromptTokens: 30, totalTokens: 200 };
+  const page = await mount([makeSnapshot([
+    { type: "run_started", sessionId: sessionA, model: "gpt-6-astra", permission: "readonly", timestamp: stamp(-240) },
+    { type: "run_finished", sessionId: sessionA, status: "completed", turns: 1, toolCalls: 0, timestamp: stamp(-239), usage: tokens },
+    { type: "run_started", sessionId: sessionA, model: "route-group", permission: "readonly", timestamp: stamp(-3) },
+    event("succeeded", -2, 1, { usage: tokens }),
+    event("succeeded", -1.9, 2, { usage: tokens }),
+    event("failed", -1.8, 3, { errorCode: "rate_limit" }),
+    event("succeeded", -1.7, 4, { model: "relay:vendor/gpt-6-astra", usage: {
+      promptTokens: 360, completionTokens: 240, cachedPromptTokens: 90, totalTokens: 600,
+    } }),
+    event("succeeded", -1.6, 5, { model: "unpriced-model", usage: tokens }),
+    event("succeeded", -1.5, 6, { model: "old/model", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }),
+  ], { model: "latest-unused-model", status: "completed" })]);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  try {
+    const rows = page.locator(".usage-model-item");
+    await expect.poll(() => rows.count()).toBe(5);
+    const row = (model: string) => rows.filter({ has: page.locator(`.usage-model-name[title="${model}"]`) });
+    expect(await row("source:vendor/gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.0030（部分）");
+    expect(await row("source:vendor/gpt-6-astra").locator(".usage-model-cost-tag").getAttribute("title")).toContain("2 / 3 次请求");
+    expect(await row("relay:vendor/gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.0044");
+    expect(await row("gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("费用未知");
+    expect(await row("unpriced-model").locator(".usage-model-cost-tag").innerText()).toBe("费用未知");
+    expect(await row("old/model").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.00");
+    expect(await row("latest-unused-model").count()).toBe(0);
+    expect(await row("route-group").count()).toBe(0);
+    expect(await page.locator(".usage-kpi-card").filter({ hasText: "预估总费用 (USD)" }).innerText()).toContain("$0.0074");
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1080 });
+      await row("source:vendor/gpt-6-astra").scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: `.build/usage-requests/browser/model-accounting-${width}.png` });
+    }
+    await page.getByLabel("时间周期筛选").selectOption("7");
+    await expect.poll(() => rows.count()).toBe(4);
+    expect(await row("gpt-6-astra").count()).toBe(0);
+    expect(await row("source:vendor/gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.0030（部分）");
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    await expect.poll(() => page.locator(".usage-request-row").count()).toBe(6);
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    await expect.poll(() => rows.count()).toBe(4);
+    expect(errors).toEqual([]);
+  } finally { await page.close(); }
+}, 30000);

@@ -644,11 +644,12 @@ export function UsageDashboard() {
                     <div className="usage-kpi-sub">
                       {requestAnalytics.pricedCount > 0 ? (
                         <span>
-                          已计价 {requestAnalytics.pricedCount} /{" "}
-                          {requests.length} 次请求
+                          {data.models.some(model => model.costIncomplete)
+                            ? "部分计价 " : "已计价 "}
+                          {requestAnalytics.pricedCount} / {requests.length} 次请求
                         </span>
                       ) : (
-                        <span>未匹配已知定价模型</span>
+                        <span>缺少价格或请求明细，费用未知</span>
                       )}
                     </div>
                   </div>
@@ -1112,13 +1113,6 @@ export function UsageDashboard() {
                             mUncached + mCached + mComp,
                             1,
                           );
-                          const perf =
-                            requestAnalytics.modelPerf.get(m.model) ??
-                            requestAnalytics.modelPerfList.find(
-                              (item) =>
-                                shortModelName(item.model) ===
-                                shortModelName(m.model),
-                            );
 
                           return (
                             <div key={m.model} className="usage-model-item">
@@ -1171,14 +1165,20 @@ export function UsageDashboard() {
                                 </span>
                                 <span>·</span>
                                 <span>{m.runCount} 次运行</span>
-                                {perf?.totalCostUsd !== undefined && (
-                                  <>
-                                    <span>·</span>
-                                    <span className="usage-model-cost-tag">
-                                      {formatCostUsd(perf.totalCostUsd)}
-                                    </span>
-                                  </>
+                                {(m.requestCount ?? 0) > 0 && (
+                                  <span>· {m.requestCount} 次请求</span>
                                 )}
+                                <span>·</span>
+                                <span
+                                  className="usage-model-cost-tag"
+                                  title={m.estimatedCostUsd === undefined
+                                    ? "缺少价格或请求明细，费用未知，不代表免费"
+                                    : `按当前公开价格估算（USD）；已计价 ${m.pricedRequestCount ?? 0} / ${m.requestCount ?? 0} 次请求${m.costIncomplete ? "；不含缺少价格、用量或请求明细的记录" : ""}`}
+                                >
+                                  {m.estimatedCostUsd === undefined
+                                    ? "费用未知"
+                                    : `预估 ${formatCostUsd(m.estimatedCostUsd)}${m.costIncomplete ? "（部分）" : ""}`}
+                                </span>
                               </div>
                             </div>
                           );
@@ -1259,6 +1259,7 @@ export function UsageDashboard() {
                                   {perf.totalCostUsd !== undefined && (
                                     <span className="usage-mono usage-cost-pill">
                                       {formatCostUsd(perf.totalCostUsd)}
+                                      {perf.pricedCount < perf.requestCount ? "（部分）" : ""}
                                     </span>
                                   )}
                                 </div>
