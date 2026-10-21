@@ -174,7 +174,7 @@ export function UsageDashboard() {
     return Array.from(set);
   }, [state.sessions]);
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (refreshPrices = false) => {
     if (!window.forge?.getUsageStats) return;
     const version = ++requestVersion.current;
     setLoading(true);
@@ -183,6 +183,7 @@ export function UsageDashboard() {
       const filter: UsageFilter = {
         days: daysFilter,
         workspace: workspaceFilter,
+        ...(refreshPrices ? { refreshPrices: true } : {}),
       };
       const res = await window.forge.getUsageStats(filter);
       if (version === requestVersion.current) setData(res);
@@ -536,11 +537,22 @@ export function UsageDashboard() {
             </div>
 
             <div className="usage-dashboard-actions">
+              {data?.pricing && data.pricing.state !== "ready" && (
+                <span
+                  className="usage-pricing-status"
+                  role="status"
+                  title={data.pricing.state === "unavailable"
+                    ? "公开价格目录加载失败；点击刷新立即重试，不代表所有模型都没有定价"
+                    : `价格更新失败，继续使用 ${data.pricing.fetchedAt ?? "此前"} 获取的缓存；点击刷新重试`}
+                >
+                  {data.pricing.state === "unavailable" ? "价格加载失败" : "使用缓存价格"}
+                </span>
+              )}
               {/* Refresh */}
               <button
                 type="button"
                 className={`usage-dashboard-btn usage-dashboard-btn-icon ${loading ? "refreshing" : ""}`}
-                onClick={fetchStats}
+                onClick={() => void fetchStats(true)}
                 title="刷新统计数据"
                 aria-label="刷新统计数据"
                 disabled={loading}
@@ -571,7 +583,7 @@ export function UsageDashboard() {
                 <button
                   type="button"
                   className="usage-dashboard-btn"
-                  onClick={fetchStats}
+                  onClick={() => void fetchStats(true)}
                 >
                   重试
                 </button>
@@ -649,7 +661,9 @@ export function UsageDashboard() {
                           {requestAnalytics.pricedCount} / {requests.length} 次请求
                         </span>
                       ) : (
-                        <span>缺少价格或请求明细，费用未知</span>
+                        <span>{data.pricing?.state === "unavailable"
+                          ? "价格目录加载失败，点击刷新重试"
+                          : "缺少价格或请求明细，费用未知"}</span>
                       )}
                     </div>
                   </div>
@@ -1172,11 +1186,13 @@ export function UsageDashboard() {
                                 <span
                                   className="usage-model-cost-tag"
                                   title={m.estimatedCostUsd === undefined
-                                    ? "缺少价格或请求明细，费用未知，不代表免费"
+                                    ? (data.pricing?.state === "unavailable"
+                                      ? "公开价格目录加载失败，点击刷新重试"
+                                      : "缺少价格或请求明细，费用未知，不代表免费")
                                     : `按当前公开价格估算（USD）；已计价 ${m.pricedRequestCount ?? 0} / ${m.requestCount ?? 0} 次请求${m.costIncomplete ? "；不含缺少价格、用量或请求明细的记录" : ""}`}
                                 >
                                   {m.estimatedCostUsd === undefined
-                                    ? "费用未知"
+                                    ? (data.pricing?.state === "unavailable" ? "价格未加载" : "费用未知")
                                     : `预估 ${formatCostUsd(m.estimatedCostUsd)}${m.costIncomplete ? "（部分）" : ""}`}
                                 </span>
                               </div>

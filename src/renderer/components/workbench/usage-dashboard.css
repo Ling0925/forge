@@ -171,6 +171,12 @@
   flex-shrink: 0;
 }
 
+.usage-pricing-status {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
 .usage-filter-select {
   height: 32px;
   padding: 0 10px;

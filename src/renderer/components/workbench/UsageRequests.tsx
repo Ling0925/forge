@@ -28,7 +28,7 @@ const costUsd = (value: number | undefined) => {
   return "<$0.0001";
 };
 const reasoningEffort = (value: UsageRequest["reasoningEffort"]) =>
-  value === "default" ? "模型默认" : value === "max" ? "MAX" : value ?? "—";
+  value === "default" ? "模型默认" : value === "max" ? "MAX" : value ?? "未记录";
 const outcome = (request: UsageRequest) => {
   if (request.outcome === "started") return "请求中";
   if (request.outcome === "succeeded") return "成功";
@@ -319,7 +319,7 @@ export function UsageRequests({
                       <td
                         className="usage-mono usage-request-reasoning"
                         title={request.reasoningEffort === undefined
-                          ? "此请求未记录思考等级"
+                          ? "此请求未保存思考等级，不能用当前设置还原；旧版 Web/CLI 需更新并重启，才能记录新请求"
                           : "请求时配置的思考等级；供应商可能映射或忽略此设置"}
                       >
                         {reasoningEffort(request.reasoningEffort)}

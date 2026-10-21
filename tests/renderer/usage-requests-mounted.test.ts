@@ -1,10 +1,14 @@
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { build } from "esbuild";
 import { chromium, type Browser, type Page } from "playwright";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { createHarness } from "../../src/core/harness";
+import { openSessionStore } from "../../src/store/sessions";
 import { createUsageStatsService } from "../../src/core/usage-stats";
-import { createModelPricingService } from "../../src/core/model-pricing";
+import { createModelPricingService, type ModelPricingService } from "../../src/core/model-pricing";
 import type { SessionStore } from "../../src/shared/contracts";
 import type { UsageFilter } from "../../src/shared/ipc";
 import { sessionIdSchema, type AgentEvent, type SessionSnapshot } from "../../src/shared/schemas";
@@ -114,14 +118,14 @@ beforeAll(async () => {
 
 afterAll(async () => { await browser?.close(); });
 
-async function mount(snapshots: readonly SessionSnapshot[] = fixtures): Promise<Page> {
+async function mount(snapshots: readonly SessionSnapshot[] = fixtures, pricingService?: ModelPricingService): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.setDefaultTimeout(5000);
   const store = {
     list: async () => snapshots,
     get: async (id: string) => snapshots.find(snapshot => snapshot.id === id),
   } as unknown as SessionStore;
-  const pricing = createModelPricingService({ fetch: async () => Response.json({ vendor: { models: {
+  const pricing = pricingService ?? createModelPricingService({ fetch: async () => Response.json({ vendor: { models: {
     "gpt-6-astra": { cost: { input: 3, output: 15, cache_read: 0.3 } },
     "model": { cost: { input: 3, output: 15 } },
   } } }) });
@@ -168,8 +172,8 @@ it("moves individual request metadata into a tab with details and session naviga
     expect(await rows.nth(2).locator(".usage-request-tokens > span").first().innerText()).toBe("120 / 80");
     expect(await rows.nth(2).locator(".usage-request-cache").innerText()).toBe("缓存 30");
     expect(await rows.nth(1).locator(".usage-request-cache").innerText()).toBe("缓存 —");
-    expect(await rows.locator(".usage-request-reasoning").allTextContents()).toEqual(["模型默认", "none", "high", "—"]);
-    expect(await rows.nth(3).locator(".usage-request-reasoning").getAttribute("title")).toBe("此请求未记录思考等级");
+    expect(await rows.locator(".usage-request-reasoning").allTextContents()).toEqual(["模型默认", "none", "high", "未记录"]);
+    expect(await rows.nth(3).locator(".usage-request-reasoning").getAttribute("title")).toContain("旧版 Web/CLI 需更新并重启");
     expect(await rows.nth(2).locator("td").nth(7).innerText()).toBe("2.00 s");
     expect(await rows.nth(2).locator("td").nth(8).innerText()).toBe("40.0 tok/s");
     expect(await rows.nth(2).locator("td").nth(9).innerText()).toBe("$0.0015");
@@ -242,13 +246,105 @@ it("shows every reasoning level, distinguishes default from unrecorded, and keep
     const rows = page.locator(".usage-request-row");
     await expect.poll(() => rows.count()).toBe(9);
     expect(await rows.locator(".usage-request-reasoning").allTextContents())
-      .toEqual(["—", "MAX", "xhigh", "high", "medium", "low", "minimal", "none", "模型默认"]);
+      .toEqual(["未记录", "MAX", "xhigh", "high", "medium", "low", "minimal", "none", "模型默认"]);
     expect(await rows.locator(".usage-request-cache").allTextContents()).toEqual(Array(9).fill("缓存 0"));
     expect(await rows.nth(0).locator("td").count()).toBe(11);
     await rows.nth(0).getByRole("button", { name: "详情", exact: true }).click();
-    expect(await page.locator(".usage-request-details div").filter({ has: page.getByText("思考等级", { exact: true }) }).locator("dd").innerText()).toBe("—");
+    expect(await page.locator(".usage-request-details div").filter({ has: page.getByText("思考等级", { exact: true }) }).locator("dd").innerText()).toBe("未记录");
   } finally { await page.close(); }
 });
+
+it("shows download failures in both tabs and retries prices immediately from the refresh button", async () => {
+  const fetcher = vi.fn<typeof fetch>().mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue(Response.json({ lab: { models: { "gpt-6-astra": { cost: { input: 3, output: 15 } } } } }));
+  const page = await mount(fixtures, createModelPricingService({ fetch: fetcher }));
+  try {
+    expect(await page.getByRole("status").innerText()).toBe("价格加载失败");
+    expect(await page.locator(".usage-model-cost-tag").allTextContents()).toContain("价格未加载");
+    await page.setViewportSize({ width: 390, height: 900 });
+    expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    expect(await page.getByRole("status").innerText()).toBe("价格加载失败");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    await expect.poll(() => page.getByRole("status").count()).toBe(0);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(await page.evaluate(() => (window as unknown as { filters: UsageFilter[] }).filters.at(-1)))
+      .toMatchObject({ refreshPrices: true });
+    expect(await page.locator(".usage-request-row").nth(2).locator("td").nth(9).innerText()).toBe("$0.0016");
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
+    expect(await page.locator(".usage-model-cost-tag").allTextContents()).not.toContain("价格未加载");
+    expect(await page.locator(".usage-model-cost-tag").allTextContents()).toContain("费用未知");
+  } finally { await page.close(); }
+});
+
+it("labels stale prices without hiding still-usable estimates", async () => {
+  let now = Date.now();
+  const fetcher = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json({ lab: { models: { "gpt-6-astra": { cost: { input: 3, output: 15 } } } } }))
+    .mockRejectedValue(new Error("offline"));
+  const pricing = createModelPricingService({ fetch: fetcher, now: () => now });
+  await pricing.getPrices();
+  now += 24 * 3600000;
+  const page = await mount(fixtures, pricing);
+  try {
+    expect(await page.getByRole("status").innerText()).toBe("使用缓存价格");
+    expect(await page.locator(".usage-model-cost-tag").allTextContents()).toContain("预估 $0.0016（部分）");
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    expect(await page.locator(".usage-request-row").nth(2).locator("td").nth(9).innerText()).toBe("$0.0016");
+  } finally { await page.close(); }
+});
+
+it("renders effort from a real HTTP request after event persistence rather than current UI settings", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forge-usage-wire-"));
+  const sentEfforts: unknown[] = [];
+  const server = createServer(async (request, response) => {
+    if (request.url?.endsWith("/models")) {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ data: [{ id: "gpt-6-astra", context_window: 100000 }] }));
+      return;
+    }
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString());
+    sentEfforts.push(body.reasoning_effort);
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "OK" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 } })}\n\ndata: [DONE]\n\n`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing fixture address");
+  let service: Awaited<ReturnType<typeof createHarness>> | undefined;
+  let page: Page | undefined;
+  try {
+    service = await createHarness({ stateDir: join(root, "home"), toolFactory: async () => ({
+      definitions: [], execute: async () => ({ content: "", isError: false }), dispose: async () => {},
+    }) });
+    await service.updateSettings({ settings: { reasoningEffort: "high" } });
+    await service.updateSettings({ source: { type: "save", apiKey: "", source: {
+      id: "wire", label: "Wire fixture", baseUrl: `http://127.0.0.1:${address.port}/v1`, model: "gpt-6-astra", apiMode: "chat-completions",
+    } } });
+    const session = await service.createSession({ workspace: root, title: "Wire fixture", providerSourceId: "wire" });
+    const result = await service.run({ sessionId: session.id, prompt: "hello", permission: "readonly" },
+      () => {}, async () => false, new AbortController().signal);
+    expect(result.status).toBe("completed");
+    expect(sentEfforts).toEqual(["high"]);
+    await service.updateSettings({ settings: { reasoningEffort: "max" } });
+    const persisted = await (await openSessionStore(join(root, "home"))).get(session.id);
+    page = await mount([persisted]);
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    await expect.poll(() => page!.locator(".usage-request-row").count()).toBe(1);
+    expect(await page.locator(".usage-request-reasoning").innerText()).toBe("high");
+    await page.getByRole("button", { name: "详情", exact: true }).click();
+    expect(await page.locator(".usage-request-details div").filter({ has: page.getByText("思考等级", { exact: true }) }).locator("dd").innerText()).toBe("high");
+  } finally {
+    await page?.close();
+    await service?.dispose();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30000);
 
 it("formats zero speed, ordinary and tiny costs, and older rows without metrics", async () => {
   const page = await mount();
