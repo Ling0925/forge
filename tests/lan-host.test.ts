@@ -1,4 +1,3 @@
-import { openDeviceAuthorization } from "../src/store/devices";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { request } from "node:http";
@@ -184,7 +183,7 @@ describe("LAN host", () => {
     const { directory, service, runtime } = await setup();
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
-    const lan = await startLanServer({ trustedLan: true, runtime, host: "127.0.0.1", port, workspace: directory,
+    const lan = await startLanServer({ runtime, host: "127.0.0.1", port, workspace: directory,
       restrictWorkspace: true, rendererRoot: await emptyRenderer(directory) });
     cleanup.push(() => lan.close());
     const session = await service.createSession({ workspace: directory, title: "Shared host" });
@@ -217,7 +216,7 @@ describe("LAN host", () => {
     const rendererRoot = await emptyRenderer(directory);
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
-    const lan = await startLanServer({ trustedLan: true,
+    const lan = await startLanServer({
       runtime,
       host: "127.0.0.1",
       port,
@@ -311,7 +310,7 @@ describe("LAN host", () => {
     if (!rendererRoot) throw new Error("missing renderer");
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
-    const lan = await startLanServer({ trustedLan: true,
+    const lan = await startLanServer({
       runtime,
       host: "127.0.0.1",
       port,
@@ -366,7 +365,7 @@ describe("LAN host", () => {
     const rendererRoot = await emptyRenderer(directory);
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
-    const lan = await startLanServer({ trustedLan: true,
+    const lan = await startLanServer({
       runtime,
       host: "127.0.0.1",
       port,
@@ -421,7 +420,7 @@ describe("LAN host", () => {
     const other = await mkdtemp(join(tmpdir(), "forge-lan-restricted-"));
     cleanup.push(() => rm(other, { recursive: true, force: true }));
     const port = await freePort();
-    const web = await createWebHost({ trustedLan: true,
+    const web = await createWebHost({
       service,
       workspace: directory,
       host: "127.0.0.1",
@@ -476,7 +475,7 @@ describe("LAN host", () => {
     const controller = createLanHostController({
       report,
       start: (input) =>
-        startLanServer({ trustedLan: true,
+        startLanServer({
           ...input,
           runtime,
           rendererRoot,
@@ -500,7 +499,7 @@ describe("LAN host", () => {
     expect(controller.status().url).toBeNull();
     // The port is free again: nothing was left half-bound.
     await expect(
-      startLanServer({ trustedLan: true,
+      startLanServer({
         runtime,
         host: "127.0.0.1",
         port: ports[0] as number,
@@ -519,7 +518,7 @@ describe("LAN host", () => {
     const controller = createLanHostController({
       report: () => {},
       start: (input) =>
-        startLanServer({ trustedLan: true,
+        startLanServer({
           ...input,
           runtime,
           rendererRoot,
@@ -603,7 +602,7 @@ describe("LAN host", () => {
   it("leaves a caller-owned runtime alive when the Web host closes", async () => {
     const { directory, runtime } = await setup();
     const port = await freePort();
-    const web = await createWebHost({ trustedLan: true,
+    const web = await createWebHost({
       runtime,
       workspace: directory,
       host: "127.0.0.1",
@@ -633,7 +632,7 @@ describe("LAN host", () => {
     );
   });
 
-  it.each([false, true])("starts/stops the real shared worker with trusted LAN = %s", async (trustedLan) => {
+  it.each(["", "0", "1"])("starts/stops the real shared worker directly regardless of legacy FORGE_TRUSTED_LAN=%s", async (legacyValue) => {
     // The real worker entry point, bundled to a temp dir so its sibling
     // `../renderer` is a directory this test controls.
     const root = await mkdtemp(join(tmpdir(), "forge-lan-worker-"));
@@ -667,7 +666,7 @@ describe("LAN host", () => {
     const state = join(root, "state");
     const { Worker } = await import("node:worker_threads");
     const child = new Worker(join(desktop, "worker.cjs"), {
-      env: { ...process.env, FORGE_HOME: state, FORGE_TRUSTED_LAN: trustedLan ? "1" : "" },
+      env: { ...process.env, FORGE_HOME: state, FORGE_TRUSTED_LAN: legacyValue },
     });
     cleanup.push(() => child.terminate());
     type Message = {
@@ -718,17 +717,8 @@ describe("LAN host", () => {
     // The same runtime serves the page: a session created over HTTP is visible
     // to the worker's controller, and events from it reach the parent.
     const origin = started.url as string;
-    let credential: Record<string, string> = {};
-    if (!trustedLan) {
-      expect((await call(`${origin}/api/connect`, { method: "POST", headers: headers(origin), body: "{}" })).status).toBe(401);
-      const authorization = await openDeviceAuthorization({ directory: state });
-      cleanup.push(() => authorization.close());
-      const invitation = await authorization.createPairing("isolated worker fixture");
-      const exchange = await call(`${origin}/api/pair`, { method: "POST", headers: headers(origin), body: JSON.stringify({ token: invitation.token }) });
-      expect(exchange.status).toBe(200);
-      credential = { Authorization: `Bearer ${(await exchange.json()).credential}` };
-    }
-    const connected = await call(`${origin}/api/connect`, { method: "POST", headers: { ...headers(origin), ...credential }, body: "{}" });
+    const connected = await call(`${origin}/api/connect`, { method: "POST", headers: { ...headers(origin) }, body: "{}" });
+    expect(connected.status).toBe(200);
     const handshake = await connected.json();
     const created = z
       .object({ ok: z.literal(true), result: z.object({ id: z.string() }) })
@@ -736,7 +726,7 @@ describe("LAN host", () => {
         await (
           await call(`${origin}/api/rpc`, {
             method: "POST",
-            headers: { ...headers(origin, handshake.clientId), ...credential },
+            headers: { ...headers(origin, handshake.clientId) },
             body: JSON.stringify({
               id: randomUUID(),
               method: "createSession",
@@ -748,7 +738,7 @@ describe("LAN host", () => {
     expect(created.result.id).toEqual(expect.any(String));
     const fetched = await call(`${origin}/api/pairing`, {
       method: "POST",
-      headers: { ...headers(origin, handshake.clientId), ...credential },
+      headers: { ...headers(origin, handshake.clientId) },
       body: "{}",
     });
     expect(await fetched.json()).toEqual({ url: origin, workspace });

@@ -10,7 +10,7 @@ Android 扫码连接、桌面内开启的共享局域网核心，以及不依赖
 pnpm dev:web --host 192.168.8.108 --port 5173 --workspace /home/ling/services/desktop-harness
 ```
 
-请替换成本机实际局域网 IPv4 和项目目录。不传参数时只监听 `127.0.0.1:5173`，工作区为当前目录。必须指定单个 IPv4，不能用 `0.0.0.0`。服务启动后打印访问地址，默认要求设备授权。先按 [LAN 设备授权](LAN_AUTHORIZATION.md) 使用同一 `FORGE_HOME` 的 `forge devices pair` 交换一次性凭证；需要旧的完全信任 LAN 模式时，必须显式添加 `--trusted-lan`。
+请替换成本机实际局域网 IPv4 和项目目录。不传参数时只监听 `127.0.0.1:5173`，工作区为当前目录。必须指定单个 IPv4，不能用 `0.0.0.0`。服务启动后打印访问地址，浏览器打开或 Android 扫码即可直接接入，无需邀请码、设备授权或本机确认。无需 `--trusted-lan` 开关。
 
 运行时使用现有 Harness 默认配置与存储（尊重 `FORGE_HOME`），API 密钥留在 Node 后端，不发送回浏览器。没有配置模型时，在共享设置页配置。`dev:web` 会话列表显示同一存储中的所有项目，可查看、操作其他工作区的会话。新任务的“服务器工作区”输入框可修改为服务器上的其他项目绝对路径；`--workspace` 只指定默认目录，不限制会话范围，路径不是浏览器所在机器的目录。正式 `serve:web` 仍限制到启动工作区，桌面文件导出在 Web 中禁用。
 
@@ -89,7 +89,7 @@ Web 工作台可以把两类 HTML 渲染成真实页面：会话中围栏标记�
 
 ## 访问边界
 
-默认设备授权与显式免认证兼容模式的边界、配对步骤、撤销和生命周期见 [LAN 设备授权](LAN_AUTHORIZATION.md)。这仍是本地/可信网络中的单用户 HTTP 入口，不是公网部署方案、多租户服务或 OS 沙箱。设备授权不加密 HTTP 传输；工具权限与审批仍由核心执行。
+直连范围和生命周期见 [LAN 直接接入](LAN_AUTHORIZATION.md)。这是个人局域网中的单用户 HTTP 入口，不是公网部署方案、多租户服务或 OS 沙箱。网络可达范围由用户管理；工具权限与审批保持原设置。
 
 HTTP 和事件 WebSocket 保留精确 Host/Origin、JSON POST、页面标识、游标及大小限制。Vite HMR 是独立的开发连接与 token 边界；开发 HTML 的 CSP 为 HMR 放宽，生产 HTML 不变，预览仍使用严格 CSP 和无 allow-same-origin 的沙箱。
 
@@ -99,7 +99,7 @@ HTTP 和事件 WebSocket 保留精确 Host/Origin、JSON POST、页面标识、�
 pnpm exec vitest run tests/web-host.test.ts tests/web-bridge.test.ts tests/web-socket-browser.test.ts tests/renderer/html-preview.test.ts tests/renderer/html-preview-mounted.test.ts
 ```
 
-浏览器冒烟必须先使用临时 `FORGE_HOME` 启动显式 `--trusted-lan` 的独立 dev fixture 服务，避免读取真实配置或改动用户会话，然后运行：
+浏览器冒烟必须先使用临时 `FORGE_HOME` 启动独立 dev fixture 服务（默认直连），避免读取真实配置或改动用户会话，然后运行：
 
 ```sh
 node scripts/check-web-dev.mjs http://192.168.8.108:5174

@@ -31,6 +31,11 @@ it("serves built standalone Web HTTP and shuts down with an isolated home", asyn
     const page = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(5000) });
     expect(page.status).toBe(200);
     expect(await page.text()).toContain(`connect-src 'self' ws://127.0.0.1:${port};`);
+    const connected = await fetch(`http://127.0.0.1:${port}/api/connect`, {
+      method: "POST", headers: { Origin: `http://127.0.0.1:${port}`, "Content-Type": "application/json" }, body: "{}",
+    });
+    expect(connected.status).toBe(200);
+    expect(connected.headers.get("set-cookie")).toBeNull();
     process.kill("SIGTERM");
     expect(await closed).toBe(0);
   } finally {
@@ -53,6 +58,11 @@ it("starts and stops built desktop LAN in the same isolated worker", async () =>
     worker.postMessage({ control: "startLan", id, host: "127.0.0.1", port, workspace: home });
     await expect.poll(() => messages, { timeout: 10_000 }).toContainEqual({ control: "lanResult", id, url: `http://127.0.0.1:${port}` });
     expect((await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(5000) })).status).toBe(200);
+    const connected = await fetch(`http://127.0.0.1:${port}/api/connect`, {
+      method: "POST", headers: { Origin: `http://127.0.0.1:${port}`, "Content-Type": "application/json" }, body: "{}",
+    });
+    expect(connected.status).toBe(200);
+    expect(connected.headers.get("set-cookie")).toBeNull();
     const stopId = randomUUID();
     worker.postMessage({ control: "stopLan", id: stopId });
     await expect.poll(() => messages).toContainEqual({ control: "lanResult", id: stopId, url: null });

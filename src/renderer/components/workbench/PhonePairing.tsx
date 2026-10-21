@@ -204,7 +204,7 @@ export function PhonePairing() {
       <div className="phone-pairing-head">
         <div className="phone-pairing-head-text">
           <h3 id={headingId}>
-            <QrCode size={16} weight="bold" aria-hidden="true" /> Android 局域网配对
+            <QrCode size={16} weight="bold" aria-hidden="true" /> Android 局域网连接
           </h3>
           <p>
             在局域网内公开当前核心的 HTTP 地址，让 Android 应用扫码连接同一个核心与任务。
@@ -216,8 +216,8 @@ export function PhonePairing() {
       </div>
 
       <ul className="phone-pairing-notes">
-        <li>二维码只包含普通 HTTP 地址，不含授权凭证；HTTP 不提供传输保密性。</li>
-        <li>默认需要设备授权；通过本机 forge devices 配对和撤销，步骤见 docs/LAN_AUTHORIZATION.md。</li>
+        <li>二维码包含连接地址，扫码或输入地址即可连接；HTTP 不提供传输保密性。</li>
+        <li>个人局域网直接接入，无需邀请码、设备授权或回到电脑前确认；网络可达范围由你管理。</li>
         <li>{canControl
           ? "手机连接的是同一核心与同一份任务列表；关闭桌面应用会终止正在运行的任务。"
           : "手机连接当前服务器的核心与任务；停止该核心服务会终止正在运行的任务。"}</li>

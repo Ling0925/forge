@@ -35,7 +35,7 @@ it("sends selected and pasted images through the real Web bridge, preserves draf
   await service.updateSettings({ settings: { baseUrl: "http://localhost:1234/v1", model: "vision-fixture" } });
   const a = await service.createSession({ workspace: directory, title: "A" });
   const b = await service.createSession({ workspace: directory, title: "B" });
-  const web = await createWebHost({ trustedLan: true, service, workspace: directory, host: "127.0.0.1", port: address.port });
+  const web = await createWebHost({ service, workspace: directory, host: "127.0.0.1", port: address.port });
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import {createRoot} from 'react-dom/client';
