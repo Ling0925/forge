@@ -3,7 +3,9 @@ import { resolve } from "node:path";
 import { build } from "esbuild";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { aggregateUsageStats, computeSessionUsage } from "../../src/core/usage-stats";
+import { createUsageStatsService } from "../../src/core/usage-stats";
+import { createModelPricingService } from "../../src/core/model-pricing";
+import type { SessionStore } from "../../src/shared/contracts";
 import type { UsageFilter } from "../../src/shared/ipc";
 import { sessionIdSchema, type AgentEvent, type SessionSnapshot } from "../../src/shared/schemas";
 
@@ -16,7 +18,7 @@ const sessionA = sessionIdSchema.parse("00000000-0000-0000-0000-000000000001");
 const sessionB = sessionIdSchema.parse("00000000-0000-0000-0000-000000000002");
 const event = (outcome: "started" | "succeeded" | "failed", hours: number, step: number, extra = {}): AgentEvent => ({
   type: "provider_attempt", sessionId: sessionA, timestamp: stamp(hours), turn: 1, step,
-  selection: { sourceId: "source-a", model: "gpt-6-astra", credentialId: "default", groupId: "r1",
+  selection: { sourceId: "source-a", model: "source:vendor/gpt-6-astra", credentialId: "default", groupId: "r1",
     apiMode: "responses", reason: "order:first", attempt: 1, timestamp: stamp(hours), outcome, ...extra },
 });
 const makeSnapshot = (events: readonly AgentEvent[], overrides: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
@@ -24,17 +26,17 @@ const makeSnapshot = (events: readonly AgentEvent[], overrides: Partial<SessionS
   createdAt: stamp(-240), updatedAt: stamp(0), messages: [], changes: [], events, ...overrides,
 });
 const fixtures = [
-  computeSessionUsage(makeSnapshot([
+  makeSnapshot([
     event("started", -2, 1), event("succeeded", -2 + 2 / 3600, 1, {
       usage: { promptTokens: 120, completionTokens: 80, cachedPromptTokens: 30, totalTokens: 200 },
     }),
     event("started", -1, 2), event("failed", -1 + 1 / 3600, 2, { errorCode: "rate_limit" }),
     event("started", -0.5, 3),
-  ])),
-  computeSessionUsage(makeSnapshot([event("succeeded", -192, 1, {
+  ]),
+  makeSnapshot([event("succeeded", -192, 1, {
     sourceId: "deleted-source", credentialId: "old-key", groupId: undefined, model: "old/model",
     usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-  })], { id: sessionB, title: "会话 B", workspace: "/workspace/b", status: "completed" })),
+  })], { id: sessionB, title: "会话 B", workspace: "/workspace/b", status: "completed" }),
 ];
 
 beforeAll(async () => {
@@ -51,6 +53,14 @@ beforeAll(async () => {
         const data=await window.fixtureStats(filter);
         if(window.bulk){data.requests=Array.from({length:55},(_,i)=>({...data.requests[0],id:'bulk-'+i}));}
         if(window.legacy){delete data.requests;}
+        if(window.metricSamples){
+          const {tokensPerSecond,estimatedCostUsd,...base}=data.requests.find(request=>request.usage?.completionTokens>0);
+          data.requests=[
+            {...base,id:'sample-normal',tokensPerSecond:0,estimatedCostUsd:1.234},
+            {...base,id:'sample-tiny',tokensPerSecond:1234.56,estimatedCostUsd:0.00001},
+            {...base,id:'sample-legacy'},
+          ];
+        }
         if(window.holdSeven&&filter.days===7){await new Promise(resolve=>{window.releaseSeven=resolve;});}
         return data;
       }};
@@ -86,7 +96,16 @@ afterAll(async () => { await browser?.close(); });
 async function mount(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.setDefaultTimeout(5000);
-  await page.exposeFunction("fixtureStats", (filter: UsageFilter) => aggregateUsageStats(fixtures, filter));
+  const store = {
+    list: async () => fixtures,
+    get: async (id: string) => fixtures.find(snapshot => snapshot.id === id),
+  } as unknown as SessionStore;
+  const pricing = createModelPricingService({ fetch: async () => Response.json({ vendor: { models: {
+    "gpt-6-astra": { cost: { input: 3, output: 15, cache_read: 0.3 } },
+    "model": { cost: { input: 3, output: 15 } },
+  } } }) });
+  const service = createUsageStatsService(store, pricing);
+  await page.exposeFunction("fixtureStats", (filter: UsageFilter) => service.getUsageStats(filter));
   await page.route("https://forge.test/**", route => route.fulfill({ contentType: "text/html", body: '<div id="root"></div>' }));
   await page.goto("https://forge.test/");
   await page.addStyleTag({ content: css });
@@ -107,12 +126,18 @@ it("moves individual request metadata into a tab with details and session naviga
     expect(await page.locator(".usage-request-row").count()).toBe(0);
     await requests.click();
     await expect.poll(() => page.locator(".usage-request-row").count()).toBe(4);
+    expect(await page.getByRole("columnheader", { name: "Token 速度", exact: true }).count()).toBe(1);
+    expect(await page.getByRole("columnheader", { name: "预估费用 (USD)", exact: true }).count()).toBe(1);
     expect(await page.locator(".usage-summary").count()).toBe(0);
     const rows = page.locator(".usage-request-row");
     expect(await rows.nth(0).innerText()).toContain("请求中");
+    expect(await rows.nth(0).locator("td").nth(8).innerText()).toBe("—");
+    expect(await rows.nth(0).locator("td").nth(9).innerText()).toBe("—");
     expect(await rows.nth(1).innerText()).toContain("失败");
     expect(await rows.nth(1).innerText()).toContain("rate_limit");
     expect(await rows.nth(1).locator("td").nth(6).innerText()).toBe("—");
+    expect(await rows.nth(1).locator("td").nth(8).innerText()).toBe("—");
+    expect(await rows.nth(1).locator("td").nth(9).innerText()).toBe("—");
     expect(await rows.nth(2).innerText()).toContain("供应商 A");
     expect(await rows.nth(2).innerText()).toContain("gpt-6-astra");
     expect(await rows.nth(2).innerText()).toContain("主密钥");
@@ -120,13 +145,18 @@ it("moves individual request metadata into a tab with details and session naviga
     expect(await rows.nth(2).locator("td").nth(4).innerText()).toBe("120 / 80");
     expect(await rows.nth(2).locator("td").nth(5).innerText()).toBe("30");
     expect(await rows.nth(2).locator("td").nth(7).innerText()).toBe("2.00 s");
+    expect(await rows.nth(2).locator("td").nth(8).innerText()).toBe("40.0 tok/s");
+    expect(await rows.nth(2).locator("td").nth(9).innerText()).toBe("$0.0015");
     expect(await rows.nth(3).innerText()).toContain("deleted-source");
     expect(await rows.nth(3).locator("td").nth(6).innerText()).toBe("0");
     expect(await rows.nth(3).locator("td").nth(7).innerText()).toBe("—");
+    expect(await rows.nth(3).locator("td").nth(8).innerText()).toBe("—");
+    expect(await rows.nth(3).locator("td").nth(9).innerText()).toBe("$0.00");
 
     await rows.nth(2).getByRole("button", { name: "详情", exact: true }).click();
     const detail = page.locator(".usage-request-details");
     await expect.poll(() => detail.count()).toBe(1);
+    expect(await page.locator(".usage-request-detail-row td").getAttribute("colspan")).toBe("11");
     const text = await detail.innerText();
     for (const value of ["source-a", "default", "路由 A (r1)", "responses", "order:first", "/workspace/a"]) {
       expect(text).toContain(value);
@@ -139,6 +169,13 @@ it("moves individual request metadata into a tab with details and session naviga
         expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
         const bounds = await page.getByRole("dialog").boundingBox();
         expect(bounds?.width).toBeLessThanOrEqual(width);
+        if (width === 390) {
+          const overflow = await page.locator(".usage-table-wrapper").evaluate(element => ({
+            scrollWidth: element.scrollWidth,
+            clientWidth: element.clientWidth,
+          }));
+          expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
+        }
         await page.screenshot({ path: `.build/usage-requests/browser/${theme}-${width}.png` });
       }
     }
@@ -155,6 +192,23 @@ it("moves individual request metadata into a tab with details and session naviga
     expect(errors).toEqual([]);
   } finally { await page.close(); }
 }, 30000);
+
+it("formats zero speed, ordinary and tiny costs, and older rows without metrics", async () => {
+  const page = await mount();
+  try {
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    await page.evaluate(() => { (window as unknown as { metricSamples: boolean }).metricSamples = true; });
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    const rows = page.locator(".usage-request-row");
+    await expect.poll(() => rows.count()).toBe(3);
+    expect(await rows.nth(0).locator("td").nth(8).innerText()).toBe("0.0 tok/s");
+    expect(await rows.nth(0).locator("td").nth(9).innerText()).toBe("$1.23");
+    expect(await rows.nth(1).locator("td").nth(8).innerText()).toBe("1234.6 tok/s");
+    expect(await rows.nth(1).locator("td").nth(9).innerText()).toBe("<$0.0001");
+    expect(await rows.nth(2).locator("td").nth(8).innerText()).toBe("—");
+    expect(await rows.nth(2).locator("td").nth(9).innerText()).toBe("—");
+  } finally { await page.close(); }
+});
 
 it("shares time/workspace filters and ignores an older response arriving late", async () => {
   const page = await mount();

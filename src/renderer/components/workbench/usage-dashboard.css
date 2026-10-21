@@ -169,6 +169,10 @@
   color: var(--text-secondary);
 }
 
+.usage-request-table {
+  min-width: 1020px;
+}
+
 .usage-request-table td:nth-child(2) {
   max-width: 280px;
   white-space: normal;

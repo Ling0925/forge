@@ -3,6 +3,7 @@ import type { UsageRequest } from "../../shared-types";
 import { useWorkbench } from "../../state/workbench-context";
 
 const pageSize = 50;
+
 const formatTime = (value: string) => {
   const date = new Date(value);
   return Number.isFinite(date.getTime())
@@ -14,6 +15,17 @@ const tokens = (value: number | undefined) =>
 const duration = (value: number | undefined) => {
   if (value === undefined) return "—";
   return value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(2)} s`;
+};
+const tokenSpeed = (value: number | undefined) => {
+  if (value === undefined || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(1)} tok/s`;
+};
+const costUsd = (value: number | undefined) => {
+  if (value === undefined || !Number.isFinite(value)) return "—";
+  if (value === 0) return "$0.00";
+  if (value >= 0.01) return `$${value.toFixed(2)}`;
+  if (value >= 0.0001) return `$${value.toFixed(4)}`;
+  return "<$0.0001";
 };
 const outcome = (request: UsageRequest) => {
   if (request.outcome === "started") return "请求中";
@@ -81,6 +93,8 @@ export function UsageRequests({
               <th>缓存</th>
               <th>总 Tokens</th>
               <th>耗时</th>
+              <th>Token 速度</th>
+              <th>预估费用 (USD)</th>
               <th>详情</th>
             </tr>
           </thead>
@@ -132,6 +146,8 @@ export function UsageRequests({
                     <td className="usage-mono">{tokens(request.usage?.cachedPromptTokens)}</td>
                     <td className="usage-mono">{tokens(request.usage?.totalTokens)}</td>
                     <td className="usage-mono">{duration(request.durationMs)}</td>
+                    <td className="usage-mono">{tokenSpeed(request.tokensPerSecond)}</td>
+                    <td className="usage-mono">{costUsd(request.estimatedCostUsd)}</td>
                     <td>
                       <button
                         type="button"
@@ -146,7 +162,7 @@ export function UsageRequests({
                   </tr>
                   {isExpanded && (
                     <tr id={detailId} className="usage-request-detail-row">
-                      <td colSpan={9}>
+                      <td colSpan={11}>
                         <dl className="usage-request-details">
                           <div>
                             <dt>会话</dt>
