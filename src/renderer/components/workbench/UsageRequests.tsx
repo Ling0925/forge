@@ -27,6 +27,8 @@ const costUsd = (value: number | undefined) => {
   if (value >= 0.0001) return `$${value.toFixed(4)}`;
   return "<$0.0001";
 };
+const reasoningEffort = (value: UsageRequest["reasoningEffort"]) =>
+  value === "default" ? "模型默认" : value === "max" ? "MAX" : value ?? "—";
 const outcome = (request: UsageRequest) => {
   if (request.outcome === "started") return "请求中";
   if (request.outcome === "succeeded") return "成功";
@@ -271,10 +273,10 @@ export function UsageRequests({
               <tr>
                 <th>时间</th>
                 <th>来源 / 模型</th>
+                <th>思考等级</th>
                 <th>凭据</th>
                 <th>状态</th>
                 <th>输入 / 输出</th>
-                <th>缓存</th>
                 <th>总 Tokens</th>
                 <th>耗时</th>
                 <th>Token 速度</th>
@@ -314,6 +316,14 @@ export function UsageRequests({
                           {request.model}
                         </span>
                       </td>
+                      <td
+                        className="usage-mono usage-request-reasoning"
+                        title={request.reasoningEffort === undefined
+                          ? "此请求未记录思考等级"
+                          : "请求时配置的思考等级；供应商可能映射或忽略此设置"}
+                      >
+                        {reasoningEffort(request.reasoningEffort)}
+                      </td>
                       <td title={request.credentialId}>
                         {credential?.label ||
                           request.credentialId ||
@@ -331,12 +341,14 @@ export function UsageRequests({
                           </span>
                         )}
                       </td>
-                      <td className="usage-mono">
-                        {tokens(request.usage?.promptTokens)} /{" "}
-                        {tokens(request.usage?.completionTokens)}
-                      </td>
-                      <td className="usage-mono">
-                        {tokens(request.usage?.cachedPromptTokens)}
+                      <td className="usage-mono usage-request-tokens">
+                        <span>
+                          {tokens(request.usage?.promptTokens)} /{" "}
+                          {tokens(request.usage?.completionTokens)}
+                        </span>
+                        <span className="usage-request-secondary usage-request-cache">
+                          缓存 {tokens(request.usage?.cachedPromptTokens)}
+                        </span>
                       </td>
                       <td className="usage-mono">
                         {tokens(request.usage?.totalTokens)}
@@ -406,6 +418,10 @@ export function UsageRequests({
                             <div>
                               <dt>协议</dt>
                               <dd>{request.apiMode}</dd>
+                            </div>
+                            <div>
+                              <dt>思考等级</dt>
+                              <dd>{reasoningEffort(request.reasoningEffort)}</dd>
                             </div>
                             <div>
                               <dt>选择原因</dt>

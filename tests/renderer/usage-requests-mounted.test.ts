@@ -27,11 +27,12 @@ const makeSnapshot = (events: readonly AgentEvent[], overrides: Partial<SessionS
 });
 const fixtures = [
   makeSnapshot([
-    event("started", -2, 1), event("succeeded", -2 + 2 / 3600, 1, {
-      usage: { promptTokens: 120, completionTokens: 80, cachedPromptTokens: 30, totalTokens: 200 },
+    event("started", -2, 1, { reasoningEffort: "high" }), event("succeeded", -2 + 2 / 3600, 1, {
+      reasoningEffort: "high", usage: { promptTokens: 120, completionTokens: 80, cachedPromptTokens: 30, totalTokens: 200 },
     }),
-    event("started", -1, 2), event("failed", -1 + 1 / 3600, 2, { errorCode: "rate_limit" }),
-    event("started", -0.5, 3),
+    event("started", -1, 2, { reasoningEffort: "none" }),
+    event("failed", -1 + 1 / 3600, 2, { reasoningEffort: "none", errorCode: "rate_limit" }),
+    event("started", -0.5, 3, { reasoningEffort: "default" }),
   ]),
   makeSnapshot([event("succeeded", -192, 1, {
     sourceId: "deleted-source", credentialId: "old-key", groupId: undefined, model: "old/model",
@@ -95,6 +96,7 @@ beforeAll(async () => {
           export function TestProvider({children}){
             const [open,setOpen]=useState(true);
             const state={isUsageDashboardOpen:open,sessions:[{workspace:'/workspace/a'},{workspace:'/workspace/b'}],settings:{
+              reasoningEffort:'max',
               providerSources:[{id:'source-a',label:'供应商 A',credentials:[{id:'default',label:'主密钥'}]}],
               routeGroups:[{id:'r1',label:'路由 A'}]}};
             return <C.Provider value={{state,openUsageDashboard:setOpen,selectSession:async id=>{window.selected.push(id)}}}>{children}</C.Provider>;
@@ -161,8 +163,13 @@ it("moves individual request metadata into a tab with details and session naviga
     expect(await rows.nth(2).innerText()).toContain("gpt-6-astra");
     expect(await rows.nth(2).innerText()).toContain("主密钥");
     expect(await rows.nth(2).innerText()).toContain("成功");
-    expect(await rows.nth(2).locator("td").nth(4).innerText()).toBe("120 / 80");
-    expect(await rows.nth(2).locator("td").nth(5).innerText()).toBe("30");
+    expect(await page.getByRole("columnheader", { name: "缓存", exact: true }).count()).toBe(0);
+    expect(await page.getByRole("columnheader", { name: "思考等级", exact: true }).count()).toBe(1);
+    expect(await rows.nth(2).locator(".usage-request-tokens > span").first().innerText()).toBe("120 / 80");
+    expect(await rows.nth(2).locator(".usage-request-cache").innerText()).toBe("缓存 30");
+    expect(await rows.nth(1).locator(".usage-request-cache").innerText()).toBe("缓存 —");
+    expect(await rows.locator(".usage-request-reasoning").allTextContents()).toEqual(["模型默认", "none", "high", "—"]);
+    expect(await rows.nth(3).locator(".usage-request-reasoning").getAttribute("title")).toBe("此请求未记录思考等级");
     expect(await rows.nth(2).locator("td").nth(7).innerText()).toBe("2.00 s");
     expect(await rows.nth(2).locator("td").nth(8).innerText()).toBe("40.0 tok/s");
     expect(await rows.nth(2).locator("td").nth(9).innerText()).toBe("$0.0015");
@@ -177,6 +184,7 @@ it("moves individual request metadata into a tab with details and session naviga
     await expect.poll(() => detail.count()).toBe(1);
     expect(await page.locator(".usage-request-detail-row td").getAttribute("colspan")).toBe("11");
     const text = await detail.innerText();
+    expect(await detail.locator("div").filter({ has: page.getByText("思考等级", { exact: true }) }).locator("dd").innerText()).toBe("high");
     for (const value of ["source-a", "default", "路由 A (r1)", "responses", "order:first", "/workspace/a"]) {
       expect(text).toContain(value);
     }
@@ -188,6 +196,16 @@ it("moves individual request metadata into a tab with details and session naviga
         expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
         const bounds = await page.getByRole("dialog").boundingBox();
         expect(bounds?.width).toBeLessThanOrEqual(width);
+        const cacheLayout = await rows.nth(2).locator(".usage-request-tokens").evaluate(cell => {
+          const first = cell.children[0]!;
+          const cache = cell.children[1]!;
+          return { firstBottom: first.getBoundingClientRect().bottom, cacheTop: cache.getBoundingClientRect().top,
+            firstColor: getComputedStyle(first).color, cacheColor: getComputedStyle(cache).color,
+            cacheDisplay: getComputedStyle(cache).display };
+        });
+        expect(cacheLayout.cacheTop).toBeGreaterThanOrEqual(cacheLayout.firstBottom);
+        expect(cacheLayout.cacheDisplay).toBe("block");
+        expect(cacheLayout.cacheColor).not.toBe(cacheLayout.firstColor);
         if (width === 390) {
           const overflow = await page.locator(".usage-table-wrapper").evaluate(element => ({
             scrollWidth: element.scrollWidth,
@@ -211,6 +229,26 @@ it("moves individual request metadata into a tab with details and session naviga
     expect(errors).toEqual([]);
   } finally { await page.close(); }
 }, 30000);
+
+it("shows every reasoning level, distinguishes default from unrecorded, and keeps zero cache visible", async () => {
+  const efforts = ["default", "none", "minimal", "low", "medium", "high", "xhigh", "max", undefined];
+  const page = await mount([makeSnapshot(efforts.map((reasoningEffort, index) =>
+    event("succeeded", -9 + index, index + 1, {
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      usage: { promptTokens: 0, completionTokens: 0, cachedPromptTokens: 0, totalTokens: 0 },
+    })), { status: "completed" })]);
+  try {
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    const rows = page.locator(".usage-request-row");
+    await expect.poll(() => rows.count()).toBe(9);
+    expect(await rows.locator(".usage-request-reasoning").allTextContents())
+      .toEqual(["—", "MAX", "xhigh", "high", "medium", "low", "minimal", "none", "模型默认"]);
+    expect(await rows.locator(".usage-request-cache").allTextContents()).toEqual(Array(9).fill("缓存 0"));
+    expect(await rows.nth(0).locator("td").count()).toBe(11);
+    await rows.nth(0).getByRole("button", { name: "详情", exact: true }).click();
+    expect(await page.locator(".usage-request-details div").filter({ has: page.getByText("思考等级", { exact: true }) }).locator("dd").innerText()).toBe("—");
+  } finally { await page.close(); }
+});
 
 it("formats zero speed, ordinary and tiny costs, and older rows without metrics", async () => {
   const page = await mount();
