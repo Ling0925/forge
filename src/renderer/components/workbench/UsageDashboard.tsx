@@ -148,6 +148,8 @@ function computeModelPerformance(
   return result;
 }
 
+const aggregateCostExplanation = "历史 Token 汇总按当前公开基础单价估算；缺少逐请求明细，未还原上下文阶梯价，不代表实际账单";
+
 export function UsageDashboard() {
   const { state, openUsageDashboard, selectSession } = useWorkbench();
   const [loading, setLoading] = useState(false);
@@ -222,6 +224,15 @@ export function UsageDashboard() {
   }, [state.isUsageDashboardOpen, openUsageDashboard]);
 
   const requests = data?.requests ?? [];
+  const costSummary = useMemo(() => {
+    const models = data?.models ?? [];
+    const priced = models.filter(model => model.estimatedCostUsd !== undefined);
+    return {
+      totalCostUsd: priced.length ? priced.reduce((sum, model) => sum + (model.estimatedCostUsd ?? 0), 0) : undefined,
+      hasAggregateEstimate: models.some(model => model.aggregateEstimatedCostUsd !== undefined),
+      incomplete: models.some(model => model.costIncomplete),
+    };
+  }, [data]);
 
   // Request-derived analytics
   const requestAnalytics = useMemo(() => {
@@ -230,11 +241,6 @@ export function UsageDashboard() {
         typeof r.estimatedCostUsd === "number" &&
         Number.isFinite(r.estimatedCostUsd),
     );
-    const totalCostUsd =
-      priced.length > 0
-        ? priced.reduce((sum, r) => sum + (r.estimatedCostUsd ?? 0), 0)
-        : undefined;
-
     const withSpeed = requests.filter(
       (r) =>
         typeof r.tokensPerSecond === "number" &&
@@ -372,7 +378,6 @@ export function UsageDashboard() {
     );
 
     return {
-      totalCostUsd,
       pricedCount: priced.length,
       avgSpeed,
       peakSpeed,
@@ -432,7 +437,7 @@ export function UsageDashboard() {
     data?.daily && data.daily.length > 0
       ? Math.max(
           ...data.daily.map(
-            (d) => requestAnalytics.dailyRequestMap.get(d.date)?.costUsd ?? 0,
+            (d) => d.estimatedCostUsd ?? requestAnalytics.dailyRequestMap.get(d.date)?.costUsd ?? 0,
           ),
           0.0001,
         )
@@ -651,19 +656,19 @@ export function UsageDashboard() {
                       <ChartBar size={14} />
                     </div>
                     <div className="usage-kpi-value">
-                      {formatCostUsd(requestAnalytics.totalCostUsd)}
+                      {formatCostUsd(costSummary.totalCostUsd)}
                     </div>
-                    <div className="usage-kpi-sub">
-                      {requestAnalytics.pricedCount > 0 ? (
+                    <div className="usage-kpi-sub" title={costSummary.hasAggregateEstimate ? aggregateCostExplanation : undefined}>
+                      {costSummary.totalCostUsd !== undefined ? (
                         <span>
-                          {data.models.some(model => model.costIncomplete)
-                            ? "部分计价 " : "已计价 "}
-                          {requestAnalytics.pricedCount} / {requests.length} 次请求
+                          {costSummary.incomplete ? "部分计价" : "已计价"}
+                          {requests.length > 0 && ` ${requestAnalytics.pricedCount} / ${requests.length} 次请求`}
+                          {costSummary.hasAggregateEstimate && " · 含历史汇总估算"}
                         </span>
                       ) : (
                         <span>{data.pricing?.state === "unavailable"
                           ? "价格目录加载失败，点击刷新重试"
-                          : "缺少价格或请求明细，费用未知"}</span>
+                          : "缺少价格或用量，费用未知"}</span>
                       )}
                     </div>
                   </div>
@@ -755,7 +760,7 @@ export function UsageDashboard() {
                       </div>
 
                       <div className="usage-section-header-right">
-                        {requests.length > 0 && (
+                        {(requests.length > 0 || costSummary.totalCostUsd !== undefined) && (
                           <div className="usage-mode-switch">
                             <button
                               type="button"
@@ -837,18 +842,19 @@ export function UsageDashboard() {
                             const dayReq = requestAnalytics.dailyRequestMap.get(
                               d.date,
                             );
-                            const dayCost = dayReq?.costUsd ?? 0;
+                            const dayCost = d.estimatedCostUsd ?? (dayReq?.pricedCount ? dayReq.costUsd : undefined);
                             const dayReqCount = dayReq?.count ?? d.runCount;
 
                             if (dailyChartMode === "cost") {
                               const costHeight = Math.max(
-                                (dayCost / maxDailyCost) * 100,
-                                dayCost > 0 ? 6 : 2,
+                                ((dayCost ?? 0) / maxDailyCost) * 100,
+                                (dayCost ?? 0) > 0 ? 6 : 2,
                               );
                               const costTooltip =
-                                `${d.date}：预估 ${formatCostUsd(dayReq?.pricedCount ? dayCost : undefined)}\n` +
-                                `• 请求数：${dayReqCount} 次\n` +
-                                `• 总计 Tokens：${compactTokens(d.totalTokens)}`;
+                                `${d.date}：预估 ${formatCostUsd(dayCost)}${d.costIncomplete ? "（部分）" : ""}\n` +
+                                `• 运行数：${d.runCount} 次；请求明细：${dayReq?.count ?? 0} 次\n` +
+                                `• 总计 Tokens：${compactTokens(d.totalTokens)}` +
+                                (d.aggregateEstimatedCostUsd !== undefined ? `\n• ${aggregateCostExplanation}` : "");
                               return (
                                 <div key={d.date} className="usage-bar-col">
                                   <span className="usage-bar-top-val">
@@ -1127,6 +1133,16 @@ export function UsageDashboard() {
                             mUncached + mCached + mComp,
                             1,
                           );
+                          const aggregateCostLabel = m.aggregateEstimatedCostUsd === undefined
+                            ? ""
+                            : ((m.pricedRequestCount ?? 0) > 0 ? "（含历史估算）" : "（汇总估算）");
+                          const pricedCostTitle = [
+                            "按当前公开价格估算（USD）",
+                            (m.requestCount ?? 0) > 0 && `已计价 ${m.pricedRequestCount ?? 0} / ${m.requestCount} 次请求`,
+                            m.aggregateEstimatedCostUsd !== undefined &&
+                              `其中历史汇总 ${formatCostUsd(m.aggregateEstimatedCostUsd)}：${aggregateCostExplanation}`,
+                            m.costIncomplete && "不含缺少价格或用量的记录",
+                          ].filter(Boolean).join("；");
 
                           return (
                             <div key={m.model} className="usage-model-item">
@@ -1188,12 +1204,12 @@ export function UsageDashboard() {
                                   title={m.estimatedCostUsd === undefined
                                     ? (data.pricing?.state === "unavailable"
                                       ? "公开价格目录加载失败，点击刷新重试"
-                                      : "缺少价格或请求明细，费用未知，不代表免费")
-                                    : `按当前公开价格估算（USD）；已计价 ${m.pricedRequestCount ?? 0} / ${m.requestCount ?? 0} 次请求${m.costIncomplete ? "；不含缺少价格、用量或请求明细的记录" : ""}`}
+                                      : "未匹配到公开价格或缺少用量，费用未知，不代表免费")
+                                    : pricedCostTitle}
                                 >
                                   {m.estimatedCostUsd === undefined
                                     ? (data.pricing?.state === "unavailable" ? "价格未加载" : "费用未知")
-                                    : `预估 ${formatCostUsd(m.estimatedCostUsd)}${m.costIncomplete ? "（部分）" : ""}`}
+                                    : `预估 ${formatCostUsd(m.estimatedCostUsd)}${aggregateCostLabel}${m.costIncomplete ? "（部分）" : ""}`}
                                 </span>
                               </div>
                             </div>

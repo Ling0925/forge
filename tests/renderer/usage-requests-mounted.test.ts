@@ -446,6 +446,60 @@ it("renders full-screen usage dashboard charts, cost mode switch, and back butto
   } finally { await page.close(); }
 }, 30000);
 
+it("prices legacy-only model distribution with labelled base estimates, matching totals and daily costs", async () => {
+  const models = ["cx/gpt-6-astra[1m]", "ag/gemini-3.8-flash", "cx/gpt-6.1-sol", "wb/global:deepseek-v4.1-flash"];
+  const hours = [-240, -4, -3, -2];
+  const tokens = { promptTokens: 1000000, completionTokens: 2000, cachedPromptTokens: 900000, totalTokens: 1002000 };
+  const events: AgentEvent[] = models.flatMap((model, index) => [
+    { type: "run_started", sessionId: sessionA, model, permission: "readonly", timestamp: stamp(hours[index]!) },
+    { type: "run_finished", sessionId: sessionA, status: "completed", turns: 1, toolCalls: 0,
+      timestamp: stamp(hours[index]! + 0.1), usage: tokens },
+  ]);
+  const pricing = createModelPricingService({ fetch: async () => Response.json({ lab: { models: {
+    "gpt-6-astra": { cost: { input: 3, output: 15, cache_read: 0.3, context_over_200k: { input: 30, output: 150, cache_read: 3 } } },
+    "gemini-3.8-flash": { cost: { input: 1, output: 2, cache_read: 0.1 } },
+    "gpt-6.1-sol": { cost: { input: 1, output: 2, cache_read: 0.1 } },
+    "deepseek-v4.1-flash": { cost: { input: 1, output: 2, cache_read: 0.1 } },
+  } } }) });
+  const page = await mount([makeSnapshot(events, { status: "completed" })], pricing);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  try {
+    const rows = page.locator(".usage-model-item");
+    expect(await rows.count()).toBe(4);
+    expect(await rows.locator(".usage-model-name").allTextContents()).toEqual(models);
+    expect(await rows.locator(".usage-model-cost-tag").allTextContents()).toEqual([
+      "预估 $0.60（汇总估算）", "预估 $0.19（汇总估算）", "预估 $0.19（汇总估算）", "预估 $0.19（汇总估算）",
+    ]);
+    const costCard = page.locator(".usage-kpi-card").filter({ hasText: "预估总费用 (USD)" });
+    expect(await costCard.innerText()).toContain("$1.18");
+    expect(await costCard.innerText()).toContain("含历史汇总估算");
+    await page.getByRole("button", { name: "费用与请求", exact: true }).click();
+    const dailyTitles = await page.locator(".usage-daily-chart .usage-bar-stack").evaluateAll(nodes => nodes.map(node => node.getAttribute("title")));
+    expect(dailyTitles.every(title => title?.includes("请求明细：0 次") && title.includes("未还原上下文阶梯价"))).toBe(true);
+    expect(dailyTitles.some(title => title?.includes("预估 $0.60"))).toBe(true);
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 1080 });
+        await rows.first().scrollIntoViewIfNeeded();
+        expect(await rows.first().locator(".usage-model-cost-tag").isVisible()).toBe(true);
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `.build/usage-requests/browser/legacy-cost-${theme}-${width}.png` });
+      }
+    }
+    await page.getByRole("tab", { name: "请求记录", exact: true }).click();
+    expect(await page.locator(".usage-request-row").count()).toBe(0); // Never invent requests.
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
+    await page.getByLabel("时间周期筛选").selectOption("7");
+    await expect.poll(() => rows.count()).toBe(3);
+    expect(await costCard.innerText()).toContain("$0.58");
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    await expect.poll(() => rows.count()).toBe(3);
+    expect(errors).toEqual([]);
+  } finally { await page.close(); }
+}, 30000);
+
 it("shows all historical and actual models with exact cost subtotals, unknown prices and partial coverage", async () => {
   const tokens = { promptTokens: 120, completionTokens: 80, cachedPromptTokens: 30, totalTokens: 200 };
   const page = await mount([makeSnapshot([
@@ -470,12 +524,14 @@ it("shows all historical and actual models with exact cost subtotals, unknown pr
     expect(await row("source:vendor/gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.0030（部分）");
     expect(await row("source:vendor/gpt-6-astra").locator(".usage-model-cost-tag").getAttribute("title")).toContain("2 / 3 次请求");
     expect(await row("relay:vendor/gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.0044");
-    expect(await row("gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("费用未知");
+    expect(await row("gpt-6-astra").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.0015（汇总估算）");
+    expect(await row("gpt-6-astra").locator(".usage-model-cost-tag").getAttribute("title")).toContain("未还原上下文阶梯价");
     expect(await row("unpriced-model").locator(".usage-model-cost-tag").innerText()).toBe("费用未知");
     expect(await row("old/model").locator(".usage-model-cost-tag").innerText()).toBe("预估 $0.00");
     expect(await row("latest-unused-model").count()).toBe(0);
     expect(await row("route-group").count()).toBe(0);
-    expect(await page.locator(".usage-kpi-card").filter({ hasText: "预估总费用 (USD)" }).innerText()).toContain("$0.0074");
+    expect(await page.locator(".usage-kpi-card").filter({ hasText: "预估总费用 (USD)" }).innerText()).toContain("$0.0089");
+    expect(await page.locator(".usage-kpi-card").filter({ hasText: "预估总费用 (USD)" }).innerText()).toContain("含历史汇总估算");
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1080 });
       await row("source:vendor/gpt-6-astra").scrollIntoViewIfNeeded();
