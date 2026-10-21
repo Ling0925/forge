@@ -61,6 +61,25 @@ beforeAll(async () => {
             {...base,id:'sample-legacy'},
           ];
         }
+        if(window.richSummary){
+          const today=data.requests[0]?.timestamp?.slice(0,10)||'2026-10-21';
+          data.totalPromptTokens=18400;
+          data.totalCompletionTokens=6200;
+          data.totalCachedTokens=11200;
+          data.totalTokens=24600;
+          data.averageCacheRate=11200/18400;
+          data.totalRuns=14;
+          data.daily=[
+            {date:'2026-10-18',promptTokens:3200,completionTokens:1100,cachedTokens:1800,totalTokens:4300,runCount:3},
+            {date:'2026-10-19',promptTokens:5400,completionTokens:1900,cachedTokens:3600,totalTokens:7300,runCount:4},
+            {date:'2026-10-20',promptTokens:4100,completionTokens:1400,cachedTokens:2500,totalTokens:5500,runCount:3},
+            {date:today,promptTokens:5700,completionTokens:1800,cachedTokens:3300,totalTokens:7500,runCount:4},
+          ];
+          data.models=[
+            {model:'source:vendor/gpt-6-astra',promptTokens:14200,completionTokens:4800,cachedTokens:9200,totalTokens:19000,runCount:10,sessionCount:1},
+            {model:'old/model',promptTokens:4200,completionTokens:1400,cachedTokens:2000,totalTokens:5600,runCount:4,sessionCount:1},
+          ];
+        }
         if(window.holdSeven&&filter.days===7){await new Promise(resolve=>{window.releaseSeven=resolve;});}
         return data;
       }};
@@ -260,3 +279,36 @@ it("refreshes, retries failures, paginates without dropping records and handles 
     await expect.poll(() => page.getByText("暂无请求记录", { exact: true }).count()).toBe(1);
   } finally { await page.close(); }
 });
+
+it("renders full-screen usage dashboard charts, cost mode switch, and back button", async () => {
+  const page = await mount();
+  try {
+    await page.evaluate(() => { (window as unknown as { richSummary: boolean }).richSummary = true; });
+    await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
+    await expect.poll(() => page.locator(".usage-donut-svg").count()).toBe(1);
+
+    expect(await page.getByText("Token 结构与缓存效率", { exact: true }).count()).toBe(1);
+    expect(await page.getByText("模型速度与耗时对比", { exact: true }).count()).toBe(1);
+    expect(await page.getByText("请求活跃时段与状态分布 (24h)", { exact: true }).count()).toBe(1);
+    expect(await page.getByText("预估总费用 (USD)", { exact: true }).count()).toBe(1);
+    expect(await page.getByText("平均输出速度", { exact: true }).count()).toBe(1);
+
+    await page.getByRole("button", { name: "费用与请求", exact: true }).click();
+    expect(await page.getByText("预估费用 (USD)", { exact: true }).count()).toBe(1);
+    await page.getByRole("button", { name: "Token 构成", exact: true }).click();
+
+    await mkdir(".build/usage-requests/browser", { recursive: true });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(value => document.documentElement.setAttribute("data-theme", value), theme);
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 1080 });
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `.build/usage-requests/browser/summary-${theme}-${width}.png` });
+      }
+    }
+
+    await page.getByRole("button", { name: "返回工作台", exact: true }).click();
+    expect(await page.getByRole("dialog").count()).toBe(0);
+  } finally { await page.close(); }
+}, 30000);
+
