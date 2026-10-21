@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("keeps five effort levels in a compact panel and nests the model catalog on desktop and mobile", async () => {
+it("styles the model picker before Settings loads and keeps five effort levels on desktop and mobile", async () => {
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import {createRoot} from 'react-dom/client';
@@ -13,13 +13,13 @@ it("keeps five effort levels in a compact panel and nests the model catalog on d
       import './src/renderer/styles/global.css';
       import './src/renderer/components/workbench/app.css';
       import './src/renderer/styles/workspace-theme.css';
-      import './src/renderer/styles/settings-models.css';
+      // Do not preload Settings or its CSS: the picker must own its styles.
       function App() {
         const [model,select] = useState('provider/long-model-name');
         const [effort,setEffort] = useState('default');
         const [disabled,disable] = useState(false);
         return <div className="wb-app"><div style={{position:'absolute',bottom:40,right:24}}>
-          <ModelPicker value={model} models={['provider/long-model-name','provider/beta']} onSelect={select}
+          <ModelPicker value={model} sourceLabel={model ? 'LingAPI' : undefined} models={['provider/long-model-name','provider/beta']} onSelect={select}
             onRefresh={()=>{}} loading={false} error="" disabled={disabled} reasoning={{value:effort,onChange:value=>setEffort(settingsFields.reasoningEffort.unwrap().parse(value)),disabled}} />
           <button onClick={()=>disable(value=>!value)}>切换禁用</button>
           <button onClick={()=>select('')}>清空模型</button>
@@ -48,6 +48,11 @@ it("keeps five effort levels in a compact panel and nests the model catalog on d
       await trigger.click();
       const slider = page.getByRole("slider", { name: "思考等级", exact: true });
       await slider.waitFor();
+      expect(await page.locator(".model-picker-heading").evaluate(node => getComputedStyle(node).display)).toBe("flex");
+      expect(await page.locator(".model-picker-current").evaluate(node => getComputedStyle(node).display)).toBe("flex");
+      expect(await page.locator(".model-effort-options").evaluate(node => getComputedStyle(node).borderTopWidth)).toBe("0px");
+      expect(await slider.evaluate(node => getComputedStyle(node).appearance)).toBe("none");
+      expect(await page.locator(".effort-slider-labels").evaluate(node => getComputedStyle(node).display)).toBe("flex");
       expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual(labels);
       expect(await page.locator("#saved-effort").textContent()).toBe(removed);
       expect(await trigger.getAttribute("title")).not.toContain(removed);
@@ -62,6 +67,16 @@ it("keeps five effort levels in a compact panel and nests the model catalog on d
       await trigger.click();
       const currentModel = page.getByRole("button", { name: /^选择模型：/ });
       await currentModel.waitFor();
+      expect(await currentModel.locator("small").textContent()).toBe("LingAPI");
+      for (const selector of [".model-picker-heading > *", ".model-picker-current > *", ".effort-slider-labels > span"]) {
+        const boxes = await page.locator(selector).evaluateAll(nodes => nodes.map(node => {
+          const { left, right } = node.getBoundingClientRect();
+          return { left, right };
+        }));
+        for (let index = 1; index < boxes.length; index++) {
+          expect(boxes[index]!.left - boxes[index - 1]!.right).toBeGreaterThanOrEqual(4);
+        }
+      }
       expect(await page.locator(".model-catalog").count()).toBe(0);
       expect(await currentModel.evaluate(node => node === document.activeElement)).toBe(true);
       expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual(labels);
@@ -91,6 +106,8 @@ it("keeps five effort levels in a compact panel and nests the model catalog on d
       await currentModel.click();
       const search = page.getByLabel("搜索模型或输入精确 ID");
       await search.waitFor();
+      expect(await page.locator(".model-catalog-list").evaluate(node => getComputedStyle(node).display)).toBe("flex");
+      expect(await page.locator(".model-catalog-option").first().evaluate(node => getComputedStyle(node).display)).toBe("flex");
       expect(await slider.count()).toBe(0);
       expect(await search.evaluate(node => node === document.activeElement)).toBe(width > 768);
       expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
@@ -138,9 +155,9 @@ it("keeps five effort levels in a compact panel and nests the model catalog on d
     expect(await page.locator(".model-catalog").count()).toBe(0);
     await page.getByRole("button", { name: "清空模型" }).click();
     await trigger.click();
-    expect(await page.getByRole("button", { name: "选择模型：尚未选择", exact: true }).textContent()).toBe("选择模型");
+    expect(await page.getByRole("button", { name: "选择模型：选择模型", exact: true }).textContent()).toBe("选择模型");
     expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
-    await page.getByRole("button", { name: "选择模型：尚未选择", exact: true }).click();
+    await page.getByRole("button", { name: "选择模型：选择模型", exact: true }).click();
     expect(await page.locator(".model-catalog-option[aria-pressed='true']").count()).toBe(0);
     expect(await page.locator(".model-catalog-option[aria-pressed]").count()).toBe(2);
     expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
