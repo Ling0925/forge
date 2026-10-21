@@ -3,7 +3,6 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type Browser, chromium } from "playwright";
-import { openDeviceAuthorization } from "../src/store/devices";
 import { expect, it } from "vitest";
 import { createHarness } from "../src/core/harness";
 import { createRuntimeHub } from "../src/desktop/runtime";
@@ -11,7 +10,7 @@ import { startLanServer } from "../src/web/lan";
 
 // Requires `pnpm build:web`: exercises the built renderer and production CSP,
 // not a Vite fixture. Never reads the real FORGE_HOME or contacts a provider.
-it("loads the packaged mobile workbench, pairs and reconnects to a desktop-owned run", async () => {
+it("loads the packaged mobile workbench directly and reconnects without credentials", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-lan-browser-"));
   const reservation = createServer();
   await new Promise<void>(done => reservation.listen(0, "127.0.0.1", done));
@@ -33,15 +32,11 @@ it("loads the packaged mobile workbench, pairs and reconnects to a desktop-owned
   });
   await service.updateSettings({ settings: { baseUrl: "http://localhost:1234/v1", model: "fixture" } });
   const runtime = createRuntimeHub(service);
-  const authorization = await openDeviceAuthorization({ directory: join(directory, "state") });
-  const server = await startLanServer({ authorization, runtime, host: "127.0.0.1", port: address.port, workspace: directory, rendererRoot: resolve("dist/renderer") });
+  const server = await startLanServer({ runtime, host: "127.0.0.1", port: address.port, workspace: directory, rendererRoot: resolve("dist/renderer") });
   let browser: Browser | undefined;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, ...(process.env.FORGE_BROWSER_EXECUTABLE ? { executablePath: process.env.FORGE_BROWSER_EXECUTABLE } : {}) });
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    const invitation = await authorization.createPairing("isolated browser fixture");
-    const paired = await context.request.post(`${server.origin}/api/pair`, { data: { token: invitation.token }, headers: { Origin: server.origin } });
-    expect(paired.status()).toBe(200);
     const phone = await context.newPage();
     phone.setDefaultTimeout(10_000);
     const errors: string[] = [];
@@ -58,6 +53,7 @@ it("loads the packaged mobile workbench, pairs and reconnects to a desktop-owned
     // A newly created remote session appears in recent tasks without hijacking an open draft.
     await phone.locator(".welcome-task").first().click();
     await expect.poll(() => phone.locator("body").innerText(), { timeout: 10_000 }).toContain("shared runtime output");
+    await context.clearCookies();
     await phone.reload();
     await phone.waitForFunction(() => !!window.forge);
     await phone.locator(".welcome-task").first().click();
@@ -77,7 +73,6 @@ it("loads the packaged mobile workbench, pairs and reconnects to a desktop-owned
   } finally {
     release();
     await browser?.close();
-    await authorization.close();
     await server.close();
     await runtime.dispose();
     await rm(directory, { recursive: true, force: true });

@@ -20,7 +20,6 @@ const web = await createWebHost({
   host,
   port,
   restrictWorkspace: false,
-  trustedLan: args.includes("--trusted-lan"),
 });
 const vite = await createViteServer({
   configFile: false,
@@ -56,7 +55,7 @@ await new Promise<void>((done, reject) => {
 });
 console.log(`Forge Web Dev: ${web.origin}`);
 console.log(`Workspace: ${web.workspace}`);
-console.log(args.includes("--trusted-lan") ? "Trusted-LAN compatibility mode: access is unauthenticated. HTTP is not confidential." : "Device pairing required. Use forge devices pair NAME and POST /api/pair (docs/LAN_AUTHORIZATION.md). Vite HMR is development-only; HTTP is not confidential.");
+console.log("Personal LAN direct access: open the address or scan its QR code; no device pairing required. Vite HMR is development-only; HTTP is not confidential.");
 let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => {
   if (stopping) return;

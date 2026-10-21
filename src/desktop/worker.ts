@@ -64,7 +64,6 @@ export async function startWorker(): Promise<void> {
         workspace: input.workspace,
         rendererRoot,
         restrictWorkspace: false,
-        trustedLan: process.env.FORGE_TRUSTED_LAN === "1",
       });
     },
   });

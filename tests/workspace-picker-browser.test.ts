@@ -25,7 +25,7 @@ it("selects a workspace by browsing server folders, preserves cancellation and u
     }),
   });
   await service.updateSettings({ settings: { baseUrl: "http://localhost:1234/v1", model: "test-model" } });
-  const web = await createWebHost({ trustedLan: true, service, workspace: directory, host: "127.0.0.1", port: address.port, restrictWorkspace: false });
+  const web = await createWebHost({ service, workspace: directory, host: "127.0.0.1", port: address.port, restrictWorkspace: false });
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     const bundle = await build({
