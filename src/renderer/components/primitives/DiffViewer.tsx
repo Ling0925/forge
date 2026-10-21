@@ -168,9 +168,7 @@ export function DiffViewer({
         </div>
       </div>
       <div className={`diff-scroll${expanded ? " is-expanded" : ""}`}>
-        <div
-          style={{ display: "flex", flexDirection: "column", width: "100%" }}
-        >
+        <div className="diff-lines">
           {lines.length === 0 && (
             <div className="diff-line diff-line-neutral">
               <span className="diff-line-number" />

@@ -29,7 +29,13 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
           return <ToolDisclosure className="live-tool" toolName="read_file" target="src/renderer/components/primitives/ToolDisclosure.tsx" status={status} autoCollapsed={autoCollapsed} output={status === 'failed' ? 'Access denied' : 'content'} />;
         }
         const editPath = 'src/renderer/components/workbench/settings/provider-connections/model-source-settings.ts';
-        const before = Array.from({length: 30}, (_, i) => 'old value ' + i).join('\\n');
+        const before = Array.from(
+          {length: 30},
+          (_, i) =>
+            i === 0
+              ? 'old value 0 ' + 'automatically_enables_search_for_mixed_protocol_route_'.repeat(3)
+              : 'old value ' + i,
+        ).join('\\n');
         const after = Array.from({length: 30}, (_, i) => 'new value ' + i).join('\\n');
         function EditTool() {
           const [done, setDone] = useState(false);
@@ -418,6 +424,45 @@ it("mounts the redesigned tool card: decoded console, failure banner, touch targ
     expect(diffHeaderGeom.badgeTop).toBeLessThanOrEqual(
       diffHeaderGeom.pathTop + 4,
     );
+    const diffOverflowGeom = await desktopPage
+      .locator('[data-tool="edit_file"]')
+      .first()
+      .locator(".diff-scroll")
+      .evaluate((scroll) => {
+        const lines = Array.from(
+          scroll.querySelectorAll<HTMLElement>(".diff-line"),
+        );
+        const contents = Array.from(
+          scroll.querySelectorAll<HTMLElement>(".diff-content"),
+        );
+        scroll.scrollLeft = scroll.scrollWidth;
+        const scrollRect = scroll.getBoundingClientRect();
+        const scrolledRightDelta = Math.min(
+          ...lines.map(
+            (line) => line.getBoundingClientRect().right - scrollRect.right,
+          ),
+        );
+        scroll.scrollLeft = 0;
+        return {
+          clientWidth: scroll.clientWidth,
+          scrollWidth: scroll.scrollWidth,
+          minLineWidth: Math.min(
+            ...lines.map((line) => line.getBoundingClientRect().width),
+          ),
+          maxContentOverflow: Math.max(
+            ...contents.map((el) => el.scrollWidth - el.clientWidth),
+          ),
+          scrolledRightDelta,
+        };
+      });
+    expect(diffOverflowGeom.scrollWidth).toBeGreaterThan(
+      diffOverflowGeom.clientWidth,
+    );
+    expect(diffOverflowGeom.minLineWidth).toBeGreaterThanOrEqual(
+      diffOverflowGeom.scrollWidth - 1,
+    );
+    expect(diffOverflowGeom.maxContentOverflow).toBeLessThanOrEqual(1);
+    expect(diffOverflowGeom.scrolledRightDelta).toBeGreaterThanOrEqual(-1);
     if (captureDirectory)
       for (const theme of ["light", "dark"]) {
         await desktopPage.evaluate((theme) => {
