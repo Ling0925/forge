@@ -2,6 +2,15 @@
 .wb-new-session-intro[hidden] {
   display: none;
 }
+.wb-new-session-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
 .wb-new-session-intro {
   flex-shrink: 0;
   width: min(720px, calc(100% - 48px));
@@ -96,14 +105,13 @@
   line-height: 1.6;
 }
 .wb-new-session .composer-fresh {
-  flex: 0 0 auto;
+  flex-shrink: 0;
   width: min(720px, calc(100% - 48px));
-  margin: auto auto 0;
+  margin: 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
-  position: sticky;
-  bottom: 0;
+  position: relative;
   z-index: 20;
 }
 .composer-project {
@@ -163,7 +171,6 @@
   }
   .wb-new-session .composer-fresh {
     width: calc(100% - 32px);
-    margin-top: auto;
     margin-bottom: 0;
   }
   .composer-project-panel .composer-workspace-row {
@@ -172,10 +179,10 @@
 }
 @media (max-height: 600px) {
   .wb-new-session-intro {
-    margin-top: 24px;
-    margin-bottom: 16px;
+    margin-top: 16px;
+    margin-bottom: 12px;
   }
   .wb-new-session .composer-fresh {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
 }

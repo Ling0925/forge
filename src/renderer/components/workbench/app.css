@@ -15,10 +15,6 @@
   overflow: hidden;
   position: relative;
 }
-.wb-app .workbench-main.wb-new-session {
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
 .wb-approval-pill {
   display: inline-flex;
   align-items: center;
@@ -493,9 +489,6 @@
     width: 100%;
     overflow: hidden;
     position: relative;
-  }
-  .wb-app .workbench-main.wb-new-session {
-    overflow-y: auto;
   }
   .wb-app .workbench-inspector {
     flex: 1 1 auto;

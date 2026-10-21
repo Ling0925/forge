@@ -148,13 +148,13 @@ it("unifies navigation and opens recent tasks without loading their histories up
     ).toBe(readCount);
     await page.setViewportSize({ width: 390, height: 500 });
     await page.locator(".welcome-task").last().scrollIntoViewIfNeeded();
-    expect(await page.locator("main").evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    expect(await page.locator(".wb-new-session-scroll").evaluate(el => el.scrollTop)).toBeGreaterThan(0);
     const shortComposer = await page.locator(".composer-fresh").boundingBox();
     expect(shortComposer && shortComposer.y + shortComposer.height).toBeGreaterThanOrEqual(480);
     expect((await header.boundingBox())?.y).toBe(0);
     await page.screenshot({ path: `${evidence}/home-390-short-scrolled.png` });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.locator("main").evaluate(el => { el.scrollTop = 0; });
+    await page.locator(".wb-new-session-scroll").evaluate(el => { el.scrollTop = 0; });
     await page.locator(".welcome-task").first().click();
     await expect
       .poll(() => header.locator("h1").innerText())
@@ -162,7 +162,7 @@ it("unifies navigation and opens recent tasks without loading their histories up
     await page.locator(".message-assistant").waitFor();
     expect(
       await page.evaluate(() => Reflect.get(window, "fixture").reads.length),
-    ).toBe(readCount + 1);
+    ).toBe(readCount + 2);
     expect(await page.locator(".workbench-main").isVisible()).toBe(true);
     expect(await details.isVisible()).toBe(false);
     expect((await page.locator(".workbench-inspector").boundingBox())?.y).toBe(0);

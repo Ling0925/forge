@@ -155,10 +155,6 @@
   padding: 0;
   border: 0;
 }
-.wb-app .workbench-main.wb-new-session {
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
 .wb-app .sidebar-footer {
   justify-content: space-between;
 }

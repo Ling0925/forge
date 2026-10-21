@@ -113,6 +113,15 @@
   margin-block: var(--space-12);
   text-align: center;
 }
+.wb-app .wb-new-session-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
 .wb-app .wb-new-session-intro {
   width: min(var(--reading-measure), calc(100% - 2 * var(--space-8)));
   margin: var(--space-8) auto var(--space-6);
@@ -139,13 +148,13 @@
   font-size: var(--text-sm);
 }
 .wb-app .wb-new-session .composer-fresh {
+  flex-shrink: 0;
   width: min(var(--reading-measure), calc(100% - 2 * var(--space-8)));
-  margin: auto auto var(--space-6);
+  margin: 0 auto var(--space-6);
   padding: 0;
   overflow: visible;
   max-height: none;
-  position: sticky;
-  bottom: 0;
+  position: relative;
   z-index: 20;
 }
 .wb-app .composer-surface {
@@ -274,7 +283,6 @@
     margin-top: var(--space-4);
   }
   .wb-app .wb-new-session .composer-fresh {
-    margin-top: auto;
     margin-bottom: var(--space-3);
   }
   .wb-app .composer-dropdown-trigger,
