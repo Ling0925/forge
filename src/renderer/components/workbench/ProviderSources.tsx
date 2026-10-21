@@ -1,7 +1,9 @@
 import {
   ArrowClockwise,
+  CaretDown,
   PencilSimple,
   Plus,
+  SlidersHorizontal,
   Trash,
 } from "@phosphor-icons/react";
 import {
@@ -12,11 +14,11 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ModelCatalog } from "../../../shared/model-catalog";
 import type { PublicProviderPreset } from "../../../shared/model-access";
+import type { ModelCatalog } from "../../../shared/model-catalog";
 import {
-  configureInputSchema,
   type PublicProviderSource,
+  configureInputSchema,
 } from "../../../shared/schemas";
 import { useWorkbench } from "../../state/workbench-context";
 import { Button } from "../primitives/Button";
@@ -29,12 +31,15 @@ import {
   type CatalogTestState,
   ConnectionEditor,
   CredentialsEditor,
+  type EditableModelSelection,
   ImportPanel,
   ModelSelectionEditor,
   PresetPicker,
   RouteGroupsPanel,
+  SourceCardModelPanel,
   accessDraft,
   aliasesObject,
+  countModelOverrides,
   credentialRows,
   describedFailure,
   endpointProblem,
@@ -163,9 +168,7 @@ function buildConnection(
       (row) => row.stored && row.name.trim() && !row.value,
     );
     if (incomplete)
-      throw new Error(
-        "已保存的请求头值不会回显，请填写或删除对应请求头。",
-      );
+      throw new Error("已保存的请求头值不会回显，请填写或删除对应请求头。");
     const headers: Record<string, string> = {};
     for (const row of draft.connection.headers) {
       const name = row.name.trim();
@@ -198,7 +201,10 @@ function buildConnection(
       } catch {
         throw new Error("Vertex JSON 格式错误。");
       }
-      if (parsed !== null && (!parsed || Array.isArray(parsed) || typeof parsed !== "object"))
+      if (
+        parsed !== null &&
+        (!parsed || Array.isArray(parsed) || typeof parsed !== "object")
+      )
         throw new Error("Vertex JSON 必须是对象或 null。");
       connection.vertex = parsed;
     }
@@ -231,9 +237,9 @@ export function ProviderSources({
   const [error, setError] = useState("");
   const [presets, setPresets] = useState<readonly PublicProviderPreset[]>([]);
   const [presetsLoaded, setPresetsLoaded] = useState(false);
-  const [catalogs, setCatalogs] = useState<Readonly<Record<string, ModelCatalog>>>(
-    {},
-  );
+  const [catalogs, setCatalogs] = useState<
+    Readonly<Record<string, ModelCatalog>>
+  >({});
   const [catalogLoading, setCatalogLoading] = useState<
     Readonly<Record<string, boolean>>
   >({});
@@ -246,9 +252,24 @@ export function ProviderSources({
   const [tests, setTests] = useState<
     Readonly<Record<string, CatalogTestState | undefined>>
   >({});
-  const [confirmRemove, setConfirmRemove] = useState<
-    Readonly<{ sourceId: string; sessions: readonly string[] }> | null
-  >(null);
+  const [confirmRemove, setConfirmRemove] = useState<Readonly<{
+    sourceId: string;
+    sessions: readonly string[];
+  }> | null>(null);
+  const [expandedSources, setExpandedSources] = useState<
+    Readonly<Record<string, boolean>>
+  >({});
+  const [cardDrafts, setCardDrafts] = useState<
+    Readonly<
+      Record<
+        string,
+        {
+          readonly model: string;
+          readonly selection: EditableModelSelection;
+        }
+      >
+    >
+  >({});
   const requestedCatalogs = useRef(new Set<string>());
   const pendingCatalogs = useRef(new Map<string, Promise<CatalogLoad>>());
   const testRequests = useRef(
@@ -291,7 +312,8 @@ export function ProviderSources({
     void window.forge
       .modelAccess({ type: "presets" })
       .then((result) => {
-        if (alive.current && result.type === "presets") setPresets(result.presets);
+        if (alive.current && result.type === "presets")
+          setPresets(result.presets);
       })
       .catch(() => undefined);
   }, [active, state.isSettingsOpen, presetsLoaded]);
@@ -404,7 +426,8 @@ export function ProviderSources({
   }, []);
 
   const cancelAllTests = useCallback(() => {
-    for (const sourceId of [...testRequests.current.keys()]) cancelTest(sourceId);
+    for (const sourceId of [...testRequests.current.keys()])
+      cancelTest(sourceId);
   }, [cancelTest]);
 
   useEffect(() => {
@@ -424,7 +447,11 @@ export function ProviderSources({
     if (!window.forge.modelAccess) {
       setTests((old) => ({
         ...old,
-        [sourceId]: { kind, status: "error", error: "当前宿主不支持模型测试。" },
+        [sourceId]: {
+          kind,
+          status: "error",
+          error: "当前宿主不支持模型测试。",
+        },
       }));
       return;
     }
@@ -518,14 +545,29 @@ export function ProviderSources({
     (sourceId: string | null) => {
       const saved = sources.find((item) => item.id === sourceId);
       setSelected(saved?.id ?? null);
-      setDraft(saved ? accessDraft(saved) : newDraft(sources));
-      setBaseline(saved ? accessDraft(saved) : null);
+      if (saved) {
+        const base = accessDraft(saved);
+        const pendingCard = cardDrafts[saved.id];
+        setDraft(
+          pendingCard
+            ? {
+                ...base,
+                model: pendingCard.model,
+                modelSelection: pendingCard.selection,
+              }
+            : base,
+        );
+        setBaseline(base);
+      } else {
+        setDraft(newDraft(sources));
+        setBaseline(null);
+      }
       setError("");
       setMessage("");
       setConfirmRemove(null);
       setConfirmClose(false);
     },
-    [sources],
+    [sources, cardDrafts],
   );
 
   const openEditor = (sourceId: string | null) => {
@@ -583,7 +625,9 @@ export function ProviderSources({
       return;
     }
     const endpoints = presetEndpoints(chosen, "");
-    const usable = protocolOptions.find((item) => chosen.id === "google" ? item.value === "gemini" : endpoints[item.value]);
+    const usable = protocolOptions.find((item) =>
+      chosen.id === "google" ? item.value === "gemini" : endpoints[item.value],
+    );
     change({
       preset: chosen.id,
       region: "",
@@ -591,7 +635,9 @@ export function ProviderSources({
       label: draft.label.trim() ? draft.label : chosen.name,
       ...(usable
         ? { apiMode: usable.value, baseUrl: endpoints[usable.value] ?? "" }
-        : chosen.id === "azure" ? { apiMode: "chat-completions", baseUrl: "" } : {}),
+        : chosen.id === "azure"
+          ? { apiMode: "chat-completions", baseUrl: "" }
+          : {}),
     });
   };
 
@@ -626,7 +672,9 @@ export function ProviderSources({
     nextSettings: typeof settings | null | undefined,
     sourceId: string,
   ) => {
-    const saved = nextSettings?.providerSources?.find((item) => item.id === sourceId);
+    const saved = nextSettings?.providerSources?.find(
+      (item) => item.id === sourceId,
+    );
     if (!saved) return;
     setSelected(saved.id);
     setDraft(accessDraft(saved));
@@ -639,7 +687,9 @@ export function ProviderSources({
       if (
         source?.hasApiKey &&
         draft.baseUrl.trim() !== source.baseUrl &&
-        !draft.credentials.some((credential) => credential.apiKey || credential.clearKey)
+        !draft.credentials.some(
+          (credential) => credential.apiKey || credential.clearKey,
+        )
       )
         throw new Error("修改 API 地址时，请填写密钥或勾选清除密钥。");
       const active = draft.credentials.find(
@@ -696,16 +746,84 @@ export function ProviderSources({
       if (!parsed.success)
         throw new Error(
           parsed.error.issues
-            .map((issue) => `${issue.path.slice(2).join(".")}：${issue.message}`)
+            .map(
+              (issue) => `${issue.path.slice(2).join(".")}：${issue.message}`,
+            )
             .join("\n"),
         );
       const result = await updateSettings(parsed.data);
       if (!result.ok) throw new Error(result.error);
       if (!alive.current) return "";
+      setCardDrafts((old) => {
+        if (!old[draft.id]) return old;
+        const next = { ...old };
+        delete next[draft.id];
+        return next;
+      });
       adopt(result.settings, draft.id);
       setEditorOpen(false);
       void loadCatalog(draft.id, true).catch(() => undefined);
       return "来源已保存。";
+    });
+
+  const saveCardModelConfig = (item: PublicProviderSource) =>
+    operation(async () => {
+      const pending = cardDrafts[item.id];
+      const nextModel = (pending?.model ?? item.model).trim();
+      const nextSelection = pending?.selection ?? selectionDraft(item);
+      const credentials = credentialRows(item).map((credential) => ({
+        id: credential.id,
+        label: credential.label.trim() || "API 密钥",
+        enabled: credential.enabled,
+        type: credential.type,
+        ...(credential.protocol ? { protocol: credential.protocol } : {}),
+      }));
+      const parsed = configureInputSchema.safeParse({
+        source: {
+          type: "save",
+          source: {
+            id: item.id,
+            label: item.label.trim(),
+            baseUrl: item.baseUrl.trim(),
+            model: nextModel,
+            apiMode: item.apiMode ?? "chat-completions",
+            preset: item.preset ?? "",
+            endpoints: normalizedEndpoints(item.endpoints ?? {}),
+            modelSelection: modelSelectionObject(nextSelection),
+            modelAliases: item.modelAliases ?? {},
+            credentialRouting: item.credentialRouting ?? "order",
+            sticky: item.sticky === true,
+            ...(item.activeCredentialId
+              ? { activeCredentialId: item.activeCredentialId }
+              : {}),
+          },
+          credentials,
+          ...(item.revision === undefined
+            ? {}
+            : { expectedRevision: item.revision }),
+        },
+      });
+      if (!parsed.success)
+        throw new Error(
+          parsed.error.issues
+            .map(
+              (issue) => `${issue.path.slice(2).join(".")}：${issue.message}`,
+            )
+            .join("\n"),
+        );
+      const result = await updateSettings(parsed.data);
+      if (!result.ok) throw new Error(result.error);
+      if (!alive.current) return "";
+      setCardDrafts((old) => {
+        const next = { ...old };
+        delete next[item.id];
+        return next;
+      });
+      if (selected === item.id) {
+        adopt(result.settings, item.id);
+      }
+      void loadCatalog(item.id, true).catch(() => undefined);
+      return "模型参数已保存。";
     });
 
   const remove = (sourceId: string, forgottenSessionIds?: readonly string[]) =>
@@ -735,7 +853,9 @@ export function ProviderSources({
     const next = await loadSettings();
     const saved = next?.providerSources?.find((item) => item.id === draft.id);
     if (!saved) return;
-    const unchanged = baseline ? stableDraft(draft) === stableDraft(baseline) : false;
+    const unchanged = baseline
+      ? stableDraft(draft) === stableDraft(baseline)
+      : false;
     if (unchanged) {
       const rebuilt = accessDraft(saved);
       setDraft(rebuilt);
@@ -744,8 +864,7 @@ export function ProviderSources({
       setDraft((old) => ({
         ...old,
         credentials: credentialRows(saved),
-        activeCredentialId:
-          saved.activeCredentialId ?? old.activeCredentialId,
+        activeCredentialId: saved.activeCredentialId ?? old.activeCredentialId,
         revision: saved.revision,
       }));
       setBaseline((old) =>
@@ -769,7 +888,10 @@ export function ProviderSources({
     : undefined;
 
   return (
-    <section className="settings-section provider-sources" aria-label="模型来源管理">
+    <section
+      className="settings-section provider-sources"
+      aria-label="模型来源管理"
+    >
       <div className="provider-heading">
         <h3>模型来源</h3>
         <Button
@@ -790,22 +912,57 @@ export function ProviderSources({
             const loading = catalogLoading[item.id] ?? false;
             const catalog = catalogs[item.id];
             const meta = catalogMeta[item.id];
-            const selection = selectionDraft(item);
+            const savedSelection = selectionDraft(item);
+            const cardDraft = cardDrafts[item.id];
+            const effectiveModel = cardDraft?.model ?? item.model;
+            const effectiveSelection = cardDraft?.selection ?? savedSelection;
+            const overrideCount = countModelOverrides(
+              effectiveSelection.overrides,
+            );
+            const cardDirty =
+              cardDraft !== undefined &&
+              JSON.stringify({
+                model: cardDraft.model.trim(),
+                selection: modelSelectionObject(cardDraft.selection),
+              }) !==
+                JSON.stringify({
+                  model: item.model.trim(),
+                  selection: modelSelectionObject(savedSelection),
+                });
+            const isModelsExpanded = expandedSources[item.id] ?? isDefault;
+            const toggleModelsExpanded = () => {
+              const next = !isModelsExpanded;
+              setExpandedSources((old) => ({ ...old, [item.id]: next }));
+              if (
+                next &&
+                catalogs[item.id] === undefined &&
+                !catalogLoading[item.id]
+              ) {
+                void loadCatalog(item.id).catch(() => undefined);
+              }
+            };
             return (
               <li
                 key={item.id}
-                className={`provider-source-card${isDefault ? " is-current" : ""}`}
+                className={`provider-source-card${isDefault ? " is-current" : ""}${isModelsExpanded ? " is-models-open" : ""}`}
               >
                 <div className="provider-source-head">
                   <span className="provider-source-title">
                     <strong>{item.label}</strong>
-                    {isDefault && <span className="provider-current">默认</span>}
+                    {isDefault && (
+                      <span className="provider-current">默认</span>
+                    )}
                     <span className="provider-tag">
                       {item.credentials?.length ?? 1} 凭据
                     </span>
                     <span className="provider-tag is-muted">
                       {item.hasApiKey ? "已保存密钥" : "无密钥"}
                     </span>
+                    {overrideCount > 0 && (
+                      <span className="provider-tag is-customized">
+                        已定制 {overrideCount} 个模型
+                      </span>
+                    )}
                     {meta?.stale && catalog && catalog.length > 0 && (
                       <span className="provider-tag is-stale">已过期</span>
                     )}
@@ -816,13 +973,13 @@ export function ProviderSources({
                 </div>
                 <p className="provider-source-url">{item.baseUrl}</p>
                 <p className="provider-source-detail">
-                  默认模型 <code>{item.model || "未选择"}</code>
+                  默认模型 <code>{effectiveModel || "未选择"}</code>
                   <span className="model-access-separator">·</span>
-                  {selection.mode === "all"
+                  {effectiveSelection.mode === "all"
                     ? "全部模型"
-                    : selection.mode === "none"
+                    : effectiveSelection.mode === "none"
                       ? "不提供模型"
-                      : `${selection.models.length} 个模型`}
+                      : `${effectiveSelection.models.length} 个模型`}
                   {catalogLoading[item.id] && (
                     <span className="model-access-separator">· 加载中</span>
                   )}
@@ -867,14 +1024,81 @@ export function ProviderSources({
                   <Button
                     size="sm"
                     variant="ghost"
+                    className={`provider-models-toggle${isModelsExpanded ? " is-open" : ""}`}
+                    icon={<SlidersHorizontal size={14} />}
+                    aria-expanded={isModelsExpanded}
+                    aria-label={`配置${item.label}的模型参数`}
+                    disabled={busy}
+                    onClick={toggleModelsExpanded}
+                  >
+                    {isModelsExpanded ? "收起模型参数" : "模型参数配置"}
+                    <CaretDown size={12} aria-hidden="true" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     className="provider-delete"
                     icon={<Trash size={14} />}
                     disabled={busy}
-                    onClick={() => setConfirmRemove({ sourceId: item.id, sessions: [] })}
+                    onClick={() =>
+                      setConfirmRemove({ sourceId: item.id, sessions: [] })
+                    }
                   >
                     删除
                   </Button>
                 </div>
+
+                {isModelsExpanded && (
+                  <SourceCardModelPanel
+                    sourceLabel={item.label}
+                    catalog={catalog ?? []}
+                    loading={loading}
+                    error={catalogErrors[item.id]}
+                    model={effectiveModel}
+                    selection={effectiveSelection}
+                    dirty={cardDirty}
+                    saving={busy}
+                    disabled={busy}
+                    onModel={(nextModel) => {
+                      setCardDrafts((old) => ({
+                        ...old,
+                        [item.id]: {
+                          model: nextModel,
+                          selection: effectiveSelection,
+                        },
+                      }));
+                      if (selected === item.id) {
+                        change({ model: nextModel });
+                      }
+                    }}
+                    onSelection={(nextSelection) => {
+                      setCardDrafts((old) => ({
+                        ...old,
+                        [item.id]: {
+                          model: effectiveModel,
+                          selection: nextSelection,
+                        },
+                      }));
+                      if (selected === item.id) {
+                        change({ modelSelection: nextSelection });
+                      }
+                    }}
+                    onResetDraft={() => {
+                      setCardDrafts((old) => {
+                        const next = { ...old };
+                        delete next[item.id];
+                        return next;
+                      });
+                      if (selected === item.id) {
+                        change({
+                          model: item.model,
+                          modelSelection: savedSelection,
+                        });
+                      }
+                    }}
+                    onSave={() => void saveCardModelConfig(item)}
+                  />
+                )}
               </li>
             );
           })}
@@ -883,7 +1107,9 @@ export function ProviderSources({
         <p className="provider-empty">无来源。</p>
       )}
 
-      {!editorOpen && message && <output className="provider-feedback">{message}</output>}
+      {!editorOpen && message && (
+        <output className="provider-feedback">{message}</output>
+      )}
       {!editorOpen && error && (
         <p className="provider-feedback provider-error" role="alert">
           {error}
@@ -917,7 +1143,11 @@ export function ProviderSources({
             >
               确认删除来源
             </Button>
-            <Button variant="ghost" disabled={busy} onClick={() => setConfirmRemove(null)}>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setConfirmRemove(null)}
+            >
               取消
             </Button>
           </div>
@@ -953,7 +1183,11 @@ export function ProviderSources({
                 onRegion={selectRegion}
               />
               <div className="provider-form-grid">
-                <Field id={`${id}-label`} label="来源名称" error={labelError || undefined}>
+                <Field
+                  id={`${id}-label`}
+                  label="来源名称"
+                  error={labelError || undefined}
+                >
                   <Input
                     id={`${id}-label`}
                     value={draft.label}
@@ -1004,7 +1238,9 @@ export function ProviderSources({
                 disabled={busy || !source || dirty}
                 test={tests[draft.id]}
                 onModel={(model) => change({ model })}
-                onSelection={(selection) => change({ modelSelection: selection })}
+                onSelection={(selection) =>
+                  change({ modelSelection: selection })
+                }
                 onAliases={(aliases) => change({ aliases })}
                 onRefresh={() => {
                   if (!source) return;
@@ -1045,7 +1281,9 @@ export function ProviderSources({
                     <input
                       type="checkbox"
                       checked={draft.sticky}
-                      onChange={(event) => change({ sticky: event.target.checked })}
+                      onChange={(event) =>
+                        change({ sticky: event.target.checked })
+                      }
                     />
                     黏性
                   </label>
@@ -1059,7 +1297,9 @@ export function ProviderSources({
                 activeCredentialId={draft.activeCredentialId}
                 disabled={busy}
                 onCredentials={(credentials) => change({ credentials })}
-                onActive={(activeCredentialId) => change({ activeCredentialId })}
+                onActive={(activeCredentialId) =>
+                  change({ activeCredentialId })
+                }
                 onCompleted={reloadAfterLogin}
               />
 
@@ -1075,7 +1315,9 @@ export function ProviderSources({
                 {error}
               </p>
             )}
-            {message && <output className="provider-feedback">{message}</output>}
+            {message && (
+              <output className="provider-feedback">{message}</output>
+            )}
             {confirmClose && (
               <fieldset
                 ref={closeConfirmation}
@@ -1099,7 +1341,10 @@ export function ProviderSources({
               </fieldset>
             )}
             {confirmRemove && (
-              <fieldset className="provider-remove-confirm" aria-label="确认删除来源">
+              <fieldset
+                className="provider-remove-confirm"
+                aria-label="确认删除来源"
+              >
                 <p>
                   删除“{removeTarget?.label ?? confirmRemove.sourceId}”？
                   {confirmRemove.sessions.length > 0 && (

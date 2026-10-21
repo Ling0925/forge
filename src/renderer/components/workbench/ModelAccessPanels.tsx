@@ -1,8 +1,11 @@
 import {
   ArrowClockwise,
+  ArrowCounterClockwise,
+  CaretDown,
   FloppyDisk,
   Plugs,
   Plus,
+  SlidersHorizontal,
   Trash,
   X,
 } from "@phosphor-icons/react";
@@ -284,11 +287,236 @@ export function accessDraft(source: PublicProviderSource): AccessDraft {
 }
 
 export function modelSelectionObject(selection: EditableModelSelection) {
+  const cleanedOverrides = cleanModelOverrides(selection.overrides);
   return {
     mode: selection.mode,
     ...(selection.mode === "selected" ? { models: [...selection.models] } : {}),
     ...(selection.manual.length ? { manual: [...selection.manual] } : {}),
-    ...(selection.overrides ? { overrides: selection.overrides } : {}),
+    ...(cleanedOverrides ? { overrides: cleanedOverrides } : {}),
+  };
+}
+
+export type ModelReasoningEffort = NonNullable<
+  ModelCatalogEntry["reasoningEffort"]
+>;
+export type ModelOverrideEntry = NonNullable<
+  EditableModelSelection["overrides"]
+>[string];
+
+export const REASONING_EFFORT_OPTIONS: readonly {
+  readonly value: "" | ModelReasoningEffort;
+  readonly label: string;
+  readonly shortLabel: string;
+  readonly bars: number;
+}[] = [
+  { value: "", label: "跟随全局", shortLabel: "全局", bars: 0 },
+  { value: "default", label: "模型默认", shortLabel: "默认", bars: 0 },
+  { value: "none", label: "关闭 (none)", shortLabel: "关闭", bars: 0 },
+  { value: "minimal", label: "极低 (minimal)", shortLabel: "minimal", bars: 1 },
+  { value: "low", label: "低 (low)", shortLabel: "low", bars: 2 },
+  { value: "medium", label: "中 (medium)", shortLabel: "medium", bars: 3 },
+  { value: "high", label: "高 (high)", shortLabel: "high", bars: 4 },
+  { value: "xhigh", label: "超高 (xhigh)", shortLabel: "xhigh", bars: 5 },
+  { value: "max", label: "MAX (max)", shortLabel: "MAX", bars: 5 },
+];
+
+export const SUPPORTED_EFFORT_LEVELS = [
+  { value: "none", label: "关闭 (none)", shortLabel: "none" },
+  { value: "minimal", label: "极低 (minimal)", shortLabel: "minimal" },
+  { value: "low", label: "低 (low)", shortLabel: "low" },
+  { value: "medium", label: "中 (medium)", shortLabel: "medium" },
+  { value: "high", label: "高 (high)", shortLabel: "high" },
+  { value: "xhigh", label: "超高 (xhigh)", shortLabel: "xhigh" },
+  { value: "max", label: "MAX (max)", shortLabel: "max" },
+] as const;
+
+export const CONTEXT_WINDOW_PRESETS = [
+  { label: "32K", tokens: 32_000 },
+  { label: "64K", tokens: 64_000 },
+  { label: "128K", tokens: 128_000 },
+  { label: "200K", tokens: 200_000 },
+  { label: "256K", tokens: 256_000 },
+  { label: "512K", tokens: 512_000 },
+  { label: "1M", tokens: 1_000_000 },
+  { label: "2M", tokens: 2_000_000 },
+] as const;
+
+export const MAX_OUTPUT_PRESETS = [
+  { label: "4K", tokens: 4_096 },
+  { label: "8K", tokens: 8_192 },
+  { label: "16K", tokens: 16_384 },
+  { label: "32K", tokens: 32_768 },
+  { label: "64K", tokens: 65_536 },
+  { label: "128K", tokens: 128_000 },
+] as const;
+
+export function hasModelOverride(
+  override: ModelOverrideEntry | undefined,
+): boolean {
+  if (!override) return false;
+  return (
+    (override.contextWindowTokens !== undefined &&
+      override.contextWindowTokens !== null) ||
+    (override.maxOutputTokens !== undefined &&
+      override.maxOutputTokens !== null) ||
+    override.reasoningEffort !== undefined ||
+    (override.reasoningEfforts !== undefined &&
+      override.reasoningEfforts.length > 0) ||
+    override.displayName !== undefined ||
+    override.tools !== undefined ||
+    override.vision !== undefined
+  );
+}
+
+export function cleanModelOverrides(
+  overrides: EditableModelSelection["overrides"],
+): EditableModelSelection["overrides"] {
+  if (!overrides) return undefined;
+  const next: Record<string, ModelOverrideEntry> = {};
+  for (const [id, item] of Object.entries(overrides)) {
+    if (!item) continue;
+    const entry: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(item)) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value) && value.length === 0) continue;
+      entry[key] = value;
+    }
+    if (Object.keys(entry).length > 0) {
+      next[id] = entry as ModelOverrideEntry;
+    }
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+export function countModelOverrides(
+  overrides: EditableModelSelection["overrides"],
+): number {
+  const cleaned = cleanModelOverrides(overrides);
+  return cleaned ? Object.keys(cleaned).length : 0;
+}
+
+export function updateModelOverride(
+  selection: EditableModelSelection,
+  modelId: string,
+  patch: Partial<{
+    readonly contextWindowTokens: number | null | undefined;
+    readonly maxOutputTokens: number | null | undefined;
+    readonly reasoningEffort: ModelReasoningEffort | undefined;
+    readonly reasoningEfforts: readonly string[] | undefined;
+  }>,
+): EditableModelSelection {
+  const current = selection.overrides?.[modelId] ?? {};
+  const merged: Record<string, unknown> = { ...current, ...patch };
+  for (const [key, value] of Object.entries(merged)) {
+    if (value === undefined || value === null) {
+      delete merged[key];
+    } else if (Array.isArray(value) && value.length === 0) {
+      delete merged[key];
+    }
+  }
+  const rest = { ...(selection.overrides ?? {}) };
+  if (Object.keys(merged).length > 0) {
+    rest[modelId] = merged as ModelOverrideEntry;
+  } else {
+    delete rest[modelId];
+  }
+  return {
+    ...selection,
+    overrides: cleanModelOverrides(rest),
+  };
+}
+
+export function clearModelOverride(
+  selection: EditableModelSelection,
+  modelId: string,
+): EditableModelSelection {
+  if (!selection.overrides?.[modelId]) return selection;
+  const rest = { ...selection.overrides };
+  delete rest[modelId];
+  return {
+    ...selection,
+    overrides: cleanModelOverrides(rest),
+  };
+}
+
+export function effectiveModelEntry(
+  entry: ModelCatalogEntry,
+  override: ModelOverrideEntry | undefined,
+): ModelCatalogEntry {
+  const nextProvenance: Record<string, "upstream" | "reference" | "user"> = {};
+  for (const [key, source] of Object.entries(entry.provenance ?? {})) {
+    if (source !== "user") {
+      nextProvenance[key] = source;
+    }
+  }
+  const baseContext =
+    entry.provenance?.contextWindowTokens === "user"
+      ? null
+      : entry.contextWindowTokens;
+  const baseMaxOutput =
+    entry.provenance?.maxOutputTokens === "user"
+      ? undefined
+      : entry.maxOutputTokens;
+  const baseEffort =
+    entry.provenance?.reasoningEffort === "user"
+      ? undefined
+      : entry.reasoningEffort;
+  const baseEfforts =
+    entry.provenance?.reasoningEfforts === "user"
+      ? undefined
+      : entry.reasoningEfforts;
+
+  const contextWindowTokens =
+    override?.contextWindowTokens !== undefined &&
+    override.contextWindowTokens !== null
+      ? override.contextWindowTokens
+      : baseContext;
+  if (
+    override?.contextWindowTokens !== undefined &&
+    override.contextWindowTokens !== null
+  ) {
+    nextProvenance.contextWindowTokens = "user";
+  }
+
+  const maxOutputTokens =
+    override?.maxOutputTokens !== undefined && override.maxOutputTokens !== null
+      ? override.maxOutputTokens
+      : baseMaxOutput;
+  if (
+    override?.maxOutputTokens !== undefined &&
+    override.maxOutputTokens !== null
+  ) {
+    nextProvenance.maxOutputTokens = "user";
+  }
+
+  const reasoningEffort = override?.reasoningEffort ?? baseEffort;
+  if (override?.reasoningEffort !== undefined) {
+    nextProvenance.reasoningEffort = "user";
+  }
+
+  const reasoningEfforts =
+    override?.reasoningEfforts && override.reasoningEfforts.length > 0
+      ? override.reasoningEfforts
+      : baseEfforts;
+  if (override?.reasoningEfforts && override.reasoningEfforts.length > 0) {
+    nextProvenance.reasoningEfforts = "user";
+  }
+
+  return {
+    ...entry,
+    contextWindowTokens,
+    ...(maxOutputTokens === undefined
+      ? { maxOutputTokens: undefined }
+      : { maxOutputTokens }),
+    ...(reasoningEffort === undefined
+      ? { reasoningEffort: undefined }
+      : { reasoningEffort }),
+    ...(reasoningEfforts === undefined
+      ? { reasoningEfforts: undefined }
+      : { reasoningEfforts }),
+    ...(Object.keys(nextProvenance).length > 0
+      ? { provenance: nextProvenance }
+      : { provenance: undefined }),
   };
 }
 
@@ -325,7 +553,7 @@ export function describedFailure(error: unknown): string {
   return "操作失败，未自动重试。";
 }
 
-function formatTokens(value: number | null | undefined): string {
+export function formatTokens(value: number | null | undefined): string {
   if (value === null || value === undefined) return "?";
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`;
   if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}K`;
@@ -358,6 +586,12 @@ export function ModelMetadata({
       <span>
         视觉 {entry.vision === undefined ? "?" : entry.vision ? "是" : "否"}
       </span>
+      {entry.reasoningEffort && (
+        <span className="model-access-meta-effort">
+          默认思考{" "}
+          {entry.reasoningEffort === "default" ? "默认" : entry.reasoningEffort}
+        </span>
+      )}
       {entry.reasoningEfforts?.length ? (
         <span>推理 {entry.reasoningEfforts.join("/")}</span>
       ) : (
@@ -376,6 +610,361 @@ export function ModelMetadata({
         </span>
       ))}
     </span>
+  );
+}
+
+function EffortBars({ bars }: { readonly bars: number }) {
+  return (
+    <span className="model-effort-bars" aria-hidden="true">
+      {[1, 2, 3, 4, 5].map((index) => (
+        <span
+          key={index}
+          className={`model-effort-bar${index <= bars ? " is-active" : ""}`}
+        />
+      ))}
+    </span>
+  );
+}
+
+export function ModelParameterEditor({
+  entry,
+  override,
+  disabled,
+  onChange,
+  onReset,
+}: {
+  readonly entry: ModelCatalogEntry;
+  readonly override: ModelOverrideEntry | undefined;
+  readonly disabled: boolean;
+  readonly onChange: (
+    patch: Partial<{
+      readonly contextWindowTokens: number | null | undefined;
+      readonly maxOutputTokens: number | null | undefined;
+      readonly reasoningEffort: ModelReasoningEffort | undefined;
+      readonly reasoningEfforts: readonly string[] | undefined;
+    }>,
+  ) => void;
+  readonly onReset: () => void;
+}) {
+  const upstreamContext =
+    entry.provenance?.contextWindowTokens === "user"
+      ? null
+      : entry.contextWindowTokens;
+  const upstreamMaxOutput =
+    entry.provenance?.maxOutputTokens === "user"
+      ? undefined
+      : entry.maxOutputTokens;
+  const upstreamEffort =
+    entry.provenance?.reasoningEffort === "user"
+      ? undefined
+      : entry.reasoningEffort;
+  const upstreamEfforts =
+    entry.provenance?.reasoningEfforts === "user"
+      ? undefined
+      : entry.reasoningEfforts;
+
+  const currentEffort: "" | ModelReasoningEffort =
+    override?.reasoningEffort ?? upstreamEffort ?? "";
+  const currentEfforts: readonly string[] =
+    override?.reasoningEfforts !== undefined &&
+    override.reasoningEfforts.length > 0
+      ? override.reasoningEfforts
+      : (upstreamEfforts ?? []);
+  const currentContext =
+    override?.contextWindowTokens !== undefined &&
+    override.contextWindowTokens !== null
+      ? override.contextWindowTokens
+      : undefined;
+  const currentMaxOutput =
+    override?.maxOutputTokens !== undefined && override.maxOutputTokens !== null
+      ? override.maxOutputTokens
+      : undefined;
+
+  const isCustomized = hasModelOverride(override);
+
+  const toggleSupportedEffort = (level: string) => {
+    const exists = currentEfforts.includes(level);
+    const next = exists
+      ? currentEfforts.filter((item) => item !== level)
+      : SUPPORTED_EFFORT_LEVELS.map((item) => item.value).filter(
+          (val) => val === level || currentEfforts.includes(val),
+        );
+    onChange({ reasoningEfforts: next.length > 0 ? next : undefined });
+  };
+
+  const handleNumberInput = (
+    raw: string,
+    field: "contextWindowTokens" | "maxOutputTokens",
+  ) => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      onChange({ [field]: undefined });
+      return;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed) && parsed > 0 && parsed <= 10_000_000) {
+      onChange({ [field]: parsed });
+    }
+  };
+
+  return (
+    <div
+      className="model-param-editor"
+      aria-label={`模型 ${entry.id} 参数配置面板`}
+    >
+      <div className="model-param-editor-head">
+        <div className="model-param-editor-title">
+          <SlidersHorizontal size={14} aria-hidden="true" />
+          <span>
+            模型参数配置 · <code>{entry.id}</code>
+          </span>
+          <span className="model-param-upstream-hint">
+            上游基准：上下文 {formatTokens(upstreamContext)} · 输出{" "}
+            {formatTokens(upstreamMaxOutput)} · 推理档位{" "}
+            {upstreamEfforts?.length ? upstreamEfforts.join("/") : "未声明"}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="model-param-reset-btn"
+          disabled={disabled || !isCustomized}
+          aria-label={`恢复模型 ${entry.id} 默认配置`}
+          onClick={onReset}
+        >
+          <ArrowCounterClockwise size={13} aria-hidden="true" />
+          <span>恢复默认</span>
+        </button>
+      </div>
+
+      <div className="model-param-grid">
+        <div className="model-param-group">
+          <div className="model-param-label-row">
+            <span className="model-param-label">默认思考等级</span>
+            <span className="model-param-sub">
+              {override?.reasoningEffort !== undefined
+                ? `已固定为 ${override.reasoningEffort}`
+                : "跟随全局或模型默认"}
+            </span>
+          </div>
+          <fieldset
+            className="model-param-chips"
+            aria-label={`模型 ${entry.id} 默认思考等级`}
+          >
+            {REASONING_EFFORT_OPTIONS.map((option) => {
+              const active = currentEffort === option.value;
+              return (
+                <button
+                  key={option.value || "global"}
+                  type="button"
+                  aria-pressed={active}
+                  disabled={disabled}
+                  className={`model-param-chip${active ? " is-active" : ""}`}
+                  onClick={() =>
+                    onChange({
+                      reasoningEffort:
+                        option.value === "" ? undefined : option.value,
+                    })
+                  }
+                >
+                  {option.bars > 0 && <EffortBars bars={option.bars} />}
+                  <span>{option.shortLabel}</span>
+                </button>
+              );
+            })}
+          </fieldset>
+        </div>
+
+        <div className="model-param-group">
+          <div className="model-param-label-row">
+            <span className="model-param-label">支持的思考档位范围</span>
+            <div className="model-param-quick-links">
+              <button
+                type="button"
+                className="model-param-link-btn"
+                disabled={disabled}
+                onClick={() =>
+                  onChange({
+                    reasoningEfforts: SUPPORTED_EFFORT_LEVELS.map(
+                      (item) => item.value,
+                    ),
+                  })
+                }
+              >
+                全档位
+              </button>
+              <button
+                type="button"
+                className="model-param-link-btn"
+                disabled={disabled}
+                onClick={() =>
+                  onChange({
+                    reasoningEfforts: ["low", "medium", "high"],
+                  })
+                }
+              >
+                标准三档
+              </button>
+              <button
+                type="button"
+                className="model-param-link-btn"
+                disabled={disabled}
+                onClick={() =>
+                  onChange({
+                    reasoningEfforts: ["medium", "high", "xhigh", "max"],
+                  })
+                }
+              >
+                深度推理
+              </button>
+              {override?.reasoningEfforts !== undefined && (
+                <button
+                  type="button"
+                  className="model-param-link-btn is-muted"
+                  disabled={disabled}
+                  onClick={() => onChange({ reasoningEfforts: undefined })}
+                >
+                  恢复上游
+                </button>
+              )}
+            </div>
+          </div>
+          <fieldset
+            className="model-param-chips"
+            aria-label={`模型 ${entry.id} 支持的思考档位范围`}
+          >
+            {SUPPORTED_EFFORT_LEVELS.map((level) => {
+              const checked = currentEfforts.includes(level.value);
+              return (
+                <button
+                  key={level.value}
+                  type="button"
+                  aria-pressed={checked}
+                  disabled={disabled}
+                  className={`model-param-chip is-toggle${checked ? " is-active" : ""}`}
+                  onClick={() => toggleSupportedEffort(level.value)}
+                >
+                  <span>{level.shortLabel}</span>
+                </button>
+              );
+            })}
+          </fieldset>
+        </div>
+
+        <div className="model-param-group">
+          <div className="model-param-label-row">
+            <span className="model-param-label">上下文窗口大小</span>
+            <span className="model-param-sub">
+              生效值：
+              {formatTokens(
+                currentContext ?? upstreamContext ?? entry.contextWindowTokens,
+              )}
+            </span>
+          </div>
+          <div className="model-param-token-row">
+            <fieldset
+              className="model-param-chips"
+              aria-label={`模型 ${entry.id} 上下文窗口预设`}
+            >
+              <button
+                type="button"
+                disabled={disabled}
+                className={`model-param-chip${currentContext === undefined ? " is-active" : ""}`}
+                onClick={() => onChange({ contextWindowTokens: undefined })}
+              >
+                上游 ({formatTokens(upstreamContext)})
+              </button>
+              {CONTEXT_WINDOW_PRESETS.map((preset) => (
+                <button
+                  key={preset.tokens}
+                  type="button"
+                  disabled={disabled}
+                  className={`model-param-chip${currentContext === preset.tokens ? " is-active" : ""}`}
+                  onClick={() =>
+                    onChange({ contextWindowTokens: preset.tokens })
+                  }
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </fieldset>
+            <Input
+              type="number"
+              min={1024}
+              max={10000000}
+              step={1024}
+              disabled={disabled}
+              aria-label={`模型 ${entry.id} 上下文窗口 Token`}
+              value={currentContext === undefined ? "" : String(currentContext)}
+              placeholder={
+                upstreamContext
+                  ? `上游默认 (${upstreamContext})`
+                  : "自定义 Token 数 (如 128000)"
+              }
+              onChange={(event) =>
+                handleNumberInput(event.target.value, "contextWindowTokens")
+              }
+            />
+          </div>
+        </div>
+
+        <div className="model-param-group">
+          <div className="model-param-label-row">
+            <span className="model-param-label">最大输出 Token</span>
+            <span className="model-param-sub">
+              生效值：
+              {formatTokens(
+                currentMaxOutput ?? upstreamMaxOutput ?? entry.maxOutputTokens,
+              )}
+            </span>
+          </div>
+          <div className="model-param-token-row">
+            <fieldset
+              className="model-param-chips"
+              aria-label={`模型 ${entry.id} 最大输出预设`}
+            >
+              <button
+                type="button"
+                disabled={disabled}
+                className={`model-param-chip${currentMaxOutput === undefined ? " is-active" : ""}`}
+                onClick={() => onChange({ maxOutputTokens: undefined })}
+              >
+                上游 ({formatTokens(upstreamMaxOutput)})
+              </button>
+              {MAX_OUTPUT_PRESETS.map((preset) => (
+                <button
+                  key={preset.tokens}
+                  type="button"
+                  disabled={disabled}
+                  className={`model-param-chip${currentMaxOutput === preset.tokens ? " is-active" : ""}`}
+                  onClick={() => onChange({ maxOutputTokens: preset.tokens })}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </fieldset>
+            <Input
+              type="number"
+              min={256}
+              max={10000000}
+              step={256}
+              disabled={disabled}
+              aria-label={`模型 ${entry.id} 最大输出 Token`}
+              value={
+                currentMaxOutput === undefined ? "" : String(currentMaxOutput)
+              }
+              placeholder={
+                upstreamMaxOutput
+                  ? `上游默认 (${upstreamMaxOutput})`
+                  : "自定义最大输出 (如 16384)"
+              }
+              onChange={(event) =>
+                handleNumberInput(event.target.value, "maxOutputTokens")
+              }
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -475,6 +1064,7 @@ export function ModelSelectionEditor({
   const [query, setQuery] = useState("");
   const [manual, setManual] = useState("");
   const [visible, setVisible] = useState(50);
+  const [expandedModel, setExpandedModel] = useState<string | null>(null);
   const listId = useId();
   const byId = new Map<string, ModelCatalogEntry>();
   for (const entry of selection.manual) byId.set(entry.id, entry);
@@ -649,33 +1239,75 @@ export function ModelSelectionEditor({
               const isManual = selection.manual.some(
                 (item) => item.id === entry.id,
               );
+              const override = selection.overrides?.[entry.id];
+              const effective = effectiveModelEntry(entry, override);
+              const overridden = hasModelOverride(override);
+              const isExpanded = expandedModel === entry.id;
               return (
-                <div className="model-access-model-row" key={entry.id}>
-                  <label className="model-access-model-check">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(entry.id)}
-                      disabled={disabled || selection.mode !== "selected"}
-                      onChange={() => toggle(entry.id)}
+                <div
+                  className={`model-access-model-row${isExpanded ? " is-expanded" : ""}${overridden ? " is-customized" : ""}`}
+                  key={entry.id}
+                >
+                  <div className="model-access-model-row-main">
+                    <label className="model-access-model-check">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(entry.id)}
+                        disabled={disabled || selection.mode !== "selected"}
+                        onChange={() => toggle(entry.id)}
+                      />
+                      <span className="model-access-model-id">{entry.id}</span>
+                    </label>
+                    {entry.displayName && (
+                      <span className="model-access-model-name">
+                        {entry.displayName}
+                      </span>
+                    )}
+                    <ModelMetadata entry={effective} />
+                    <div className="model-access-row-actions">
+                      {overridden && (
+                        <span className="model-override-badge">已定制</span>
+                      )}
+                      <button
+                        type="button"
+                        className={`model-param-toggle-btn${isExpanded ? " is-open" : ""}`}
+                        aria-expanded={isExpanded}
+                        aria-label={`配置模型参数 ${entry.id}`}
+                        onClick={() =>
+                          setExpandedModel(isExpanded ? null : entry.id)
+                        }
+                      >
+                        <SlidersHorizontal size={13} aria-hidden="true" />
+                        <span>参数配置</span>
+                        <CaretDown size={11} aria-hidden="true" />
+                      </button>
+                      {isManual && (
+                        <button
+                          type="button"
+                          className="model-access-icon-button"
+                          aria-label={`移除手工模型 ${entry.id}`}
+                          disabled={disabled}
+                          onClick={() => removeManual(entry.id)}
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <ModelParameterEditor
+                      entry={entry}
+                      override={override}
+                      disabled={false}
+                      onChange={(patch) =>
+                        onSelection(
+                          updateModelOverride(selection, entry.id, patch),
+                        )
+                      }
+                      onReset={() =>
+                        onSelection(clearModelOverride(selection, entry.id))
+                      }
                     />
-                    <span className="model-access-model-id">{entry.id}</span>
-                  </label>
-                  {entry.displayName && (
-                    <span className="model-access-model-name">
-                      {entry.displayName}
-                    </span>
-                  )}
-                  <ModelMetadata entry={entry} />
-                  {isManual && (
-                    <button
-                      type="button"
-                      className="model-access-icon-button"
-                      aria-label={`移除手工模型 ${entry.id}`}
-                      disabled={disabled}
-                      onClick={() => removeManual(entry.id)}
-                    >
-                      <X size={14} aria-hidden="true" />
-                    </button>
                   )}
                 </div>
               );
@@ -788,6 +1420,384 @@ export function ModelSelectionEditor({
         <p className="model-access-status">不提供模型。</p>
       )}
     </section>
+  );
+}
+
+export function SourceCardModelPanel({
+  sourceLabel,
+  catalog,
+  loading,
+  error,
+  model,
+  selection,
+  dirty,
+  saving,
+  disabled,
+  onModel,
+  onSelection,
+  onSave,
+  onResetDraft,
+}: {
+  readonly sourceLabel: string;
+  readonly catalog: ModelCatalog;
+  readonly loading: boolean;
+  readonly error: string | undefined;
+  readonly model: string;
+  readonly selection: EditableModelSelection;
+  readonly dirty: boolean;
+  readonly saving: boolean;
+  readonly disabled: boolean;
+  readonly onModel: (value: string) => void;
+  readonly onSelection: (value: EditableModelSelection) => void;
+  readonly onSave: () => void;
+  readonly onResetDraft: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "customized">("all");
+  const [manualInput, setManualInput] = useState("");
+  const [expandedModel, setExpandedModel] = useState<string | null>(null);
+  const [visible, setVisible] = useState(30);
+
+  const byId = new Map<string, ModelCatalogEntry>();
+  for (const entry of selection.manual) byId.set(entry.id, entry);
+  for (const entry of catalog) byId.set(entry.id, entry);
+  for (const id of Object.keys(selection.overrides ?? {})) {
+    if (!byId.has(id)) {
+      byId.set(id, { id, contextWindowTokens: null });
+    }
+  }
+  if (model.trim() && !byId.has(model.trim())) {
+    byId.set(model.trim(), { id: model.trim(), contextWindowTokens: null });
+  }
+
+  const entries = [...byId.values()];
+  const overrideCount = countModelOverrides(selection.overrides);
+  const needle = query.trim().toLowerCase();
+  const filtered = entries.filter((entry) => {
+    if (
+      filterMode === "customized" &&
+      !hasModelOverride(selection.overrides?.[entry.id])
+    ) {
+      return false;
+    }
+    if (!needle) return true;
+    return (
+      entry.id.toLowerCase().includes(needle) ||
+      Boolean(entry.displayName?.toLowerCase().includes(needle))
+    );
+  });
+
+  const addManualModel = () => {
+    const id = manualInput.trim();
+    if (!id) return;
+    if (!byId.has(id)) {
+      const entry: ModelCatalogEntry = { id, contextWindowTokens: null };
+      onSelection({
+        ...selection,
+        ...(selection.mode === "selected"
+          ? { models: [...selection.models, id] }
+          : {}),
+        manual: [...selection.manual, entry],
+      });
+    }
+    setManualInput("");
+    setExpandedModel(id);
+  };
+
+  return (
+    <div
+      className="provider-card-models-panel"
+      aria-label={`${sourceLabel} 模型参数配置`}
+    >
+      <div className="provider-card-models-toolbar">
+        <div className="provider-card-models-search">
+          <Input
+            aria-label={`搜索${sourceLabel}的模型`}
+            value={query}
+            placeholder="搜索模型 ID 或名称…"
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setVisible(30);
+            }}
+          />
+          <div
+            className="provider-card-filter-tabs"
+            role="tablist"
+            aria-label="模型筛选"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterMode === "all"}
+              className={`provider-card-filter-tab${filterMode === "all" ? " is-active" : ""}`}
+              onClick={() => setFilterMode("all")}
+            >
+              全部 ({entries.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterMode === "customized"}
+              className={`provider-card-filter-tab${filterMode === "customized" ? " is-active" : ""}`}
+              onClick={() => setFilterMode("customized")}
+            >
+              已定制 ({overrideCount})
+            </button>
+          </div>
+        </div>
+        <div className="provider-card-manual-add">
+          <Input
+            aria-label={`添加${sourceLabel}的手工模型`}
+            value={manualInput}
+            placeholder="手工添加模型 ID…"
+            onChange={(event) => setManualInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addManualModel();
+              }
+            }}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Plus size={14} />}
+            disabled={disabled || !manualInput.trim()}
+            onClick={addManualModel}
+          >
+            加入列表
+          </Button>
+        </div>
+      </div>
+
+      {dirty && (
+        <div className="provider-card-save-bar">
+          <span className="provider-card-save-hint">
+            已修改模型思考等级或上下文配置，保存后立即同步至此来源。
+          </span>
+          <div className="provider-card-save-actions">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={disabled || saving}
+              onClick={onResetDraft}
+            >
+              放弃修改
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<FloppyDisk size={14} />}
+              loading={saving}
+              disabled={disabled}
+              aria-label={`保存${sourceLabel}的模型配置`}
+              onClick={onSave}
+            >
+              保存模型配置
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="provider-card-models-list" aria-busy={loading}>
+        {filtered.length > 0 ? (
+          filtered.slice(0, visible).map((entry) => {
+            const override = selection.overrides?.[entry.id];
+            const effective = effectiveModelEntry(entry, override);
+            const overridden = hasModelOverride(override);
+            const isExpanded = expandedModel === entry.id;
+            const isDefaultModel = model === entry.id;
+            const upstreamContext =
+              entry.provenance?.contextWindowTokens === "user"
+                ? null
+                : entry.contextWindowTokens;
+            const currentEffort =
+              override?.reasoningEffort ??
+              (entry.provenance?.reasoningEffort === "user"
+                ? undefined
+                : entry.reasoningEffort) ??
+              "";
+            const currentContext =
+              override?.contextWindowTokens !== undefined &&
+              override.contextWindowTokens !== null
+                ? override.contextWindowTokens
+                : undefined;
+            const isPresetContext =
+              currentContext === undefined ||
+              CONTEXT_WINDOW_PRESETS.some(
+                (item) => item.tokens === currentContext,
+              );
+
+            return (
+              <div
+                key={entry.id}
+                className={`provider-card-model-item${isExpanded ? " is-expanded" : ""}${overridden ? " is-customized" : ""}`}
+              >
+                <div className="provider-card-model-row">
+                  <div className="provider-card-model-info">
+                    <code className="provider-card-model-id">{entry.id}</code>
+                    {entry.displayName && (
+                      <span className="provider-card-model-name">
+                        {entry.displayName}
+                      </span>
+                    )}
+                    {isDefaultModel ? (
+                      <span className="provider-model-badge is-default">
+                        默认模型
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="provider-model-action-pill"
+                        disabled={disabled}
+                        onClick={() => onModel(entry.id)}
+                      >
+                        设为默认
+                      </button>
+                    )}
+                    {overridden && (
+                      <span className="provider-model-badge is-custom">
+                        已定制
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="provider-card-model-quick">
+                    <label className="provider-quick-control">
+                      <span className="provider-quick-label">思考</span>
+                      <select
+                        className="provider-quick-select"
+                        aria-label={`模型 ${entry.id} 思考等级`}
+                        disabled={disabled}
+                        value={currentEffort}
+                        onChange={(event) => {
+                          const val = event.target.value as
+                            | ""
+                            | ModelReasoningEffort;
+                          onSelection(
+                            updateModelOverride(selection, entry.id, {
+                              reasoningEffort: val === "" ? undefined : val,
+                            }),
+                          );
+                        }}
+                      >
+                        {REASONING_EFFORT_OPTIONS.map((opt) => (
+                          <option key={opt.value || "global"} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="provider-quick-control">
+                      <span className="provider-quick-label">上下文</span>
+                      <select
+                        className="provider-quick-select"
+                        aria-label={`模型 ${entry.id} 上下文预设`}
+                        disabled={disabled}
+                        value={
+                          currentContext === undefined
+                            ? ""
+                            : String(currentContext)
+                        }
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          onSelection(
+                            updateModelOverride(selection, entry.id, {
+                              contextWindowTokens: raw
+                                ? Number.parseInt(raw, 10)
+                                : undefined,
+                            }),
+                          );
+                        }}
+                      >
+                        <option value="">
+                          上游 ({formatTokens(upstreamContext)})
+                        </option>
+                        {!isPresetContext && currentContext !== undefined && (
+                          <option value={String(currentContext)}>
+                            自定义 ({formatTokens(currentContext)})
+                          </option>
+                        )}
+                        {CONTEXT_WINDOW_PRESETS.map((preset) => (
+                          <option
+                            key={preset.tokens}
+                            value={String(preset.tokens)}
+                          >
+                            {preset.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <span className="provider-quick-summary">
+                      输出 {formatTokens(effective.maxOutputTokens)} · 档位{" "}
+                      {effective.reasoningEfforts?.length
+                        ? effective.reasoningEfforts.length > 3
+                          ? `${effective.reasoningEfforts[0]}~${effective.reasoningEfforts.at(-1)} (${effective.reasoningEfforts.length}档)`
+                          : effective.reasoningEfforts.join("/")
+                        : "默认"}
+                    </span>
+
+                    <button
+                      type="button"
+                      className={`model-param-toggle-btn${isExpanded ? " is-open" : ""}`}
+                      aria-expanded={isExpanded}
+                      aria-label={`展开模型 ${entry.id} 详细设置`}
+                      disabled={disabled}
+                      onClick={() =>
+                        setExpandedModel(isExpanded ? null : entry.id)
+                      }
+                    >
+                      <SlidersHorizontal size={13} aria-hidden="true" />
+                      <span>详细设置</span>
+                      <CaretDown size={11} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <ModelParameterEditor
+                    entry={entry}
+                    override={override}
+                    disabled={disabled}
+                    onChange={(patch) =>
+                      onSelection(
+                        updateModelOverride(selection, entry.id, patch),
+                      )
+                    }
+                    onReset={() =>
+                      onSelection(clearModelOverride(selection, entry.id))
+                    }
+                  />
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <p className="provider-card-models-empty">
+            {loading
+              ? "正在加载模型目录…"
+              : filterMode === "customized"
+                ? "暂未对任何模型设置自定义思考等级或上下文参数。"
+                : error ||
+                  "暂无模型目录数据，可点击上方刷新或手工添加模型 ID。"}
+          </p>
+        )}
+      </div>
+
+      {filtered.length > visible && (
+        <div className="provider-card-models-more">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setVisible((count) => count + 30)}
+          >
+            显示更多模型（剩余 {filtered.length - visible}）
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 

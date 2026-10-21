@@ -449,6 +449,65 @@ it("adds sources from presets, keeps drafts, reports stale catalogs and cancels 
     await page.waitForTimeout(100);
     expect(await page.getByText("目录测试已取消").count()).toBe(1);
 
+    // Per-model parameter configuration inside the dialog and inline source card.
+    await page.getByRole("button", { name: "配置模型参数 a/one" }).click();
+    const dialogParamPanel = page
+      .getByRole("dialog")
+      .getByRole("region", { name: "模型 a/one 参数配置面板" })
+      .or(
+        page
+          .getByRole("dialog")
+          .locator('[aria-label="模型 a/one 参数配置面板"]'),
+      );
+    await dialogParamPanel
+      .getByRole("group", { name: "模型 a/one 默认思考等级" })
+      .getByRole("button", { name: "high", exact: true })
+      .click();
+    await dialogParamPanel.getByRole("button", { name: "深度推理" }).click();
+    await dialogParamPanel.getByRole("button", { name: "256K" }).click();
+    await dialogParamPanel.getByRole("button", { name: "16K" }).click();
+    await expect
+      .poll(() => page.locator(".model-access-catalog").innerText())
+      .toContain("默认思考 high");
+    await expect
+      .poll(() => page.locator(".model-access-catalog").innerText())
+      .toContain("上下文 256K");
+    await page.getByRole("button", { name: "保存来源" }).click();
+    await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
+
+    // Inline source card reflects the saved overrides and allows direct quick/detailed editing.
+    const cardA = page.locator(".provider-source-card", { hasText: "源 A" });
+    await expect.poll(() => cardA.innerText()).toContain("已定制 1 个模型");
+    await page.getByLabel("模型 a/two 思考等级").selectOption("xhigh");
+    await page.getByLabel("模型 a/two 上下文预设").selectOption("200000");
+    await page.getByRole("button", { name: "保存源 A的模型配置" }).click();
+    await expect.poll(() => cardA.innerText()).toContain("已定制 2 个模型");
+    const lastSavedOverrides = await page.evaluate(() => {
+      const calls = Reflect.get(window, "calls") as Array<{
+        source?: { source?: { modelSelection?: { overrides?: unknown } } };
+      }>;
+      return calls
+        .filter((call) => call.source?.source?.modelSelection?.overrides)
+        .at(-1)?.source?.source?.modelSelection?.overrides;
+    });
+    expect(lastSavedOverrides).toMatchObject({
+      "a/one": {
+        reasoningEffort: "high",
+        reasoningEfforts: ["medium", "high", "xhigh", "max"],
+        contextWindowTokens: 256000,
+        maxOutputTokens: 16384,
+      },
+      "a/two": {
+        reasoningEffort: "xhigh",
+        contextWindowTokens: 200000,
+      },
+    });
+
+    // Reopen dialog and clear holdTests before the unmount cancel check.
+    await page.evaluate(() => Reflect.set(window, "holdTests", false));
+    await page.getByRole("button", { name: "编辑源 A", exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+
     await page.setViewportSize({ width: 390, height: 844 });
     expect(
       await page
