@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { contextDisplayLabel } from "../../../shared/context-display";
 import { budgetUsage, resolveContextBudget, resolveContextWindow } from "../../../shared/context-usage";
+import type { ModelCatalogEntry } from "../../../shared/model-catalog";
 import type { AgentEvent, SessionSnapshot } from "../../shared-types";
+import { composerModelMetadata } from "../../state/composer-model";
 import { useWorkbench } from "../../state/workbench-context";
 import { persistentUsageCache } from "../../state/persistent-usage-cache";
 import { compactTokens, sessionUsage } from "../../state/session-usage";
@@ -17,9 +19,15 @@ const categories = [
 export function UsagePopover({
   events,
   snapshot,
+  selection,
 }: {
   readonly events: readonly AgentEvent[];
   readonly snapshot?: SessionSnapshot | undefined;
+  readonly selection?: {
+    readonly model: string;
+    readonly sourceId?: string | undefined;
+    readonly metadata?: ModelCatalogEntry | undefined;
+  };
 }) {
   const { state: { settings } } = useWorkbench();
   const usage = useMemo(
@@ -38,19 +46,33 @@ export function UsagePopover({
   // settings to an idle view only; an active run still uses its captured budget.
   // Never rewrite persisted usage or billing totals.
   const active = snapshot?.status === "running" || snapshot?.status === "awaiting_approval";
-  const resolvedWindow = snapshot && !active && settings && usage.context
-    ? resolveContextWindow(snapshot.model, settings, usage.context.windowTokens)
+  const model = selection ? selection.model : snapshot?.model;
+  const sourceId = selection ? selection.sourceId : snapshot?.providerSourceId;
+  const source = settings?.providerSources?.find((item) => item.id === sourceId);
+  const metadata = model ? composerModelMetadata(model, source, selection?.metadata ? [selection.metadata] : []) : undefined;
+  // A previous model/source's reported window is not a fallback for a new pick.
+  const sameSelection = !selection || (model === snapshot?.model && sourceId === snapshot?.providerSourceId);
+  // Explicit picker metadata (including an unknown window) describes the next
+  // request. Do not revive a cleared override from a historical usage event.
+  const reportedWindow = metadata?.contextWindowTokens
+    ?? (sameSelection && !selection?.metadata ? usage.context?.windowTokens : undefined);
+  const resolvedWindow = !active && settings && model
+    ? resolveContextWindow(model, settings, reportedWindow)
     : undefined;
-  const context = resolvedWindow !== undefined && settings && usage.context
-    ? { ...usage.context, windowTokens: resolvedWindow, ...budgetUsage(resolveContextBudget(resolvedWindow, settings)) }
+  const previewBudget = resolvedWindow !== undefined && settings
+    ? budgetUsage(resolveContextBudget(resolvedWindow, settings))
+    : undefined;
+  const context = resolvedWindow !== undefined && usage.context
+    ? { ...usage.context, windowTokens: resolvedWindow, ...previewBudget }
     : usage.context;
-  const windowTokens = context?.windowTokens ?? undefined;
-  const ratio = windowTokens
+  // New conversations can show the model window without fabricating usage data.
+  const windowTokens = resolvedWindow ?? context?.windowTokens ?? undefined;
+  const ratio = windowTokens && context
     ? context.usedTokens / windowTokens
     : undefined;
   const partsTotal = context ? categories.reduce((sum, [key]) => sum + context.parts[key], 0) : 0;
   const budgetLimit = windowTokens
-    ? (context?.budgetTokens ?? Math.floor(windowTokens * 0.8))
+    ? (previewBudget?.budgetTokens ?? context?.budgetTokens ?? Math.floor(windowTokens * 0.8))
     : undefined;
   const reserveTokens = windowTokens && budgetLimit !== undefined && budgetLimit < windowTokens
     ? windowTokens - budgetLimit
@@ -120,8 +142,8 @@ export function UsagePopover({
         <span className="usage-footer-stats">
           <span className="usage-cache-chip" title="最近请求缓存命中率">CH {percent(usage.latestCache)}</span>
           <span className="usage-footer-total">
-            {context?.windowTokens
-              ? compactTokens(context.windowTokens)
+            {windowTokens
+              ? compactTokens(windowTokens)
               : context
                 ? `${compactTokens(context.usedTokens)} tokens`
                 : "—"}
@@ -185,8 +207,8 @@ export function UsagePopover({
             </div>
           )}
           <p className="usage-caption">
-            {context?.windowTokens
-              ? `窗口 ${compactTokens(context.windowTokens)} tokens`
+            {windowTokens
+              ? `窗口 ${compactTokens(windowTokens)} tokens`
               : "上下文窗口未知，暂不计算百分比"}
           </p>
           {context && <dl className="usage-legend">

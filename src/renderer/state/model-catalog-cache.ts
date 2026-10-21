@@ -1,25 +1,32 @@
 import { z } from "zod";
+import { modelCatalogSchema, type ModelCatalog } from "../../shared/model-catalog";
 
-const modelsSchema = z.array(z.string().min(1).max(256)).max(10000);
+const modelsSchema = modelCatalogSchema;
 // Keep all 20 supported provider sources, with room for legacy/changed endpoints.
 const maxCatalogs = 24;
 const recordsSchema = z.array(z.object({ source: z.string(), models: modelsSchema })).max(maxCatalogs);
-const storageKey = "forge-model-catalog-v1";
+// v1 stored only IDs, so it cannot satisfy a metadata read after an upgrade.
+const storageKey = "forge-model-catalog-v2";
 
 export function modelCatalogKey(source: {
   id?: string | undefined;
   baseUrl: string;
   apiMode?: string | undefined;
+  revision?: number | undefined;
 }, environmentOverride = false): string {
+  // Every saved source edit bumps its revision, including metadata and selection.
   // Explicit sources ignore environment overrides, just like getProviderConfig.
-  return JSON.stringify([source.id ?? "legacy", source.baseUrl, source.apiMode ?? "chat-completions", source.id ? false : environmentOverride]);
+  return JSON.stringify([source.id ?? "legacy", source.baseUrl, source.apiMode ?? "chat-completions", source.id ? false : environmentOverride, source.revision ?? 0]);
 }
 
 export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" | "setItem"> = () => localStorage) {
-  const memory = new Map<string, readonly string[]>();
-  const pending = new Map<string, Promise<readonly string[]>>();
+  const memory = new Map<string, ModelCatalog>();
+  const pending = new Map<string, Promise<ModelCatalog>>();
   // Hydrate the whole map once so a prune never wipes entries it has not read.
+  let hydrated = false;
   const hydrate = (): void => {
+    if (hydrated) return;
+    hydrated = true;
     try {
       const raw = storage().getItem(storageKey);
       if (!raw || raw.length > 4 * 1024 * 1024) return;
@@ -30,7 +37,7 @@ export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" |
       /* Fall back to whatever is already in memory. */
     }
   };
-  const read = (source: string): readonly string[] | undefined => {
+  const read = (source: string): ModelCatalog | undefined => {
     const cached = memory.get(source);
     if (cached) return cached;
     hydrate();
@@ -38,9 +45,9 @@ export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" |
   };
   const load = (
     source: string,
-    loader: () => Promise<readonly string[]>,
+    loader: () => Promise<ModelCatalog>,
     refresh = false,
-  ): Promise<readonly string[]> => {
+  ): Promise<ModelCatalog> => {
     const inflight = pending.get(source);
     // An explicit refresh must not be answered by a request that started before
     // the user asked for fresh data.
@@ -49,6 +56,8 @@ export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" |
     if (!refresh && cached) return Promise.resolve(cached);
     const request = Promise.resolve().then(loader).then(raw => {
       const models = modelsSchema.parse(raw);
+      // A superseded read must not overwrite a refresh or resurrect a saved source's old revision.
+      if (pending.get(source) !== request) return models;
       memory.delete(source);
       memory.set(source, models);
       while (memory.size > maxCatalogs) {
@@ -71,6 +80,7 @@ export function createModelCatalogCache(storage: () => Pick<Storage, "getItem" |
     hydrate();
     const keep = new Set(live);
     for (const key of [...memory.keys()]) if (!keep.has(key)) memory.delete(key);
+    for (const key of [...pending.keys()]) if (!keep.has(key)) pending.delete(key);
     persist();
   };
   const persist = () => {

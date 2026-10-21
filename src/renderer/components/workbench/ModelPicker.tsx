@@ -1,10 +1,11 @@
 import { CaretDown, CaretLeft, CaretRight, Cpu } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
+import { reasoningEffortSchema } from "../../../shared/model-access";
 import { ModelCatalog, type ModelCatalogGroup } from "./ModelCatalog";
 // The composer needs these styles before the lazy-loaded Settings page opens.
 import "../../styles/settings-models.css";
 
-const efforts = ["low", "medium", "high", "xhigh", "max"] as const;
+const defaultEfforts = ["low", "medium", "high", "xhigh", "max"] as const;
 const formatEffort = (value: string | undefined) =>
   value === "max" ? "MAX" : value;
 
@@ -18,6 +19,7 @@ export function ModelPicker(props: {
   readonly error: string;
   readonly reasoning?: {
     value: string;
+    options?: readonly string[] | undefined;
     disabled: boolean;
     onChange: (value: string) => void;
   };
@@ -40,6 +42,12 @@ export function ModelPicker(props: {
   );
   const shownValue = selectedRoute?.label || props.value || "选择模型";
   const initialized = useRef(false);
+  // Unknown capability keeps the existing choices. Advertised choices must also
+  // be representable by the host's request schema; never offer invented levels.
+  const efforts = props.reasoning?.options === undefined
+    ? defaultEfforts
+    : [...new Set(props.reasoning.options.filter((value) => reasoningEffortSchema.safeParse(value).success))];
+  const effortSignature = JSON.stringify(efforts);
   const effortIndex = efforts.findIndex(
     (value) => value === props.reasoning?.value,
   );
@@ -50,7 +58,7 @@ export function ModelPicker(props: {
     if (props.reasoning?.disabled) return;
     setDraftEffort(Math.max(0, effortIndex));
     submittedEffort.current = null;
-  }, [effortIndex, props.reasoning?.disabled]);
+  }, [effortIndex, effortSignature, props.value, props.sourceId, props.reasoning?.disabled]);
   const commitEffort = (index: number) => {
     const choice = efforts[index];
     if (
@@ -214,7 +222,7 @@ export function ModelPicker(props: {
               ))}
             </div>
           )}
-          {!modelsOpen && props.reasoning && (
+          {!modelsOpen && props.reasoning && efforts.length > 0 && (
             <fieldset
               className="model-effort-options"
               disabled={props.reasoning.disabled}
@@ -231,7 +239,7 @@ export function ModelPicker(props: {
                   <span
                     className="effort-slider-fill"
                     style={{
-                      width: `${(draftEffort / (efforts.length - 1)) * 100}%`,
+                      width: `${(draftEffort / Math.max(1, efforts.length - 1)) * 100}%`,
                     }}
                   />
                 </div>

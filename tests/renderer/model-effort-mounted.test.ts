@@ -18,9 +18,11 @@ it("styles the model picker before Settings loads and keeps five effort levels o
         const [model,select] = useState('provider/long-model-name');
         const [effort,setEffort] = useState('default');
         const [disabled,disable] = useState(false);
+        const [options,setOptions] = useState(undefined);
+        window.setEffortOptions = setOptions;
         return <div className="wb-app"><div style={{position:'absolute',bottom:40,right:24}}>
           <ModelPicker value={model} sourceLabel={model ? 'LingAPI' : undefined} models={['provider/long-model-name','provider/beta']} onSelect={select}
-            onRefresh={()=>{}} loading={false} error="" disabled={disabled} reasoning={{value:effort,onChange:value=>setEffort(settingsFields.reasoningEffort.unwrap().parse(value)),disabled}} />
+            onRefresh={()=>{}} loading={false} error="" disabled={disabled} reasoning={{value:effort,options,onChange:value=>setEffort(settingsFields.reasoningEffort.unwrap().parse(value)),disabled}} />
           <button onClick={()=>disable(value=>!value)}>切换禁用</button>
           <button onClick={()=>select('')}>清空模型</button>
           {['default','none','minimal'].map(value => <button key={value} onClick={()=>setEffort(value)}>{value}</button>)}
@@ -161,5 +163,25 @@ it("styles the model picker before Settings loads and keeps five effort levels o
     expect(await page.locator(".model-catalog-option[aria-pressed='true']").count()).toBe(0);
     expect(await page.locator(".model-catalog-option[aria-pressed]").count()).toBe(2);
     expect(await page.locator(".composer-model-panel").textContent()).not.toMatch(/默认|default/);
+
+    // Configured levels can include none/minimal, but not unknown wire values.
+    await page.getByRole("button", { name: "none", exact: true }).click();
+    await page.evaluate(() => Reflect.get(window, "setEffortOptions")(["none", "minimal", "high", "vendor-only", "high"]));
+    await trigger.click();
+    const configured = page.getByRole("slider", { name: "思考等级", exact: true });
+    await expect.poll(() => page.locator(".effort-slider-labels > span").allTextContents()).toEqual(["none", "minimal", "high"]);
+    expect(await trigger.getAttribute("title")).toContain("思考：none");
+    await configured.press("ArrowRight");
+    expect(await page.locator("#saved-effort").textContent()).toBe("minimal");
+
+    // A single advertised choice must not produce a NaN slider fill.
+    await page.evaluate(() => Reflect.get(window, "setEffortOptions")(["max"]));
+    await expect.poll(() => configured.getAttribute("max")).toBe("0");
+    await configured.press("Home");
+    await expect.poll(() => page.locator("#saved-effort").textContent()).toBe("max");
+    expect(await page.locator(".effort-slider-fill").evaluate(node => (node as HTMLElement).style.width)).toBe("0%");
+    await page.evaluate(() => Reflect.get(window, "setEffortOptions")(["vendor-only"]));
+    await expect.poll(() => configured.count()).toBe(0);
+    expect(await page.getByRole("button", { name: /^选择模型：/ }).count()).toBe(1);
   } finally { await browser.close(); }
 }, 20000);

@@ -21,7 +21,9 @@ import {
   imageAttachmentsSchema,
 } from "../../../shared/images";
 import { parseDrafts } from "../../state/drafts";
+import type { ModelCatalog } from "../../../shared/model-catalog";
 import { modelCatalogCache, modelCatalogKey } from "../../state/model-catalog-cache";
+import { composerEffortUpdate, composerModelMetadata, composerReasoningEffort } from "../../state/composer-model";
 import { useWorkbench } from "../../state/workbench-context";
 import { hostCapabilities } from "../../web-host";
 import { Button } from "../primitives/Button";
@@ -235,39 +237,35 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       [draftId]: { routeGroupId },
     }));
   };
-  const [catalogs, setCatalogs] = useState<Record<string, readonly string[]>>({});
+  const [catalogs, setCatalogs] = useState<Record<string, ModelCatalog>>({});
   const [modelError, setModelError] = useState("");
   const [listing, setListing] = useState(false);
-  const modelSource = modelCatalogKey({
+  const catalogRequest = useRef(0);
+  const modelSource = modelCatalogKey(providerSource ?? {
     id: providerSourceId,
-    baseUrl: providerSource?.baseUrl ?? state.settings?.baseUrl ?? "",
-    apiMode: providerSource?.apiMode ?? state.settings?.apiMode,
+    baseUrl: state.settings?.baseUrl ?? "",
+    apiMode: state.settings?.apiMode,
   }, state.settings?.environmentOverride ?? false);
   const catalogSources = sourceProfiles.length
     ? sourceProfiles.map((source) => ({ id: source.id, label: source.label, key: modelCatalogKey(source) }))
     : [{ id: undefined, label: "当前来源", key: modelSource }];
   const catalogSignature = JSON.stringify(catalogSources);
   useEffect(() => {
+    if (!state.settings) return;
+    const liveKeys = catalogSources.map((source) => source.key);
+    modelCatalogCache.retain(liveKeys);
+    setCatalogs((old) => Object.fromEntries(Object.entries(old).filter(([key]) => liveKeys.includes(key))));
     void listModels();
-  }, [catalogSignature]);
-  const allKnownModels = [
-    ...new Set(
-      [
-        model,
-        ...(catalogs[modelSource] ?? modelCatalogCache.read(modelSource) ?? []),
-      ].filter(Boolean),
-    ),
-  ];
+    return () => { catalogRequest.current++; };
+  }, [catalogSignature, !!state.settings]);
+  const sourceCatalog = catalogs[modelSource] ?? modelCatalogCache.read(modelSource) ?? [];
+  const selectedMetadata = composerModelMetadata(model, providerSource, sourceCatalog);
+  const allKnownModels = [...new Set([model, ...sourceCatalog.map((entry) => entry.id)].filter(Boolean))];
   // Custom IDs stay allowed, but flag one this source never advertised.
-  const sourceCatalog = providerSource
-    ? (catalogs[modelCatalogKey(providerSource)] ??
-      modelCatalogCache.read(modelCatalogKey(providerSource)) ??
-      [])
-    : [];
   const modelUnlisted =
     Boolean(model && providerSource) &&
     sourceCatalog.length > 0 &&
-    !sourceCatalog.includes(model) &&
+    !sourceCatalog.some((entry) => entry.id === model) &&
     model !== providerSource?.model;
   const modelGroups = sourceProfiles.length ? [
     ...sourceProfiles.map((source) => ({
@@ -276,7 +274,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       models: [...new Set([
         ...(source.id === providerSourceId && model ? [model] : []),
         source.model,
-        ...(catalogs[modelCatalogKey(source)] ?? modelCatalogCache.read(modelCatalogKey(source)) ?? []),
+        ...(catalogs[modelCatalogKey(source)] ?? modelCatalogCache.read(modelCatalogKey(source)) ?? []).map((entry) => entry.id),
       ].filter(Boolean))],
     })),
     ...(!providerSource && providerSourceId
@@ -286,7 +284,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   const [savingEffort, setSavingEffort] = useState(false);
   const effortSaving = useRef(false);
   const changeEffort = async (value: string) => {
-    if (effortSaving.current) return;
+    if (effortSaving.current || (providerSourceId && !providerSource)) return;
     const reasoningEffort = settingsFields.reasoningEffort
       .unwrap()
       .parse(value);
@@ -294,7 +292,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     setSavingEffort(true);
     setError("");
     try {
-      const result = await updateSettings({ settings: { reasoningEffort } });
+      const result = await updateSettings(composerEffortUpdate(model, providerSource, reasoningEffort));
       if (!result.ok && alive.current) setError(result.error || "思考等级保存失败，请重试。");
     } catch {
       if (alive.current) setError("思考等级保存失败，请重试。");
@@ -807,13 +805,29 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
     }
   };
   const listModels = async (refresh = false) => {
+    const request = ++catalogRequest.current;
     setListing(true);
     setModelError("");
     const results = await Promise.allSettled(catalogSources.map(async (source) => {
-      const models = await modelCatalogCache.load(source.key, () => window.forge.listModels(source.id, refresh), refresh);
-      if (alive.current) setCatalogs((old) => ({ ...old, [source.key]: models }));
+      const models = await modelCatalogCache.load(source.key, async () => {
+        if (window.forge.modelAccess && source.id) {
+          const result = await window.forge.modelAccess({
+            type: "catalog",
+            sourceId: source.id,
+            ...(refresh ? { refresh: true } : {}),
+          });
+          if (result.type !== "catalog") throw new Error("目录响应类型错误。");
+          if (result.stale) throw new Error(result.error || "模型目录刷新失败，请重试。");
+          return result.models;
+        }
+        // Legacy settings/hosts have only IDs; never downgrade a failed metadata read.
+        return (await window.forge.listModels(source.id, refresh))
+          .map((id) => ({ id, contextWindowTokens: null }));
+      }, refresh);
+      if (alive.current && request === catalogRequest.current)
+        setCatalogs((old) => ({ ...old, [source.key]: models }));
     }));
-    if (!alive.current) return;
+    if (!alive.current || request !== catalogRequest.current) return;
     const errors = results.flatMap((result, index) => result.status === "rejected"
       ? [`${catalogSources[index]?.label}: ${result.reason instanceof Error ? result.reason.message : "模型列表读取失败"}`] : []);
     // A failed read must not leave stale models selectable under a source.
@@ -1549,8 +1563,9 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
               loading={listing}
               error={modelError}
               reasoning={{
-                value: state.settings?.reasoningEffort ?? "default",
-                disabled: savingEffort || busy || !!submission,
+                value: composerReasoningEffort(model, providerSource, state.settings),
+                options: selectedMetadata?.reasoningEfforts,
+                disabled: savingEffort || busy || !!submission || !!(providerSourceId && !providerSource),
                 onChange: (value) => void changeEffort(value),
               }}
               groups={modelGroups}
@@ -1561,6 +1576,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
         </div>
         </div>
         <UsagePopover
+          selection={{ model, sourceId: providerSourceId, metadata: selectedMetadata }}
           snapshot={
             !isNew && state.activeSnapshot?.id === state.activeSessionId
               ? state.activeSnapshot
