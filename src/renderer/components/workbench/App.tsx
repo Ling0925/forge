@@ -1,4 +1,4 @@
-import { lazy, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useGlobalModalShortcuts } from "../../state/modal-shortcuts";
 import { WorkbenchProvider, useWorkbench } from "../../state/workbench-context";
@@ -18,8 +18,8 @@ import "./new-session.css";
 import "./inspector.css";
 import "../../styles/motion.css";
 
-const Settings = lazy(() => import("./Settings").then((module) => ({ default: module.Settings })));
-const UsageDashboard = lazy(() => import("./UsageDashboard").then((module) => ({ default: module.UsageDashboard })));
+const loadSettingsPanel = () => import("./Settings").then((module) => ({ default: module.Settings }));
+const loadUsageDashboard = () => import("./UsageDashboard").then((module) => ({ default: module.UsageDashboard }));
 
 function Workbench() {
   const {
@@ -152,12 +152,8 @@ function Workbench() {
           </div>
         </div>
       </div>
-      <DeferredPanel open={state.isSettingsOpen} label="设置" onClose={() => openSettings(false)}>
-        <Settings />
-      </DeferredPanel>
-      <DeferredPanel open={state.isUsageDashboardOpen} label="用量看板" onClose={() => openUsageDashboard(false)}>
-        <UsageDashboard />
-      </DeferredPanel>
+      <DeferredPanel open={state.isSettingsOpen} label="设置" onClose={() => openSettings(false)} load={loadSettingsPanel} />
+      <DeferredPanel open={state.isUsageDashboardOpen} label="用量看板" onClose={() => openUsageDashboard(false)} load={loadUsageDashboard} />
     </>
   );
 }
