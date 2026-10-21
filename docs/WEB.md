@@ -2,30 +2,26 @@
 
 搜索已改为 **Responses API 原生 `web_search` 工具**，不是同名本地函数，也不再请求 Bing RSS。模型服务端负责搜索、打开网页与页内查找，Forge 接收 `web_search_call`、进度、`url_citation` 注释和来源记录。`web_fetch` 仍是独立的指定 URL 本地读取工具，不是搜索失败后的自动替代。
 
-## 启用原生搜索
+## 默认可用，无需开关
 
-```sh
-forge config set --api-mode responses --web-search live
-```
+CLI、桌面和 Web 共用同一行为：普通 Responses 代理请求自动声明 `{ "type": "web_search", "external_web_access": true }`，允许模型实时联网搜索，**无需命令或页面开关**。模型自行决定何时调用，不保证每个回答都会搜索。
 
-- `disabled`：关闭（未配置时也是关闭，避免对已有网关自动启用额外服务）。
-- `cached`：声明 `{ "type": "web_search", "external_web_access": false }`，要求服务端只用缓存；仍会请求模型服务端，不是本机离线搜索。
-- `live`：声明 `{ "type": "web_search", "external_web_access": true }`，允许服务端实时联网。
+已移除 `forge config set --web-search ...` 和公开设置中的 `webSearch` 字段。已有配置里的 `disabled`、`cached`、`live` 值只作兼容读取并丢弃，不再控制搜索；后续保存设置会清除旧字段。
 
-模型决定是否调用；开启不保证每个回答都会搜索。配置为共享运行设置；切到不支持的协议时需显式关闭。已有会话若绑定其他来源，需切到支持 Responses 的模型来源。
+选择支持原生搜索的 Responses 模型来源后即可使用；Chat Completions、Anthropic、Gemini 请求保持原样，不声明此工具，也不会因为默认启用而报协议不兼容。混合协议路由按实际选中的成员协议决定是否声明搜索。已有会话若绑定其他来源，需切到支持 Responses 的模型来源。
 
 请求仍为 `store:false`，额外请求 `web_search_call.action.sources`。原始搜索项与注释随本地 `providerState` 保存，同一端点/模型续聊原样回传；切换端点/模型不回传外来原生项。结构化引用和搜索记录单独保存，CLI 实时输出、重开历史及 renderer 显示去重、有界的来源列表。检索来源与实际引用分开显示。外部内容是不可信资料，不是指令或真实性保证。
 
 ### 托管搜索的权限与费用
 
-- 仅 Responses 支持；Chat Completions / Anthropic 不伪装成原生搜索。安装 SDK 或能请求 `/responses` 不代表当前网关/模型支持 `web_search`。
-- 不支持时明确失败，不去掉工具重试，不静默降级到 Bing、其他搜索服务或浏览器。开启搜索的请求失败不自动重放，避免未知搜索执行和费用被重复。
+- 仅 Responses 支持；其他协议不伪装成原生搜索。安装 SDK 或能请求 `/responses` 不代表当前网关/模型支持 `web_search`。
+- Responses 网关拒绝搜索工具时明确失败，不去掉工具重试，不静默降级到 Bing、其他搜索服务或浏览器。携带搜索工具的请求失败不自动重放，避免未知搜索执行和费用被重复。
 - `readonly` / Plan 不声明搜索工具。`workspace` 每次可能搜索的模型请求发送前审批整次托管搜索；拒绝后不发送该次请求。`unrestricted` 不弹审批。标题生成、上下文压缩不启用搜索。
 - 无法提前逐个审批服务端内部查询/网址。查询可能包含对话数据，可能另计费用；不要放入秘密、凭据或私有代码。`store:false` 不代表查询不出域，也不替代服务商数据保留政策。
-- 本机 IP/DNS/端口规则不能约束托管搜索内部网络。缓存/实时行为依赖服务端遵守协议。权限修改无法撤回已经发出的搜索；取消会终止本机等待，但不保证远端未执行。
+- 本机 IP/DNS/端口规则不能约束托管搜索内部网络。实时联网行为依赖服务端遵守协议。权限修改无法撤回已经发出的搜索；取消会终止本机等待，但不保证远端未执行。
 - 这是 Codex 式原生工具协议接入，**不保证复刻 Codex 内部服务、账号能力、搜索质量或 UI**。本地协议测试不证明某个真实网关可用。
 
-本机更新方式：`node scripts/build-core.mjs` 后重新启动 `forge`。当前进程不会热更新；这不等于已构建桌面或 Web 分发产物。
+本机 CLI 更新方式：`node scripts/build-core.mjs` 后重新启动 `forge`。Web 开发入口需等活动任务结束后重启 `pnpm dev:web`；构建版 Web 需执行 `node scripts/build-web.mjs` 后重启原来的 Web 服务。仅刷新网页不能更新后端；CLI 编译不等于已构建桌面或 Web 分发产物。
 
 ## 使用
 
@@ -57,7 +53,7 @@ forge config set --api-mode responses --web-search live
 
 ## 限制和故障
 
-原生搜索可用性、缓存新鲜度、地域与排序由服务端决定；没有搜索结果不能据此声称“互联网上没有相关信息”。不提供自动搜索服务切换；网关拒绝时应检查原生能力，或用户显式关闭搜索继续。
+原生搜索可用性、结果新鲜度、地域与排序由服务端决定；没有搜索结果不能据此声称“互联网上没有相关信息”。不提供自动搜索服务切换；Responses 网关拒绝搜索工具时，应检查网关与模型的原生搜索支持，或手动切换到兼容的来源。
 
 不支持 PDF、登录页、验证码绕过、完整 JS 渲染和浏览器会话。网站返回的错误、超时或正文截断会明确标记；即便 HTTP 成功，网页本身也可能是反爬提示，需要模型核实内容，不能假装已经获取目标资料。
 
@@ -73,4 +69,4 @@ pnpm exec vitest run tests/provider/web-search.test.ts tests/provider/responses.
 FORGE_WEB_SMOKE=1 pnpm exec vitest run tests/tools/web-live.test.ts
 ```
 
-公网检查仅验证当时的 `web_fetch` 网页读取，不证明原生搜索可用性。真实网关验证需在已配置、支持该能力的来源中显式启用后发起搜索；不能用公开网页连通性测试冒充原生搜索验证。
+公网检查仅验证当时的 `web_fetch` 网页读取，不证明原生搜索可用性。真实网关验证需选择已配置、支持该能力的 Responses 来源后发起搜索；不能用公开网页连通性测试冒充原生搜索验证。
