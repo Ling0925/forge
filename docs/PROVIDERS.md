@@ -38,7 +38,25 @@ Select `gemini` for `generateContent` / `streamGenerateContent`, with the Develo
 
 `forge providers --help` and `forge routes --help` expose the same host service used by the workbench. Presets populate editable endpoints; manual/custom sources and existing `config` / `models` remain supported. Discovery selection is explicit `all`, `selected` or `none`. Model aliases never change stored upstream IDs. Private header values, proxy credentials, additional bodies and tokens are omitted from settings projections.
 
-Explicit inference tests send a minimal request with a 64-token output limit; catalog checks do not imply inference support. Import accepts user-provided Magpie JSON/deep links, returns a sanitized preview and writes only explicitly selected sources atomically. It does not discover third-party configuration files. Named request cancellation does not retry a mutation.
+### Per-model overrides
+
+The Web connection page saves model settings as `source.modelSelection.overrides[modelId]`:
+
+```ts
+{
+  reasoningEffort?: "default" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  reasoningEfforts?: readonly string[];
+  contextWindowTokens?: number | null;
+  maxOutputTokens?: number | null;
+}
+```
+
+- `reasoningEffort` and a non-null `maxOutputTokens` override global request settings for that source/model. An omitted effort inherits the global setting; `default` explicitly uses the adapter's model-default behavior instead of the global effort. Null/omitted output limits inherit the global limit or existing adapter default. Upstream output-limit metadata is not automatically sent as a request limit.
+- `reasoningEfforts` describes supported levels in the catalog. It does not select an effort or silently downgrade an explicit request; unknown vendor level names remain valid metadata. Empty/omitted lists restore upstream metadata.
+- A non-null `contextWindowTokens` overrides catalog metadata for runtime context accounting/compaction, including models hidden by `none`/`selected`. Local windows work without a successful catalog request. Null/omitted values restore upstream metadata; the existing explicit global `modelContextWindows` override still has priority in context budgeting.
+- Exact selected-ID overrides take priority per field, with fallback to the explicitly mapped wire model's overrides for aliases. Sources remain isolated even when they use the same model ID. Direct requests, routed attempts and inherited child-model requests use these settings, and attempt records retain the effective requested effort. Saving/resetting settings affects subsequent provider resolutions, not already-running requests.
+
+Explicit inference tests use the selected model (or the source's default model) and honor its effective effort/output settings. With no configured output limit they request 64 tokens, except Anthropic thinking uses the adapter's 8192-token default to avoid an invalid thinking budget. Catalog checks do not run inference and do not imply inference support. Import accepts user-provided Magpie JSON/deep links, returns a sanitized preview and writes only explicitly selected sources atomically. It does not discover third-party configuration files. Named request cancellation does not retry a mutation.
 
 One source can have multiple enabled API keys/accounts and an explicit selection strategy. Cross-model routing requires a selected group. `provider_attempt` and usage views identify the actual source/model/credential/group without bodies or tokens. `smart`/`pace` use real reported quota; missing quota remains unknown and uses declared order. Known incompatible protocol/tool/vision candidates are excluded. Runtime attempts share one budget; 429 rejection may switch an explicit candidate, but timeouts, 5xx, disconnects, partial output and hosted-search uncertainty do not authorize replay.
 
