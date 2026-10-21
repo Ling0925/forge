@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { contextUsageSchema, usageSchema } from "../../shared/schemas";
 import type { SessionSnapshot, SessionSummary } from "../shared-types";
-import { sessionUsage } from "./session-usage";
+import { seedSessionUsage, sessionUsage } from "./session-usage";
 
 type Identity = Pick<SessionSummary, "id" | "updatedAt" | "status" | "model">;
 // v2 invalidates summaries computed with alternating input+output/estimate totals.
@@ -18,6 +18,14 @@ const resultSchema = z
     averageCache: number.optional(),
     cacheRead: number.optional(),
     cachePartial: z.boolean(),
+    speed: z
+      .object({
+        outputTokens: number,
+        durationMs: number,
+        partial: z.boolean(),
+        requestStartedAt: z.number().finite().optional(),
+      })
+      .strict(),
   })
   .strict();
 const recordSchema = z
@@ -36,6 +44,26 @@ const terminal = (session: Identity) =>
   ["completed", "failed", "cancelled", "interrupted"].includes(session.status);
 const version = (session: Identity) =>
   JSON.stringify([session.updatedAt, session.status, session.model]);
+
+/** Number of durable events represented from the beginning of the transcript. */
+const eventCount = (session: SessionSnapshot) => {
+  const transcript = session.transcript;
+  return transcript === undefined
+    ? session.events.length
+    : Math.max(
+        transcript.eventEnd,
+        transcript.eventOffset + session.events.length,
+      );
+};
+/** A page without its fixed-size prefix total cannot produce a full summary. */
+const hasCompleteUsage = (session: SessionSnapshot) => {
+  const transcript = session.transcript;
+  return (
+    transcript === undefined ||
+    transcript.eventOffset === 0 ||
+    transcript.usageBefore !== undefined
+  );
+};
 
 export function createPersistentUsageCache(
   storage: StorageAccess = () => localStorage,
@@ -58,17 +86,30 @@ export function createPersistentUsageCache(
   };
   const snapshot = (session: SessionSnapshot) => {
     const saved = get(session);
-    if (saved && saved.eventCount === session.events.length) return saved;
+    const represented = eventCount(session);
+    // A full, newer persisted summary still covers an older page of the same
+    // version. Never replace it with a page-only total.
+    if (saved && saved.eventCount >= represented) return saved;
+    const transcript = session.transcript;
+    if (transcript?.usageBefore !== undefined) {
+      seedSessionUsage(session.events, transcript.usageBefore);
+    }
+    const complete = hasCompleteUsage(session);
+    const usage = sessionUsage(session.events);
     const result = {
       id: session.id,
       version: version(session),
-      eventCount: session.events.length,
+      eventCount: represented,
       model:
         session.events.findLast((event) => event.type === "run_started")
-          ?.model ?? session.model,
-      usage: sessionUsage(session.events),
+          ?.model ??
+        transcript?.usageBefore?.display.model ??
+        session.model,
+      // A page without its prefix summary only knows the recent window: keep
+      // its tokens but mark them partial instead of presenting a lifetime total.
+      usage: complete ? usage : { ...usage, partial: true },
     };
-    if (terminal(session)) {
+    if (terminal(session) && complete) {
       try {
         storage().setItem(
           key,

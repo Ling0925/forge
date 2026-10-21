@@ -22,6 +22,7 @@ beforeAll(async () => {
         import {WorkbenchProvider,useWorkbench} from './src/renderer/state/workbench-context';
         import {createTransportBridge} from './src/shared/bridge';
         import {defaultPublicSettings} from './src/shared/schemas';
+        import {paginateSession} from './src/shared/session-page';
         import {ErrorState} from './src/renderer/components/primitives/ErrorState';
         import {Button} from './src/renderer/components/primitives/Button';
         import './src/renderer/styles/global.css';
@@ -39,7 +40,7 @@ beforeAll(async () => {
             const fail=(code,message,retryable)=>({id:input.id,method:input.method,ok:false,error:{code,message,retryable}});
             if(input.method==='getSettings') return ok({...defaultPublicSettings,isConfigured:true,baseUrl:'https://example.invalid',theme:'light',model:'fixture'});
             if(input.method==='listSessions') return ok(snapshots.map(({messages,events,changes,...s})=>s));
-            if(input.method==='getSession'){
+            if(input.method==='getSession'||input.method==='getSessionPage'){
               fixture.reads.push(input.sessionId);
               const script=fixture.scenarios[input.sessionId]??[];
               const mode=script.length>1?script.shift():script[0];
@@ -49,7 +50,7 @@ beforeAll(async () => {
               if(mode==='network') throw new Error('Network failure');
               const snapshot=structuredClone(snapshots.find(s=>s.id===input.sessionId));
               if(mode==='hold') await new Promise(resolve=>{fixture.release=resolve;});
-              return ok(snapshot);
+              return ok(input.method==='getSessionPage'?paginateSession(snapshot,input.page):snapshot);
             }
             fixture.writes.push(input.method);
             return fail('storage','Write failed; inspect before retrying.',true);
@@ -210,4 +211,41 @@ it("cancels pending retry timers when the workbench unmounts", async () => {
   await page.waitForTimeout(500);
   expect(await readCount()).toBe(1);
   expect(await page.getByRole("alert").count()).toBe(0);
+});
+
+it("loads only a tail page, coalesces history requests and ignores stale history after A-B-A navigation", async () => {
+  await page.evaluate(() => {
+    Reflect.get(window, "fixture").snapshots[0].messages = [1, 2, 3].flatMap(turn => [
+      { role: "user", content: `question-${turn}` }, { role: "assistant", content: `answer-${turn}` },
+    ]);
+  });
+  await page.getByRole("button", { name: "选择 A" }).click();
+  await title("Session A");
+  const windowState = () => page.evaluate(() => {
+    const state = Reflect.get(window, "controller").state;
+    return { offset: state.activeSnapshot?.transcript?.messageOffset, count: state.activeSnapshot?.messages.length,
+      loading: state.isHistoryLoading, error: state.historyError };
+  });
+  expect(await windowState()).toEqual({ offset: 4, count: 2, loading: false, error: null });
+  await script(first, ["hold", "ok"]);
+  await page.evaluate(() => {
+    const controller = Reflect.get(window, "controller");
+    void controller.loadOlderMessages();
+    void controller.loadOlderMessages();
+  });
+  await page.waitForFunction(() => Reflect.get(window, "fixture").release);
+  expect(await readCount()).toBe(2);
+  await page.getByRole("button", { name: "选择 B" }).click();
+  await title("Session B");
+  await page.getByRole("button", { name: "选择 A" }).click();
+  await title("Session A");
+  await page.evaluate(() => Reflect.get(window, "fixture").release());
+  await page.waitForTimeout(100);
+  expect(await windowState()).toEqual({ offset: 4, count: 2, loading: false, error: null });
+  await page.evaluate(() => Reflect.get(window, "controller").loadOlderMessages());
+  await expect.poll(async () => (await windowState()).offset).toBe(2);
+  expect((await windowState()).count).toBe(4);
+  await page.getByRole("button", { name: "再次读取" }).click();
+  await expect.poll(readCount).toBe(6);
+  expect(await windowState()).toEqual({ offset: 2, count: 4, loading: false, error: null });
 });

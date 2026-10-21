@@ -241,11 +241,12 @@ export function extractReadableMessageFromRecord(message: Message): {
 export function resolveMessageByRef(
   messages: readonly Message[] | undefined,
   ref: string | undefined,
+  messageOffset = 0,
 ): { readonly roleLabel: string; readonly text: string } | undefined {
   if (!messages || !ref) return undefined;
   const match = ref.match(/^m([1-9]\d*)$/);
   if (!match?.[1]) return undefined;
-  const index = Number(match[1]) - 1;
+  const index = Number(match[1]) - 1 - messageOffset;
   const message = messages[index];
   if (!message) return undefined;
   return extractReadableMessageFromRecord(message);

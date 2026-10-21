@@ -15,6 +15,8 @@ import type {
 import { appendSessionEvent } from "./session-usage";
 import { estimateTokens } from "../../shared/context-usage";
 import { recordPlan } from "../../shared/plans";
+import type { SessionPage } from "../../shared/session-page";
+import { prependSessionPage } from "./session-pages";
 import {
   type PendingOutput,
   mergeTranscript,
@@ -78,6 +80,8 @@ export interface WorkbenchState {
   readonly snapshotCache: Readonly<Record<string, { readonly snapshot: SessionSnapshot; readonly persistedAt: string | null }>>;
   readonly snapshotPersistedAt: string | null;
   readonly isSnapshotLoading: boolean;
+  readonly isHistoryLoading: boolean;
+  readonly historyError: string | null;
   readonly activeRuns: Readonly<Record<string, ActiveRunState>>;
   /** Cumulative child drafts, never mixed into the parent's transcript or run. */
   readonly agentProgress: Readonly<Record<string, Extract<AgentEvent, { type: "agent_progress" }>>>;
@@ -158,6 +162,8 @@ export const initialWorkbenchState: WorkbenchState = {
   snapshotCache: {},
   snapshotPersistedAt: null,
   isSnapshotLoading: false,
+  isHistoryLoading: false,
+  historyError: null,
   activeRuns: {},
   agentProgress: {},
   isSettingsOpen: false,
@@ -183,6 +189,8 @@ export type WorkbenchAction =
       readonly snapshot: SessionSnapshot | null;
     }
   | { readonly type: "SET_SNAPSHOT_LOADING"; readonly isLoading: boolean }
+  | { readonly type: "SET_HISTORY_LOADING"; readonly sessionId: SessionId; readonly isLoading: boolean; readonly error?: string }
+  | { readonly type: "PREPEND_SESSION_PAGE"; readonly result: SessionPage }
   | { readonly type: "START_RUN_INITIATED"; readonly sessionId: SessionId }
   | { readonly type: "START_RUN_FAILED"; readonly sessionId: SessionId }
   | { readonly type: "START_RUN_RESOLVED"; readonly runHandle: RunHandle }
@@ -262,8 +270,11 @@ export function workbenchReducer(
       const cache = { ...state.snapshotCache };
       if (state.activeSnapshot) {
         delete cache[state.activeSnapshot.id];
-        cache[state.activeSnapshot.id] = { snapshot: state.activeSnapshot, persistedAt: state.snapshotPersistedAt };
+        // Release explicitly loaded history when leaving a paged conversation.
+        if (!state.activeSnapshot.transcript)
+          cache[state.activeSnapshot.id] = { snapshot: state.activeSnapshot, persistedAt: state.snapshotPersistedAt };
       }
+      if (cache[action.sessionId]?.snapshot.transcript) delete cache[action.sessionId];
       const selected = cache[action.sessionId];
       for (const id of Object.keys(cache).slice(0, -8)) delete cache[id];
       return {
@@ -273,6 +284,8 @@ export function workbenchReducer(
         snapshotPersistedAt: selected?.persistedAt ?? null,
         activeSnapshot: selected?.snapshot ?? null,
         isSnapshotLoading: !selected,
+        isHistoryLoading: false,
+        historyError: null,
         isNewSessionOpen: false,
         mobileTab: "task",
         isMobileSidebarOpen: false,
@@ -391,6 +404,22 @@ export function workbenchReducer(
             : s,
         ),
       };
+    }
+    case "SET_HISTORY_LOADING":
+      return state.activeSessionId === action.sessionId
+        ? { ...state, isHistoryLoading: action.isLoading, historyError: action.error ?? null }
+        : state;
+    case "PREPEND_SESSION_PAGE": {
+      const snapshot = state.activeSnapshot;
+      if (!snapshot || snapshot.id !== action.result.snapshot.id) return state;
+      try {
+        const next = prependSessionPage(snapshot, action.result);
+        return { ...state, activeSnapshot: next, isHistoryLoading: false, historyError: null,
+          snapshotCache: { ...state.snapshotCache, [next.id]: { snapshot: next, persistedAt: state.snapshotPersistedAt } } };
+      } catch (error) {
+        return { ...state, isHistoryLoading: false,
+          historyError: error instanceof Error ? error.message : "历史记录边界已变化，请重新打开会话" };
+      }
     }
     case "SET_SNAPSHOT_LOADING":
       return { ...state, isSnapshotLoading: action.isLoading };
@@ -518,7 +547,7 @@ export function workbenchReducer(
       if (event.type === "run_started") {
         const messageCount =
           state.activeSnapshot?.id === event.sessionId
-            ? state.activeSnapshot.messages.length
+            ? (state.activeSnapshot.transcript?.messageOffset ?? 0) + state.activeSnapshot.messages.length
             : 0;
         next = {
           ...next,
@@ -552,7 +581,7 @@ export function workbenchReducer(
           reasoningStartMessage: text
             ? (run.reasoningStartMessage ?? 0)
             : state.activeSnapshot?.id === event.sessionId
-              ? state.activeSnapshot.messages.length
+              ? (state.activeSnapshot.transcript?.messageOffset ?? 0) + state.activeSnapshot.messages.length
               : 0,
           streamingReasoning: text + event.text.slice(0, Math.max(0, STREAMING_REASONING_LIMIT - text.length)),
           reasoningTruncated: Boolean(run.reasoningTruncated) || text.length + event.text.length > STREAMING_REASONING_LIMIT,
@@ -566,7 +595,7 @@ export function workbenchReducer(
           streamStartMessage: run.streamingText
             ? (run.streamStartMessage ?? 0)
             : state.activeSnapshot?.id === event.sessionId
-              ? state.activeSnapshot.messages.length
+              ? (state.activeSnapshot.transcript?.messageOffset ?? 0) + state.activeSnapshot.messages.length
               : 0,
           streamingText:
             run.streamingText +

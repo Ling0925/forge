@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SessionSummary } from "../../shared-types";
 import { readSessionInfo } from "../../state/session-info-cache";
+import { seedSessionUsage } from "../../state/session-usage";
 import { useWorkbench } from "../../state/workbench-context";
 import { SessionActions } from "./SessionActions";
 
@@ -44,7 +45,16 @@ export function SessionListItem({
           status: session.status,
           model: session.model,
         },
-        () => window.forge.getSession(session.id),
+        async () => {
+          const bridge = window.forge;
+          const getPage = bridge.getSessionPage;
+          if (!getPage) return bridge.getSession(session.id);
+          const { snapshot, page } = await getPage(session.id);
+          // The page contract always carries its prefix summary. Never turn a
+          // missing summary into a full-history fetch for a sidebar hover.
+          seedSessionUsage(snapshot.events, page.usageBefore);
+          return { ...snapshot, transcript: page };
+        },
       )
         .then((summary) => {
           if (cancelled) return;
@@ -131,7 +141,8 @@ export function SessionListItem({
           if (menuActive) setOpen(false);
         }}
       />
-      {open && !isMenuOpen &&
+      {open &&
+        !isMenuOpen &&
         createPortal(
           <div
             id={tooltipId}

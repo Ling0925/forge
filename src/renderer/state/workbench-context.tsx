@@ -21,10 +21,12 @@ import type {
   Permission,
   PublicSettings,
   SessionId,
+  SessionSnapshot,
 } from "../shared-types";
 import { ForgeError } from "../../shared/errors";
 import { shouldRefreshTranscript } from "./refresh-events";
 import { RunInputQueue } from "./run-input-queue";
+import { pageSnapshot } from "./session-pages";
 import type { ImageAttachment } from "../../shared/images";
 import {
   type WorkbenchAction,
@@ -92,6 +94,10 @@ function useController() {
   const readLifetime = useRef<AbortController | null>(null);
   const reads = useRef(new Map<string, number>());
   const pendingReads = useRef(new Map<string, Promise<void>>());
+  const selectionVersion = useRef(0);
+  const historyRequest = useRef<{ sessionId: SessionId; selection: number } | null>(null);
+  // Tracks the requested window synchronously, independent of React commit timing.
+  const loadedFrom = useRef(new Map<SessionId, number>());
   const refreshSession = useCallback(
     async (id: SessionId, invalidate = true) => {
       const signal = readLifetime.current?.signal;
@@ -105,17 +111,26 @@ function useController() {
         let observed: number | undefined;
         do {
           observed = reads.current.get(id);
+          const selection = selectionVersion.current;
           let attempt = 0;
           for (;;) {
             if (signal.aborted) return;
             try {
-              const snapshot = await window.forge.getSession(id);
+              const from = loadedFrom.current.get(id);
+              const snapshot: SessionSnapshot = window.forge.getSessionPage
+                ? pageSnapshot(await window.forge.getSessionPage(id, from === undefined ? undefined : { from }))
+                : await window.forge.getSession(id);
               if (signal.aborted) return;
+              if (selection !== selectionVersion.current) break;
+              if (snapshot.transcript && current.current.activeSessionId === id) {
+                loadedFrom.current.set(id, Math.min(loadedFrom.current.get(id) ?? Infinity, snapshot.transcript.messageOffset));
+              }
               dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
               dispatch({ type: "CLEAR_SESSION_READ_ERROR", sessionId: id });
               break;
             } catch (err) {
               if (signal.aborted) return;
+              if (selection !== selectionVersion.current) break;
               const delay = SESSION_READ_RETRY_DELAYS[attempt++];
               // Only this idempotent read may retry an explicitly transient
               // storage conflict. Never retry mutations or hide corrupt data.
@@ -140,11 +155,37 @@ function useController() {
   );
   const selectSession = useCallback(
     async (sessionId: SessionId) => {
+      selectionVersion.current++;
+      historyRequest.current = null;
+      loadedFrom.current.clear();
       dispatch({ type: "SELECT_SESSION", sessionId });
-      await refreshSession(sessionId, false);
+      await refreshSession(sessionId);
     },
     [dispatch, refreshSession],
   );
+  const loadOlderMessages = useCallback(async () => {
+    const snapshot = current.current.activeSnapshot;
+    const page = snapshot?.transcript;
+    const signal = readLifetime.current?.signal;
+    if (!snapshot || !page?.hasMore || !window.forge.getSessionPage ||
+        !signal || signal.aborted || historyRequest.current) return;
+    const request = { sessionId: snapshot.id, selection: selectionVersion.current };
+    historyRequest.current = request;
+    const valid = () => !signal.aborted && historyRequest.current === request &&
+      selectionVersion.current === request.selection && current.current.activeSessionId === snapshot.id;
+    dispatch({ type: "SET_HISTORY_LOADING", sessionId: snapshot.id, isLoading: true });
+    try {
+      const result = await window.forge.getSessionPage(snapshot.id, { before: page.messageOffset });
+      if (!valid()) return;
+      loadedFrom.current.set(snapshot.id, result.page.messageOffset);
+      dispatch({ type: "PREPEND_SESSION_PAGE", result });
+    } catch (err) {
+      if (valid()) dispatch({ type: "SET_HISTORY_LOADING", sessionId: snapshot.id, isLoading: false,
+        error: err instanceof Error ? err.message : "历史记录加载失败，请重试" });
+    } finally {
+      if (historyRequest.current === request) historyRequest.current = null;
+    }
+  }, [dispatch]);
   const sessionListGeneration = useRef(0);
   const loadSessions = useCallback(async () => {
     const generation = ++sessionListGeneration.current;
@@ -227,6 +268,8 @@ function useController() {
       lifetime.abort();
       pendingReads.current.clear();
       reads.current.clear();
+      loadedFrom.current.clear();
+      historyRequest.current = null;
       off();
       for (const timer of titleRefreshes.values()) clearTimeout(timer);
     };
@@ -274,6 +317,9 @@ function useController() {
         createSessionInputSchema.parse(input),
       );
       if (select) {
+        selectionVersion.current++;
+        historyRequest.current = null;
+        loadedFrom.current.clear();
         dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
         dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
       }
@@ -432,6 +478,7 @@ function useController() {
     loadSettings,
     loadSessions,
     selectSession,
+    loadOlderMessages,
     createSession,
     startRun,
     sendSteering,

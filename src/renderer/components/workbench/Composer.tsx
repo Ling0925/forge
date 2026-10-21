@@ -574,8 +574,13 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
                     model: snapshot.model,
                   },
             }));
-          dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
-          dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
+          // The command result may be a full export-shaped snapshot. Re-read only
+          // the latest page instead of retaining its whole transcript in UI state.
+          if (window.forge.getSessionPage) await selectSession(snapshot.id);
+          else {
+            dispatch({ type: "SELECT_SESSION", sessionId: snapshot.id });
+            dispatch({ type: "SET_ACTIVE_SNAPSHOT", snapshot });
+          }
         }
         await loadSessions();
       },

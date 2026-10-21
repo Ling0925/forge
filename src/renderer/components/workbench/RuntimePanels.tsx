@@ -377,15 +377,17 @@ function MemoryExcerptCard({
   label,
   excerpt,
   messages,
+  messageOffset = 0,
 }: {
   readonly label?: string | undefined;
   readonly excerpt: MemoryExcerptBlock;
   readonly messages?: readonly Message[] | undefined;
+  readonly messageOffset?: number | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
   const resolvedRecord = useMemo(
-    () => resolveMessageByRef(messages, excerpt.ref),
-    [messages, excerpt.ref],
+    () => resolveMessageByRef(messages, excerpt.ref, messageOffset),
+    [messages, excerpt.ref, messageOffset],
   );
   const fullText =
     resolvedRecord && resolvedRecord.text.length >= excerpt.text.length
@@ -470,9 +472,11 @@ function MemoryExcerptCard({
 function WorkingStateItemRow({
   item,
   messages,
+  messageOffset = 0,
 }: {
   readonly item: MemoryRefItem;
   readonly messages?: readonly Message[] | undefined;
+  readonly messageOffset?: number | undefined;
 }) {
   const [expandedRef, setExpandedRef] = useState<string | null>(null);
   const [textExpanded, setTextExpanded] = useState(false);
@@ -487,9 +491,9 @@ function WorkingStateItemRow({
   const resolvedRefMessage = useMemo(
     () =>
       expandedRef
-        ? resolveMessageByRef(messages, expandedRef)
+        ? resolveMessageByRef(messages, expandedRef, messageOffset)
         : undefined,
-    [messages, expandedRef],
+    [messages, expandedRef, messageOffset],
   );
 
   return (
@@ -639,10 +643,12 @@ function MemoryPlanBlock({
 export function ContextMemoryView({
   parsed,
   messages,
+  messageOffset = 0,
   currentPlan,
 }: {
   readonly parsed: ParsedContextMemory;
   readonly messages?: readonly Message[] | undefined;
+  readonly messageOffset?: number | undefined;
   readonly currentPlan?: TaskPlan | null | undefined;
 }) {
   if (parsed.kind === "working_state") {
@@ -681,7 +687,7 @@ export function ContextMemoryView({
                 <WorkingStateItemRow
                   key={`${section.key}:${idx}`}
                   item={item}
-                  messages={messages}
+                  messages={messages} messageOffset={messageOffset}
                 />
               ))}
             </ul>
@@ -714,21 +720,21 @@ export function ContextMemoryView({
           <MemoryExcerptCard
             label="初始请求"
             excerpt={parsed.initialRequest}
-            messages={messages}
+            messages={messages} messageOffset={messageOffset}
           />
         )}
         {parsed.latestRequest && (
           <MemoryExcerptCard
             label="最近请求"
             excerpt={parsed.latestRequest}
-            messages={messages}
+            messages={messages} messageOffset={messageOffset}
           />
         )}
         {parsed.latestAssistantReport && (
           <MemoryExcerptCard
             label="最近助手回复"
             excerpt={parsed.latestAssistantReport}
-            messages={messages}
+            messages={messages} messageOffset={messageOffset}
           />
         )}
         {parsed.plan && (
@@ -747,7 +753,7 @@ export function ContextMemoryView({
                 <MemoryExcerptCard
                   key={`${obs.ref ?? idx}:${idx}`}
                   excerpt={obs}
-                  messages={messages}
+                  messages={messages} messageOffset={messageOffset}
                 />
               ))}
             </div>
@@ -762,7 +768,7 @@ export function ContextMemoryView({
             <div className="wb-disclosure-body">
               <ContextMemoryView
                 parsed={parsed.priorMemory}
-                messages={messages}
+                messages={messages} messageOffset={messageOffset}
                 currentPlan={currentPlan}
               />
             </div>
@@ -804,7 +810,7 @@ export function ContextMemoryView({
                 <MemoryExcerptCard
                   key={`${item.ref ?? idx}:${idx}`}
                   excerpt={item}
-                  messages={messages}
+                  messages={messages} messageOffset={messageOffset}
                 />
               ))}
             </div>
@@ -819,7 +825,7 @@ export function ContextMemoryView({
             <div className="wb-disclosure-body">
               <ContextMemoryView
                 parsed={parsed.previousState}
-                messages={messages}
+                messages={messages} messageOffset={messageOffset}
                 currentPlan={currentPlan}
               />
             </div>
@@ -1028,6 +1034,7 @@ export function ContextManagementPanel() {
             <ContextMemoryView
               parsed={parsedMemory}
               messages={snapshot.messages}
+              messageOffset={snapshot.transcript?.messageOffset}
               currentPlan={snapshot.plan}
             />
           </div>

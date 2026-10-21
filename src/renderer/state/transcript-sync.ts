@@ -1,5 +1,6 @@
 import type { SessionSnapshot } from "../shared-types";
 import { executionTurns } from "../../shared/execution";
+import { retainLoadedPrefix, seedSnapshotUsage } from "./session-pages";
 
 export interface PendingOutput {
   readonly id: string;
@@ -12,7 +13,8 @@ export interface PendingOutput {
 }
 
 function outputMessages(output: PendingOutput, snapshot: SessionSnapshot) {
-  if (output.turn === undefined) return snapshot.messages.slice(output.afterMessage);
+  const offset = snapshot.transcript?.messageOffset ?? 0;
+  if (output.turn === undefined) return snapshot.messages.slice(Math.max(0, output.afterMessage - offset));
   const turn = executionTurns(snapshot).find(item => item.turn === output.turn);
   if (!turn) return [];
   const steps = turn.events.filter(event => event.type === "step_started");
@@ -20,8 +22,8 @@ function outputMessages(output: PendingOutput, snapshot: SessionSnapshot) {
   const start = stepIndex >= 0 ? steps[stepIndex]?.messageIndex : undefined;
   const end = stepIndex >= 0 ? steps[stepIndex + 1]?.messageIndex : undefined;
   return snapshot.messages.slice(
-    Math.max(output.afterMessage, start ?? turn.messageStart + 1),
-    end ?? turn.messageEnd,
+    Math.max(0, output.afterMessage - offset, start === undefined ? turn.messageStart + 1 : start - offset),
+    end === undefined ? turn.messageEnd : end - offset,
   );
 }
 
@@ -38,7 +40,7 @@ export function retainedOutputs(snapshot: SessionSnapshot): readonly PendingOutp
   for (const turn of executionTurns(snapshot)) {
     if (turn.finish?.status === "completed") continue;
     let step: number | undefined;
-    let afterMessage = turn.messageEnd;
+    let afterMessage = (snapshot.transcript?.messageOffset ?? 0) + turn.messageEnd;
     const chunks = new Map<number | undefined, PendingOutput>();
     for (const [index, event] of turn.events.entries()) {
       if (event.type === "step_started") {
@@ -88,7 +90,7 @@ export function reasoningSaved(
 ): boolean {
   return (
     snapshot?.messages
-      .slice(output.afterMessage)
+      .slice(Math.max(0, output.afterMessage - (snapshot?.transcript?.messageOffset ?? 0)))
       .some(
         (message) =>
           message.role === "assistant" &&
@@ -104,7 +106,9 @@ export function mergeTranscript(
   incoming: SessionSnapshot,
   persistedAt: string | null = null,
 ): SessionSnapshot {
-  if (!current || current.id !== incoming.id) return incoming;
+  if (!current || current.id !== incoming.id) return seedSnapshotUsage(incoming);
+  if (current.transcript && incoming.transcript && persistedAt && incoming.updatedAt < persistedAt) return current;
+  incoming = retainLoadedPrefix(current, incoming);
   const counts = new Map<string, number>();
   for (const event of incoming.events) {
     const key = JSON.stringify(event);
@@ -120,7 +124,7 @@ export function mergeTranscript(
     return true;
   });
   const newerLocal = current.updatedAt > incoming.updatedAt;
-  return {
+  return seedSnapshotUsage({
     ...incoming,
     messages:
       (persistedAt !== null && incoming.updatedAt < persistedAt) ||
@@ -138,5 +142,5 @@ export function mergeTranscript(
     // A stale read must not drop plans this client already synchronized.
     ...(newerLocal && current.plan ? { plan: current.plan } : {}),
     ...(newerLocal && current.plans ? { plans: current.plans } : {}),
-  };
+  });
 }

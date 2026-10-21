@@ -2,6 +2,7 @@ import { createSlashActions } from "../../../shared/slash-actions";
 import { parseSlashCommand, SLASH_COMMANDS } from "../../../shared/slash-commands";
 import { parseSessionId, permissionSchema, settingsFields, type SessionId, type SessionSnapshot } from "../../../shared/schemas";
 import type { ForgeBridge } from "../../../shared/ipc";
+import { pageSnapshot } from "../../state/session-pages";
 
 // Limitations of the current desktop bridge, not a second command catalog.
 export const desktopSlashLimitation = (name: string): string | undefined => ({
@@ -84,7 +85,12 @@ export async function executeDesktopSlash(line: string, host: DesktopSlashHost):
       return { text: `Permission: ${value || host.permission}` };
     case "/new": return apply(await actions.newSession(host.workspace, host.model));
     case "/resume":
-      if (value) return apply(await host.bridge.getSession(parseSessionId(value)));
+      if (value) {
+        const sessionId = parseSessionId(value);
+        return apply(host.bridge.getSessionPage
+          ? pageSnapshot(await host.bridge.getSessionPage(sessionId))
+          : await host.bridge.getSession(sessionId));
+      }
       return { sessions: await actions.sessions(), text: "选择会话恢复" };
     case "/sessions": return { sessions: await actions.sessions(), text: "历史会话" };
     case "/fork": return apply(await actions.fork(id(), value));

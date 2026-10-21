@@ -908,10 +908,41 @@ export const InlineApproval = memo(function InlineApproval({
   );
 });
 
+interface TranscriptHistoryAnchor {
+  readonly sessionId: SessionId | null;
+  readonly messageOffset: number;
+  readonly element: HTMLElement | null;
+  readonly turn: string | null;
+  readonly viewportOffset: number;
+  readonly scrollHeight: number;
+  readonly following: boolean;
+}
+
+/** A wheel notch or two: enough to count, small enough not to pull the reader. */
+const HISTORY_TOP_THRESHOLD = 24;
+/**
+ * Only an animated scroll needs a time window: it keeps emitting events after
+ * the gesture that started it. Instant jumps record their own scrollTop, so the
+ * single event they produce can never look like an upward gesture.
+ */
+const HISTORY_SMOOTH_SUPPRESS_MS = 800;
+
+function isNearTranscriptTop(scroll: HTMLDivElement): boolean {
+  return (
+    scroll.scrollTop <= HISTORY_TOP_THRESHOLD ||
+    scroll.scrollHeight <= scroll.clientHeight + 1
+  );
+}
+
 export function Transcript() {
-  const { state, answerApproval, openNewSession } = useWorkbench();
+  const workbench = useWorkbench();
+  const { answerApproval, loadOlderMessages, openNewSession } = workbench;
+  const state = workbench.state;
   const snapshot = state.activeSnapshot;
   const sessionId = state.activeSessionId;
+  // A session that predates windowing (or a full snapshot) has no page cursor,
+  // so the reader simply shows everything it has and grows no history control.
+  const history = snapshot?.transcript;
   const run = sessionId ? state.activeRuns[sessionId] : undefined;
   const pendingApproval = run?.pendingApproval;
   // The inline card is the primary path only for the selected session's live
@@ -921,12 +952,28 @@ export function Transcript() {
   const contentRef = useRef<HTMLDivElement>(null);
   const navigation = useRef(new TranscriptScrollState());
   const [hasNewContent, setHasNewContent] = useState(false);
+  // Pagination state is kept per session: an old promise or its anchor must not
+  // grab the next session's scroll position. The controller additionally
+  // isolates stale responses; this is the second, local guard.
+  const historyRequest = useRef<{
+    readonly sessionId: SessionId | null;
+  } | null>(null);
+  const historyAnchor = useRef<TranscriptHistoryAnchor | null>(null);
+  const historySuppressNewContent = useRef(false);
+  const programmaticScrollUntil = useRef(0);
+  const lastScrollTop = useRef(0);
+  // A collapsing disclosure shrinks the content and the browser clamps
+  // scrollTop upward. That is layout, not reading intent, so the shrink is
+  // remembered here instead of opening a timed window that would also swallow
+  // a real upward gesture.
+  const lastScrollHeight = useRef(0);
+  const touchStartY = useRef<number | null>(null);
   // Loading a snapshot for the selected session is itself arriving content,
   // and a fresh approval request is arriving content too: the card must be
   // pulled into view like any new message.
   // Reasoning deltas grow the live tail too, so they must count as arriving
   // content or the follow-scroll would stall while the model is still thinking.
-  const contentVersion = `${snapshot?.id ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.pendingSteering?.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning?.length ?? 0}:${run?.streamingText?.length ?? 0}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
+  const contentVersion = `${snapshot?.id ?? ""}:${history?.messageOffset ?? ""}:${history?.eventOffset ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.pendingSteering?.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning?.length ?? 0}:${run?.streamingText?.length ?? 0}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
   // Has this turn produced answer prose yet? Either the live draft is still
   // streaming, or the snapshot already persisted it and the draft was cleared
   // on sync. Both mean the model has left its reasoning phase.
@@ -934,6 +981,123 @@ export function Transcript() {
     Boolean(run?.streamingText) ||
     (snapshot?.messages.at(-1)?.role === "assistant" &&
       Boolean(snapshot?.messages.at(-1)?.content));
+  const suppressProgrammaticScroll = () => {
+    programmaticScrollUntil.current = Math.max(
+      programmaticScrollUntil.current,
+      Date.now() + HISTORY_SMOOTH_SUPPRESS_MS,
+    );
+  };
+  const captureHistoryAnchor = (): TranscriptHistoryAnchor | null => {
+    const scroll = scrollRef.current;
+    if (!scroll || !history) return null;
+    const scrollRect = scroll.getBoundingClientRect();
+    let element: HTMLElement | null = null;
+    for (const candidate of scroll.querySelectorAll<HTMLElement>("[data-turn]")) {
+      if (candidate.getBoundingClientRect().bottom > scrollRect.top + 1) {
+        element = candidate;
+        break;
+      }
+    }
+    return {
+      sessionId,
+      messageOffset: history.messageOffset,
+      element,
+      turn: element?.dataset.turn ?? null,
+      viewportOffset: element
+        ? element.getBoundingClientRect().top - scrollRect.top
+        : 0,
+      scrollHeight: scroll.scrollHeight,
+      following: navigation.current.following,
+    };
+  };
+  const restoreHistoryAnchor = (anchor: TranscriptHistoryAnchor) => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    if (anchor.following) {
+      // A short transcript (or a reader already at the tail) keeps the tail:
+      // the same visible turn remains at the bottom after the prepend.
+      scroll.scrollTop = scroll.scrollHeight;
+      lastScrollTop.current = scroll.scrollTop;
+      lastScrollHeight.current = scroll.scrollHeight;
+      navigation.current.following = true;
+      navigation.current.hasNewContent = false;
+      setHasNewContent(false);
+      return;
+    }
+    const align = () => {
+      const element = anchor.element?.isConnected
+        ? anchor.element
+        : anchor.turn === null
+          ? null
+          : (Array.from(
+              scroll.querySelectorAll<HTMLElement>("[data-turn]"),
+            ).find((candidate) => candidate.dataset.turn === anchor.turn) ?? null);
+      const delta = element
+        ? element.getBoundingClientRect().top -
+          scroll.getBoundingClientRect().top -
+          anchor.viewportOffset
+        : scroll.scrollHeight - anchor.scrollHeight;
+      if (Math.abs(delta) < 0.5) return;
+      scroll.scrollTop = Math.max(0, scroll.scrollTop + delta);
+      lastScrollTop.current = scroll.scrollTop;
+      lastScrollHeight.current = scroll.scrollHeight;
+    };
+    align();
+    navigation.current.following = false;
+    navigation.current.hasNewContent = false;
+    setHasNewContent(false);
+    // The loading row swapping back to its idle state, a late font or a
+    // collapse above the reader can move the anchor a pixel or two after this
+    // commit: re-measure once on the next frame unless the reader moved first.
+    const settle = () => {
+      if (!scroll.isConnected || scroll.scrollTop !== lastScrollTop.current) return;
+      align();
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(settle);
+  };
+  const requestOlderMessages = async (retry = false) => {
+    if (!sessionId || !snapshot || !history?.hasMore) return;
+    if (state.isHistoryLoading) return;
+    if (historyRequest.current?.sessionId === sessionId) return;
+    // A failure is never retried by geometry/scroll alone. The explicit retry
+    // button is the one path back in, so a persistent error cannot loop.
+    if (state.historyError && !retry) return;
+    const request = { sessionId };
+    historyRequest.current = request;
+    historyAnchor.current = captureHistoryAnchor();
+    try {
+      await loadOlderMessages();
+    } catch {
+      // The controller owns the visible error and the anchor reset; the
+      // content already on screen stays exactly where the reader left it.
+    } finally {
+      const clear = () => {
+        if (historyRequest.current === request) historyRequest.current = null;
+      };
+      // Let the controller's loading/snapshot update commit before another
+      // gesture is allowed to start a second page.
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(clear);
+      } else {
+        setTimeout(clear, 0);
+      }
+    }
+  };
+  const maybeRequestOlderMessages = () => {
+    if (state.historyError || state.isHistoryLoading) return;
+    const scroll = scrollRef.current;
+    if (!scroll || !isNearTranscriptTop(scroll)) return;
+    void requestOlderMessages(false);
+  };
+  // A wheel/touch/key gesture in a short transcript produces no scroll event at
+  // all, so let the browser apply the gesture first and then inspect the top.
+  const requestOlderAfterUserScroll = () => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(maybeRequestOlderMessages);
+    } else {
+      maybeRequestOlderMessages();
+    }
+  };
   const jumpToLatest = () => {
     navigation.current.reset();
     setHasNewContent(false);
@@ -945,21 +1109,72 @@ export function Transcript() {
     const reduced =
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) scroll.scrollTop = scroll.scrollHeight;
-    else scroll.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
+    if (reduced) {
+      scroll.scrollTop = scroll.scrollHeight;
+    } else {
+      // The animation itself is the only programmatic movement that needs the
+      // time window; it keeps emitting events after this handler returns.
+      suppressProgrammaticScroll();
+      scroll.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
+    }
+    lastScrollTop.current = scroll.scrollTop;
+    lastScrollHeight.current = scroll.scrollHeight;
   };
   useLayoutEffect(() => {
     // Each saved session starts at its own tail, even if the previous one was
-    // being read off-tail. No scroll/follow state crosses session boundaries.
+    // being read off-tail. No scroll/follow state, pending page request or
+    // anchor from the previous session crosses this boundary.
     if (sessionId) navigation.current.reset();
     setHasNewContent(false);
+    historyRequest.current = null;
+    historyAnchor.current = null;
+    historySuppressNewContent.current = false;
+    lastScrollTop.current = 0;
+    lastScrollHeight.current = 0;
+    programmaticScrollUntil.current = 0;
+    touchStartY.current = null;
     const scroll = scrollRef.current;
-    if (scroll) scroll.scrollTop = scroll.scrollHeight;
+    if (scroll) {
+      scroll.scrollTop = scroll.scrollHeight;
+      lastScrollTop.current = scroll.scrollTop;
+      lastScrollHeight.current = scroll.scrollHeight;
+    }
   }, [sessionId]);
   useLayoutEffect(() => {
+    const anchor = historyAnchor.current;
+    if (!anchor) return;
+    if (anchor.sessionId !== sessionId) {
+      historyAnchor.current = null;
+      return;
+    }
+    // The page cursor is the only prepend signal: live output grows the tail
+    // and leaves messageOffset alone. A missing cursor cannot be a prepend.
+    if (!history || history.messageOffset >= anchor.messageOffset) return;
+    historyAnchor.current = null;
+    // Prepending history is not arriving chat output. Skip the follow-tail and
+    // unread indicator for this commit, then keep the reader's DOM anchor.
+    historySuppressNewContent.current = true;
+    restoreHistoryAnchor(anchor);
+  }, [sessionId, history?.messageOffset]);
+  useLayoutEffect(() => {
+    if (!state.historyError) return;
+    if (historyAnchor.current?.sessionId === sessionId) {
+      historyAnchor.current = null;
+    }
+  }, [state.historyError, sessionId]);
+  useLayoutEffect(() => {
+    if (historySuppressNewContent.current) {
+      historySuppressNewContent.current = false;
+      setHasNewContent(false);
+      return;
+    }
     if (contentVersion && navigation.current.contentArrived()) {
       const scroll = scrollRef.current;
-      if (scroll) scroll.scrollTop = scroll.scrollHeight;
+      if (scroll) {
+        scroll.scrollTop = scroll.scrollHeight;
+        lastScrollTop.current = scroll.scrollTop;
+        lastScrollHeight.current = scroll.scrollHeight;
+      }
     }
     setHasNewContent(navigation.current.hasNewContent);
   }, [contentVersion]);
@@ -970,7 +1185,11 @@ export function Transcript() {
     const observer = new ResizeObserver(() => {
       // Also handles font/layout changes and content growing after the commit.
       // Never smooth-scroll token updates (including under reduced motion).
-      if (navigation.current.following) scroll.scrollTop = scroll.scrollHeight;
+      if (navigation.current.following) {
+        scroll.scrollTop = scroll.scrollHeight;
+        lastScrollTop.current = scroll.scrollTop;
+        lastScrollHeight.current = scroll.scrollHeight;
+      }
     });
     observer.observe(content);
     observer.observe(scroll);
@@ -981,11 +1200,65 @@ export function Transcript() {
       <div
         ref={scrollRef}
         className="workbench-conversation-scroll"
+        role={snapshot ? "region" : undefined}
+        aria-label={snapshot ? "对话记录" : undefined}
+        tabIndex={snapshot ? 0 : undefined}
         onScroll={() => {
           const scroll = scrollRef.current;
           if (!scroll) return;
+          const previous = lastScrollTop.current;
+          lastScrollTop.current = scroll.scrollTop;
+          // A collapsing disclosure (or a shrinking viewport) can clamp
+          // scrollTop upward. That is layout, not reading intent.
+          const heightShrank = scroll.scrollHeight < lastScrollHeight.current - 1;
+          lastScrollHeight.current = scroll.scrollHeight;
           navigation.current.readPosition(scroll);
           setHasNewContent(navigation.current.hasNewContent);
+          // If the reader moves while the request is pending, preserve their
+          // latest position rather than pulling them back to the request origin.
+          if (historyAnchor.current?.sessionId === sessionId &&
+              historyAnchor.current?.messageOffset === history?.messageOffset) {
+            historyAnchor.current = captureHistoryAnchor();
+          }
+          // Programmatic follow/restore jumps record their own scrollTop, and an
+          // animated jump owns its events, so neither is reading intent.
+          if (heightShrank) return;
+          if (Date.now() < programmaticScrollUntil.current) return;
+          // Only a real upward movement at the top asks for another page; a
+          // sentinel merely being visible on a short transcript must not.
+          if (scroll.scrollTop < previous && isNearTranscriptTop(scroll)) {
+            maybeRequestOlderMessages();
+          }
+        }}
+        onWheel={(event) => {
+          if (event.ctrlKey || event.deltaY >= 0) return;
+          requestOlderAfterUserScroll();
+        }}
+        onTouchStart={(event) => {
+          touchStartY.current = event.touches[0]?.clientY ?? null;
+        }}
+        onTouchMove={(event) => {
+          const start = touchStartY.current;
+          const current = event.touches[0]?.clientY;
+          if (start === null || current === undefined) return;
+          // Finger moving down scrolls the content up.
+          if (current - start > 8) {
+            touchStartY.current = current;
+            requestOlderAfterUserScroll();
+          }
+        }}
+        onTouchEnd={() => {
+          touchStartY.current = null;
+        }}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || event.defaultPrevented) return;
+          if (
+            event.key === "ArrowUp" ||
+            event.key === "PageUp" ||
+            event.key === "Home"
+          ) {
+            requestOlderAfterUserScroll();
+          }
         }}
         onClickCapture={(event) => {
           const target = event.target;
@@ -1016,13 +1289,54 @@ export function Transcript() {
               if (reduced) {
                 scroll.scrollTop = top;
               } else {
+                // Expanding can scroll upward towards the top; the animation's
+                // own events are interaction, not a request for a page.
+                suppressProgrammaticScroll();
                 scroll.scrollTo({ top, behavior: "smooth" });
               }
+              lastScrollTop.current = scroll.scrollTop;
+              lastScrollHeight.current = scroll.scrollHeight;
             });
           }
         }}
       >
         <div ref={contentRef} className="conversation-inner">
+          {snapshot && history && (
+            <div className="transcript-history" data-session-id={snapshot.id}>
+              {state.isHistoryLoading ? (
+                <span className="transcript-history-status" role="status">
+                  <span
+                    className="transcript-history-spinner"
+                    aria-hidden="true"
+                  />
+                  正在加载历史记录…
+                </span>
+              ) : state.historyError ? (
+                <button
+                  type="button"
+                  className="transcript-history-button is-error"
+                  onClick={() => void requestOlderMessages(true)}
+                  title={state.historyError}
+                  aria-label={`历史记录加载失败：${state.historyError}。点击重试`}
+                >
+                  加载失败，点击重试
+                </button>
+              ) : history.hasMore ? (
+                <button
+                  type="button"
+                  className="transcript-history-button"
+                  onClick={() => void requestOlderMessages(false)}
+                  aria-label="加载更早的对话记录"
+                >
+                  上滑加载更早对话
+                </button>
+              ) : (
+                <span className="transcript-history-status is-end">
+                  已加载全部记录
+                </span>
+              )}
+            </div>
+          )}
           {state.isSnapshotLoading && <p className="wb-muted">正在读取会话…</p>}
           {snapshot ? (
             <StoredTranscript key={snapshot.id} snapshot={snapshot} pendingOutputs={run?.pendingOutputs} />

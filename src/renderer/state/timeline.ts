@@ -108,6 +108,8 @@ export function reduceTimeline(
   const cached = timelineCache.get(snapshot);
   if (cached) return insertOutputs(cached, pendingOutputs.filter(output => !outputSaved(output, snapshot)));
   const items: TimelineItem[] = [];
+  const messageOffset = snapshot.transcript?.messageOffset ?? 0;
+  const eventOffset = snapshot.transcript?.eventOffset ?? 0;
   const turns = executionTurns(snapshot);
   const positions = new Map<number, { readonly turn: number; readonly step?: number }>();
   for (const turn of turns) {
@@ -117,7 +119,7 @@ export function reduceTimeline(
     for (let index = turn.messageStart; index < turn.messageEnd; index++) {
       while (cursor < steps.length) {
         const start = steps[cursor];
-        if (!start || start.messageIndex > index) break;
+        if (!start || start.messageIndex > messageOffset + index) break;
         step = start.step;
         cursor++;
       }
@@ -140,7 +142,7 @@ export function reduceTimeline(
         placedErrors.add(index);
         items.push({
           kind: "error",
-          id: `error:${index}`,
+          id: `error:${eventOffset + index}`,
           message: event.error.message,
           timestamp: event.timestamp,
           ...(errorTurn === undefined ? {} : { turn: errorTurn }),
@@ -153,7 +155,7 @@ export function reduceTimeline(
         placedDiagnostics.add(index);
         items.push({
           kind: "hook_diagnostic",
-          id: `hook:${index}`,
+          id: `hook:${eventOffset + index}`,
           hook: event.diagnostic.hook,
           hookId: event.diagnostic.id,
           status: event.diagnostic.status,
@@ -196,8 +198,8 @@ export function reduceTimeline(
       if (message.content || (message.role === "user" && message.images?.length) || (message.role === "assistant" && (message.reasoning || message.citations?.length || message.webSearches?.length)))
         items.push({
           kind: "message",
-          id: `message:${index}`,
-          messageIndex: index,
+          id: `message:${messageOffset + index}`,
+          messageIndex: messageOffset + index,
           ...positions.get(index),
           role: message.role,
           content: message.content ?? "",
@@ -285,8 +287,8 @@ export function reduceTimeline(
           pending.set(call.id, [...(pending.get(call.id) ?? []), items.length]);
           items.push({
             kind: "tool",
-            id: `tool:${call.id}:${occurrence}`,
-            messageIndex: index,
+            id: snapshot.transcript ? `tool:${call.id}:message:${messageOffset + index}` : `tool:${call.id}:${occurrence}`,
+            messageIndex: messageOffset + index,
             ...positions.get(index),
             call,
             status: finish
@@ -362,7 +364,7 @@ export function reduceTimeline(
     if (event.type === "error" && !placedErrors.has(index)) {
       (event.turn === undefined ? historical : anchoredErrors).push({
         kind: "error",
-        id: `error:${index}`,
+        id: `error:${eventOffset + index}`,
         message: event.error.message,
         timestamp: event.timestamp,
         ...(event.turn === undefined ? { historical: true } : { turn: event.turn }),
@@ -375,7 +377,7 @@ export function reduceTimeline(
     ) {
       (event.turn === undefined ? historical : anchoredErrors).push({
         kind: "hook_diagnostic",
-        id: `hook:${index}`,
+        id: `hook:${eventOffset + index}`,
         hook: event.diagnostic.hook,
         hookId: event.diagnostic.id,
         status: event.diagnostic.status,

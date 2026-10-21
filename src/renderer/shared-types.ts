@@ -9,12 +9,14 @@ export type {
   PublicSettings,
   RunInput,
   SessionId,
-  SessionSnapshot,
   SessionStatus,
   SessionSummary,
   ToolCall,
   ToolResult,
 } from "../shared/schemas";
+
+// View-only paging metadata never enters the persisted session schema.
+export type { TranscriptSnapshot as SessionSnapshot } from "../shared/session-page";
 
 export type {
   PublishedFile,
