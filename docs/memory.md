@@ -85,14 +85,14 @@ Forge 的默认工具集提供 `update_memory`、`del_memory`、`get_memory`、`
 
 默认最多扫描 500 个会话、50000 条非系统记录、3200 万字符；优先当前会话及最近活跃会话，每个会话优先近期记录。对话候选最多 60 条，旧记忆候选最多 60 条；每个关键词最多取 50 条旧记忆。材料总预算约 48000 字符，对话片段最多 1800 字符，旧记忆材料最多 6000 字符。返回 `coverage` 的扫描数、不可读取数以及 `scan_truncated`、`selection_truncated`、`excerpt_truncated`，不承诺穷尽所有历史或语义相关内容。`matchedMemories` 是已载入的去重候选数，不是整库匹配总数。
 
-熔炼最多输出 12 项建议；模型合成的本地总期限为 90 秒，不包含前面的审批和历史检索，也不是随流式输出续期的空闲超时。`scope: "workspace"` 只限制工作区，不限定日期或降低材料预算。模型失败、超时、提交前取消或校验失败不会写入记忆；不会隐式删除旧记忆。熔炼的额外模型用量计入本轮统计；供应商不返回用量或调用失败时标记统计不完整。
+熔炼最多输出 12 项建议；不再设置独立的 90 秒合成总期限，长时间整理可继续等待模型完成。用户取消、整轮任务的总预算/取消信号以及供应商自身的请求超时仍然有效，并非无限等待保证。`scope: "workspace"` 只限制工作区，不限定日期或降低材料预算。模型失败、超时、提交前取消或校验失败不会写入记忆；不会隐式删除旧记忆。熔炼的额外模型用量计入本轮统计；供应商不返回用量或调用失败时标记统计不完整。
 
 ### 合成失败诊断
 
 模型请求、返回结构校验和用量回调失败时，工具的 `error` 文本包含安全诊断，不再统一显示“失败或超时”：
 
 - `stage`：`model_request`（模型请求）、`response_validation`（模型返回结构校验）或 `usage_accounting`（用量回调）。记忆 JSON 和引用校验仍返回各自的校验错误。
-- `classification=deadline_exceeded`：本地合成总期限已到，同时提供 `timeout_ms`。`stage=model_request, classification=timeout` 则表示供应商适配层报告超时，不等于本地期限已到。
+- `stage=model_request, classification=timeout` 表示供应商适配层报告超时。`forge_memory` 不再生成独立合成期限的 `deadline_exceeded` / `timeout_ms` 诊断；外层运行被取消时仍走取消处理。
 - 已知供应商错误保留白名单分类（如 `http`、`network`、`protocol`、`upstream`），以及有效的 `http_status` 和白名单 `reason`（如 `insufficient_quota`、`missing_completion`）。未知异常标记 `unknown`，不猜测原因。
 - `elapsed_ms`：使用单调时钟测量，从模型调用前到失败的耗时，不包含审批或检索。用户取消仍单独返回取消错误。
 
