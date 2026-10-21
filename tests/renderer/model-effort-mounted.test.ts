@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("styles the model picker before Settings loads and keeps five effort levels on desktop and mobile", async () => {
+it("styles the model picker before Settings loads and preserves configured efforts on desktop and mobile", async () => {
   const bundle = await build({
     stdin: { resolveDir: resolve("."), loader: "tsx", contents: `
       import {createRoot} from 'react-dom/client';
@@ -45,8 +45,10 @@ it("styles the model picker before Settings loads and keeps five effort levels o
     await page.addScriptTag({ content: js });
     const labels = ["low", "medium", "high", "xhigh", "MAX"];
     const trigger = page.locator(".composer-model-summary");
-    for (const removed of ["default", "none", "minimal"]) {
-      await page.getByRole("button", { name: removed, exact: true }).click();
+    // Unknown capability retains the usual five choices plus the actual setting.
+    for (const width of [1440, 390]) for (const configured of ["default", "none", "minimal"]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.getByRole("button", { name: configured, exact: true }).click();
       await trigger.click();
       const slider = page.getByRole("slider", { name: "思考等级", exact: true });
       await slider.waitFor();
@@ -55,11 +57,21 @@ it("styles the model picker before Settings loads and keeps five effort levels o
       expect(await page.locator(".model-effort-options").evaluate(node => getComputedStyle(node).borderTopWidth)).toBe("0px");
       expect(await slider.evaluate(node => getComputedStyle(node).appearance)).toBe("none");
       expect(await page.locator(".effort-slider-labels").evaluate(node => getComputedStyle(node).display)).toBe("flex");
-      expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual(labels);
-      expect(await page.locator("#saved-effort").textContent()).toBe(removed);
-      expect(await trigger.getAttribute("title")).not.toContain(removed);
-      expect(await page.locator(".model-effort-meter").count()).toBe(0);
+      expect(await page.locator(".effort-slider-labels > span").allTextContents()).toEqual([configured, ...labels]);
+      expect(await page.locator("#saved-effort").textContent()).toBe(configured);
+      expect(await slider.getAttribute("aria-valuetext")).toBe(configured);
+      expect(await trigger.getAttribute("title")).toContain(`思考：${configured}`);
+      expect(await page.locator(".model-effort-meter > span").count()).toBe(6);
+      const labelBoxes = await page.locator(".effort-slider-labels > span").evaluateAll(nodes => nodes.map(node => {
+        const { left, right } = node.getBoundingClientRect();
+        return { left, right };
+      }));
+      for (let index = 1; index < labelBoxes.length; index++) {
+        expect(labelBoxes[index]!.left - labelBoxes[index - 1]!.right).toBeGreaterThanOrEqual(4);
+      }
       await slider.press("Home");
+      expect(await page.locator("#saved-effort").textContent()).toBe(configured);
+      await slider.press("ArrowRight");
       expect(await page.locator("#saved-effort").textContent()).toBe("low");
       await page.keyboard.press("Escape");
     }
@@ -174,14 +186,18 @@ it("styles the model picker before Settings loads and keeps five effort levels o
     await configured.press("ArrowRight");
     expect(await page.locator("#saved-effort").textContent()).toBe("minimal");
 
-    // A single advertised choice must not produce a NaN slider fill.
+    // Keep the current setting until an explicit choice changes it. Once only
+    // one level remains, the slider must still have a finite fill width.
     await page.evaluate(() => Reflect.get(window, "setEffortOptions")(["max"]));
-    await expect.poll(() => configured.getAttribute("max")).toBe("0");
-    await configured.press("Home");
+    await expect.poll(() => page.locator(".effort-slider-labels > span").allTextContents()).toEqual(["minimal", "MAX"]);
+    expect(await configured.getAttribute("aria-valuetext")).toBe("minimal");
+    await configured.press("End");
     await expect.poll(() => page.locator("#saved-effort").textContent()).toBe("max");
+    await expect.poll(() => configured.getAttribute("max")).toBe("0");
     expect(await page.locator(".effort-slider-fill").evaluate(node => (node as HTMLElement).style.width)).toBe("0%");
     await page.evaluate(() => Reflect.get(window, "setEffortOptions")(["vendor-only"]));
-    await expect.poll(() => configured.count()).toBe(0);
+    await expect.poll(() => page.locator(".effort-slider-labels > span").allTextContents()).toEqual(["MAX"]);
+    expect(await configured.getAttribute("aria-valuetext")).toBe("MAX");
     expect(await page.getByRole("button", { name: /^选择模型：/ }).count()).toBe(1);
   } finally { await browser.close(); }
 }, 20000);

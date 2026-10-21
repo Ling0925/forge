@@ -611,6 +611,69 @@ it("limits reasoning choices to model metadata and saves only the selected model
   }
 }, 30000);
 
+it.each(["default", "none", "minimal", "xhigh", "max"] as const)("shows configured effort %s even when the catalog omits it, without rewriting it on blur", async (effort) => {
+  const label = effort === "max" ? "MAX" : effort;
+  const { browser, page } = await openComposer({
+    settings: settings([source("a", "Source A", {
+      modelSelection: { mode: "all", overrides: { "shared/model": { reasoningEffort: effort } } },
+    })], { reasoningEffort: "high" }),
+    catalogs: { a: [entry("shared/model", 128000, { reasoningEfforts: ["low", "medium", "high"] })] },
+  });
+  try {
+    await expect.poll(() => title(page)).toContain(`思考：${label}`);
+    await page.locator(".composer-model-summary").click();
+    const slider = page.getByRole("slider", { name: "思考等级", exact: true });
+    await expect.poll(() => slider.getAttribute("aria-valuetext")).toBe(label);
+    expect(await page.locator(".effort-slider-heading output").textContent()).toBe(label);
+    expect(await page.locator(".effort-slider-labels [data-active=true]").textContent()).toBe(label);
+    await slider.focus();
+    await page.locator("textarea.composer-textarea").click();
+    expect(await page.evaluate(() => window.__updates)).toEqual([]);
+    expect(await title(page)).toContain(`思考：${label}`);
+  } finally {
+    await browser.close();
+  }
+}, 30000);
+
+it("follows configured efforts across sources and settings revisions even outside advertised choices", async () => {
+  const { browser, page } = await openComposer({
+    settings: settings([
+      source("a", "Source A", {
+        modelSelection: { mode: "all", overrides: { "shared/model": { reasoningEffort: "max" } } },
+      }),
+      source("b", "Source B", {
+        modelSelection: { mode: "all", overrides: { "shared/model": { reasoningEffort: "minimal" } } },
+      }),
+    ], { reasoningEffort: "high" }),
+    catalogs: {
+      a: [entry("shared/model", 128000, { reasoningEfforts: ["low", "high"] })],
+      b: [entry("shared/model", 128000, { reasoningEfforts: ["low", "high"] })],
+    },
+  });
+  try {
+    await expect.poll(() => title(page)).toContain("思考：MAX");
+    await pickModel(page, "Source B", "shared/model");
+    const slider = page.getByRole("slider", { name: "思考等级", exact: true });
+    await expect.poll(() => slider.getAttribute("aria-valuetext")).toBe("minimal");
+    expect(await title(page)).toContain("思考：minimal");
+
+    await page.evaluate(() => window.__saveSourceOverrides({ "shared/model": { reasoningEffort: "none" } }));
+    expect(await title(page)).toContain("思考：minimal");
+    await pickModel(page, "Source A", "shared/model");
+    await expect.poll(() => slider.getAttribute("aria-valuetext")).toBe("none");
+
+    // Both values have the first index; an unchanged index must not keep an old label.
+    await page.evaluate(() => window.__saveSourceOverrides({ "shared/model": { reasoningEffort: "minimal" } }));
+    await expect.poll(() => slider.getAttribute("aria-valuetext")).toBe("minimal");
+    await page.evaluate(() => window.__saveSourceOverrides({}));
+    await expect.poll(() => slider.getAttribute("aria-valuetext")).toBe("high");
+    expect(await title(page)).toContain("思考：high");
+    expect(await page.evaluate(() => window.__updates.length)).toBe(3);
+  } finally {
+    await browser.close();
+  }
+}, 30000);
+
 it("does not revive a historical override after clearing an unknown model's current window", async () => {
   const idle = fixtureSnapshot("idle-session", "completed");
   const { browser, page } = await openComposer({

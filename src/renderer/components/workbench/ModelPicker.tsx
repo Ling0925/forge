@@ -42,11 +42,14 @@ export function ModelPicker(props: {
   );
   const shownValue = selectedRoute?.label || props.value || "选择模型";
   const initialized = useRef(false);
-  // Unknown capability keeps the existing choices. Advertised choices must also
-  // be representable by the host's request schema; never offer invented levels.
-  const efforts = props.reasoning?.options === undefined
-    ? defaultEfforts
-    : [...new Set(props.reasoning.options.filter((value) => reasoningEffortSchema.safeParse(value).success))];
+  // Capability metadata limits new choices, not the effective request setting.
+  // Keep the configured value even if discovery omits it; otherwise the slider
+  // displays the first option and can overwrite the saved effort on mere blur.
+  // The schema filters unknown levels and orders the remaining choices by effort.
+  const availableEfforts: readonly string[] = props.reasoning?.options ?? defaultEfforts;
+  const efforts = reasoningEffortSchema.options.filter(
+    (value) => value === props.reasoning?.value || availableEfforts.includes(value),
+  );
   const effortSignature = JSON.stringify(efforts);
   const effortIndex = efforts.findIndex(
     (value) => value === props.reasoning?.value,
