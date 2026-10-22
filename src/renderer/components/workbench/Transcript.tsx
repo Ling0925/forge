@@ -157,10 +157,10 @@ function MessageCopyButton({ text }: { readonly text: string }) {
 
 export interface PlanStageDividerProps {
   readonly title: string;
-  readonly completed?: number;
-  readonly total?: number;
-  readonly percent?: number;
-  readonly inProgress?: number;
+  readonly completed?: number | undefined;
+  readonly total?: number | undefined;
+  readonly percent?: number | undefined;
+  readonly inProgress?: number | undefined;
   readonly plan?: PlanItemData | null;
 }
 
@@ -442,6 +442,14 @@ function renderToolCard(
   phases: readonly number[],
   timeline?: readonly TimelineItem[],
 ) {
+  if (item.status === "unexecuted")
+    return (
+      <section key={item.id} className="wb-stack tool-unexecuted message-evidence">
+        <strong>{item.call.function.name} · 无匹配执行记录</strong>
+        <p className="wb-muted">已保存调用意图，但没有可可靠关联的执行或结果记录。</p>
+        <code>{item.call.function.arguments.slice(0, 12000)}</code>
+      </section>
+    );
   let command =
     item.call.function.name === "run_command"
       ? commandActivity(item.call).command || undefined
@@ -598,19 +606,7 @@ function renderTimelineEntry(
         impact={`历史事件时间：${new Date(item.timestamp).toLocaleString()}。此错误不会覆盖当前会话状态。`}
       />
     );
-  if (item.status === "unexecuted")
-    return (
-      <section
-        key={item.id}
-        className="wb-stack tool-unexecuted message-evidence"
-      >
-        <strong>{item.call.function.name} · 无匹配执行记录</strong>
-        <p className="wb-muted">
-          已保存调用意图，但没有可可靠关联的执行或结果记录。
-        </p>
-        <code>{item.call.function.arguments.slice(0, 12000)}</code>
-      </section>
-    );
+  if (item.status === "unexecuted") return renderToolCard(item, index, phases, timeline);
   if (
     item.kind === "tool" &&
     ["create_plan", "update_plan"].includes(item.call.function.name) &&
@@ -659,7 +655,7 @@ function ExecutionProcess({
   readonly children: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
-  if (!execution) return <>{children}</>;
+  if (!execution) return <>{counts && <div className="wb-muted transcript-execution-summary">{counts}</div>}{children}</>;
   return (
     <div className="transcript-execution">
       <button

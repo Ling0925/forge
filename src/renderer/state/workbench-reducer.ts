@@ -19,6 +19,7 @@ import type { SessionPage } from "../../shared/session-page";
 import { prependSessionPage } from "./session-pages";
 import {
   type PendingOutput,
+  generationMessage,
   mergeTranscript,
   outputSaved,
   reasoningSaved,
@@ -47,6 +48,10 @@ export interface ActiveRunState {
   readonly toolPreviews?: readonly ToolPreviewEntry[];
   readonly webSearch?: import("../../shared/web-search").WebSearchProgress | undefined;
   readonly providerRetry?: number | undefined;
+  readonly generationId?: string | undefined;
+  readonly generationFinished?: boolean;
+  readonly generationStatus?: "pending" | "failed" | "cancelled" | undefined;
+  readonly reasoningDone?: boolean;
   readonly streamingReasoning?: string;
   readonly reasoningTruncated?: boolean;
   readonly reasoningStartMessage?: number;
@@ -60,8 +65,8 @@ export interface ActiveRunState {
   readonly streamingText: string;
   readonly streamingTruncated?: boolean;
   readonly streamingTurn?: number;
-  readonly streamTurn?: number;
-  readonly streamStep?: number;
+  readonly streamTurn?: number | undefined;
+  readonly streamStep?: number | undefined;
   readonly accepted?: boolean;
   readonly approvalQueue?: readonly ApprovalRequest[];
   readonly pendingApproval?: ApprovalRequest | undefined;
@@ -93,44 +98,34 @@ export interface WorkbenchState {
   readonly alertError: string | null;
   readonly alertReadSessionId: SessionId | null;
 }
-function retainOutput(
-  run: ActiveRunState,
-  snapshot: SessionSnapshot | null,
-  toolCallId?: string,
-) {
-  const pending = run.pendingOutputs ?? [];
-  if (!run.streamingText) return pending;
-  const output: PendingOutput = {
-    id: `${run.runId ?? "pending"}:${run.streamingTurn ?? 0}`,
-    text: run.streamingText,
-    truncated: Boolean(run.streamingTruncated),
-    afterMessage: run.streamStartMessage ?? 0,
-    toolCallId,
-    ...(run.streamTurn === undefined ? {} : { turn: run.streamTurn }),
-    ...(run.streamStep === undefined ? {} : { step: run.streamStep }),
+export function streamedOutput(run: ActiveRunState, reasoning = false): PendingOutput | undefined {
+  const text = reasoning ? run.streamingReasoning : run.streamingText;
+  if (!text) return undefined;
+  const id = run.generationId ? `generation:${run.generationId}` : `${run.runId ?? "pending"}:${run.streamingTurn ?? 0}`;
+  return {
+    id: reasoning ? `${id}:reasoning` : id,
+    text,
+    truncated: Boolean(reasoning ? run.reasoningTruncated : run.streamingTruncated),
+    afterMessage: (reasoning ? run.reasoningStartMessage : run.streamStartMessage) ?? 0,
+    generationId: run.generationId,
+    turn: run.streamTurn,
+    step: run.streamStep,
+    live: active(run.status) && !run.generationFinished && (!reasoning || (!run.reasoningDone && !run.streamingText)),
+    status: run.generationStatus,
   };
-  return outputSaved(output, snapshot?.id === run.sessionId ? snapshot : null)
-    ? pending
-    : [...pending, output];
 }
-function retainReasoning(
-  run: ActiveRunState,
-  snapshot: SessionSnapshot | null,
-  toolCallId?: string,
-): readonly PendingOutput[] {
-  const pending = run.pendingReasoning ?? [];
-  if (!run.streamingReasoning) return pending;
-  const output: PendingOutput = {
-    id: `${run.runId ?? "pending"}:${run.streamingTurn ?? 0}:reasoning`,
-    text: run.streamingReasoning,
-    truncated: Boolean(run.reasoningTruncated),
-    afterMessage: run.reasoningStartMessage ?? 0,
-    toolCallId,
-  };
-  return reasoningSaved(output, snapshot?.id === run.sessionId ? snapshot : null)
+function retainChannel(run: ActiveRunState, snapshot: SessionSnapshot | null, reasoning: boolean, toolCallId?: string): readonly PendingOutput[] {
+  const pending = (reasoning ? run.pendingReasoning : run.pendingOutputs) ?? [];
+  const streamed = streamedOutput(run, reasoning);
+  if (!streamed) return pending;
+  const output = { ...streamed, live: false, toolCallId, status: run.generationStatus ?? "pending" as const };
+  const saved = reasoning ? reasoningSaved : outputSaved;
+  return saved(output, snapshot?.id === run.sessionId ? snapshot : null)
     ? pending
-    : [...pending, output];
+    : [...pending.filter(previous => previous.id !== output.id), output];
 }
+const retainOutput = (run: ActiveRunState, snapshot: SessionSnapshot | null, toolCallId?: string) => retainChannel(run, snapshot, false, toolCallId);
+const retainReasoning = (run: ActiveRunState, snapshot: SessionSnapshot | null, toolCallId?: string) => retainChannel(run, snapshot, true, toolCallId);
 
 /** Same-id preview updates replace in place; a new id appends within the bound. */
 function upsertPreview(
@@ -330,6 +325,7 @@ export function workbenchReducer(
           outputSaved(
             {
               id: "live",
+              generationId: run.generationId,
               text: run.streamingText,
               truncated: Boolean(run.streamingTruncated),
               afterMessage: run.streamStartMessage ?? 0,
@@ -343,7 +339,10 @@ export function workbenchReducer(
           reasoningSaved(
             {
               id: "live-reasoning",
-              text: run.streamingReasoning,
+              generationId: run.generationId,
+              turn: run.streamTurn,
+              step: run.streamStep,
+              text: run.streamingReasoning ?? "",
               truncated: Boolean(run.reasoningTruncated),
               afterMessage:
                 run.reasoningStartMessage ?? run.streamStartMessage ?? 0,
@@ -363,6 +362,7 @@ export function workbenchReducer(
             ...run,
             pendingOutputs,
             pendingReasoning,
+            reasoningDone: run.reasoningDone || Boolean(generationMessage(selectedSnapshot, run.generationId)) || reasoningSavedLive || liveSaved,
             ...(liveSaved
               ? { streamingText: "", streamingTruncated: false }
               : {}),
@@ -505,12 +505,56 @@ export function workbenchReducer(
             ...previous,
             runId,
           };
+      const scopedStream = ["text_delta", "reasoning_delta", "tool_call_preview", "tool_preview_reset", "retry_reset", "generation_finished"].includes(event.type);
+      if (event.generationId && scopedStream && event.generationId !== run.generationId) return state;
+      if (run.generationFinished && ["text_delta", "reasoning_delta", "tool_call_preview"].includes(event.type)) return state;
+      const savedGeneration = generationMessage(state.activeSnapshot?.id === event.sessionId ? state.activeSnapshot : null, event.generationId);
+      if ((event.type === "reasoning_delta" && savedGeneration?.reasoning) ||
+          (event.type === "text_delta" && savedGeneration?.content)) return state;
       let next = run;
+      if (event.type === "generation_started") {
+        if (event.generationId === run.generationId || !active(run.status)) return state;
+        const history = state.activeSnapshot?.id === event.sessionId ? state.activeSnapshot.events : [];
+        const previousStart = history.findIndex(item => item.type === "generation_started" && item.generationId === event.generationId);
+        const currentStart = history.findIndex(item => item.type === "generation_started" && item.generationId === run.generationId);
+        if ((previousStart >= 0 && currentStart > previousStart) ||
+            (event.turn !== undefined && run.streamTurn !== undefined && event.turn < run.streamTurn) ||
+            (event.turn === run.streamTurn && event.step !== undefined && run.streamStep !== undefined && event.step < run.streamStep)) return state;
+        next = {
+          ...run,
+          pendingOutputs: retainOutput(run, state.activeSnapshot),
+          pendingReasoning: retainReasoning(run, state.activeSnapshot),
+          generationId: event.generationId,
+          generationFinished: false,
+          generationStatus: "pending",
+          reasoningDone: Boolean(savedGeneration),
+          streamingText: "", streamingReasoning: "",
+          streamingTruncated: false, reasoningTruncated: false,
+          streamStartMessage: event.messageIndex, reasoningStartMessage: event.messageIndex,
+          streamTurn: event.turn, streamStep: event.step,
+          toolPreviews: [],
+        };
+      }
+      if (event.type === "generation_finished") {
+        const terminalRun = { ...run, generationStatus: event.status === "failed" || event.status === "cancelled" ? event.status : "pending" as const };
+        next = {
+          ...terminalRun, generationFinished: true, reasoningDone: true,
+          pendingOutputs: event.status === "superseded"
+            ? (run.pendingOutputs ?? []).filter(output => output.generationId !== event.generationId)
+            : retainOutput(terminalRun, state.activeSnapshot),
+          pendingReasoning: event.status === "superseded"
+            ? (run.pendingReasoning ?? []).filter(output => output.generationId !== event.generationId)
+            : retainReasoning(terminalRun, state.activeSnapshot),
+          streamingText: "", streamingReasoning: "", streamingTruncated: false, reasoningTruncated: false,
+          toolPreviews: [],
+        };
+      }
       // Live tool-argument metadata is display-only: it never becomes a call,
       // never executes, and never enters the stored transcript.
       if (event.type === "tool_call_preview")
         next = {
           ...run,
+          reasoningDone: true,
           toolPreviews: upsertPreview(run.toolPreviews, {
             previewId: event.previewId,
             name: event.name,
@@ -539,6 +583,7 @@ export function workbenchReducer(
           streamingReasoning: "",
           streamingTruncated: false,
           reasoningTruncated: false,
+          reasoningDone: Boolean(event.generationId),
         };
       if (event.type === "provider_retry")
         next = { ...run, providerRetry: event.attempt };
@@ -578,7 +623,9 @@ export function workbenchReducer(
         const text = run.streamingReasoning ?? "";
         next = {
           ...run,
-          reasoningStartMessage: text
+          streamTurn: event.turn ?? run.streamTurn,
+          streamStep: event.step ?? run.streamStep,
+          reasoningStartMessage: text || run.generationId
             ? (run.reasoningStartMessage ?? 0)
             : state.activeSnapshot?.id === event.sessionId
               ? (state.activeSnapshot.transcript?.messageOffset ?? 0) + state.activeSnapshot.messages.length
@@ -592,7 +639,8 @@ export function workbenchReducer(
           ...run,
           ...(event.turn === undefined ? {} : { streamTurn: event.turn }),
           ...(event.step === undefined ? {} : { streamStep: event.step }),
-          streamStartMessage: run.streamingText
+          reasoningDone: run.reasoningDone || Boolean(event.text),
+          streamStartMessage: run.streamingText || run.generationId
             ? (run.streamStartMessage ?? 0)
             : state.activeSnapshot?.id === event.sessionId
               ? (state.activeSnapshot.transcript?.messageOffset ?? 0) + state.activeSnapshot.messages.length
@@ -607,9 +655,10 @@ export function workbenchReducer(
             !!run.streamingTruncated ||
             run.streamingText.length + event.text.length > STREAMING_TEXT_LIMIT,
         };
-      if (event.type === "tool_started")
+      if (event.type === "tool_started" && (!event.generationId || event.generationId === run.generationId))
         next = {
           ...next,
+          reasoningDone: true,
           pendingOutputs: retainOutput(
             run,
             state.activeSnapshot,
@@ -677,9 +726,11 @@ export function workbenchReducer(
           ...run,
           providerRetry: undefined,
           toolPreviews: [],
-          pendingOutputs: retainOutput(run, state.activeSnapshot),
-          pendingReasoning: retainReasoning(run, state.activeSnapshot),
+          pendingOutputs: retainOutput({ ...run, generationStatus: event.status === "cancelled" ? "cancelled" : event.status === "completed" ? "pending" : "failed" }, state.activeSnapshot),
+          pendingReasoning: retainReasoning({ ...run, generationStatus: event.status === "cancelled" ? "cancelled" : event.status === "completed" ? "pending" : "failed" }, state.activeSnapshot),
           streamingReasoning: "",
+          reasoningDone: true,
+          generationFinished: true,
           reasoningTruncated: false,
           status: event.status,
           streamingText: "",
@@ -690,7 +741,7 @@ export function workbenchReducer(
           isSubmittingApproval: false,
         };
       if (event.type === "error")
-        next = { ...run, error: event.error, toolPreviews: [] };
+        next = { ...run, error: event.error, reasoningDone: true, toolPreviews: [] };
       if (event.type === "web_search") next = { ...next, webSearch: event.search };
       if (["run_started", "run_finished", "error", "retry_reset", "web_search_result", "tool_started", "text_delta"].includes(event.type) ||
         (event.type === "state_changed" && ["cancelled", "failed", "interrupted"].includes(event.status)))

@@ -94,6 +94,7 @@ it("renders live step counts, persisted retries and independent folding at deskt
     for (const width of [1280, 390]) {
       for (const theme of ["light", "dark"]) {
         const page = await browser.newPage({ viewport: { width, height: 800 } });
+        page.setDefaultTimeout(3000);
         const errors: string[] = [];
         page.on("pageerror", error => errors.push(error.message));
         await page.setContent(`<html data-theme="${theme}"><body><div id="root"></div></body></html>`);
@@ -106,13 +107,16 @@ it("renders live step counts, persisted retries and independent folding at deskt
         const toggle = page.getByRole("button", { name: "展开本轮执行过程", exact: true });
         await toggle.click();
         expect(await page.getByText("也检查失败情况", { exact: true }).isVisible()).toBe(true);
-        expect(await page.locator("[data-step='1']").count()).toBe(1);
+        // Assert actual process contents rather than a nonexistent step wrapper.
+        expect(await page.locator(".transcript-execution-items .tool-disclosure").count()).toBe(1);
+        expect(await page.locator(".transcript-execution-items").innerText()).toContain("先读取文件。");
         await page.getByRole("button", { name: "收起第 1 轮对话", exact: true }).click();
         await page.getByRole("button", { name: "展开第 1 轮执行与回复", exact: true }).click();
         await page.getByRole("button", { name: "展开本轮执行过程", exact: true }).click();
         expect(await page.locator(".tool-disclosure").isVisible()).toBe(true);
         await expect.poll(() => page.locator(".tool-disclosure").evaluate(node => getComputedStyle(node).opacity)).toBe("1");
-        expect(await page.locator("[data-step='2']").count()).toBe(1);
+        expect(await page.locator(".transcript-turn-body > .message-assistant").innerText()).toContain("检查完成，失败情况已保留在执行记录中。");
+        expect(await page.locator(".transcript-execution-items").innerText()).not.toContain("检查完成，失败情况已保留在执行记录中。");
         await page.screenshot({ path: join(artifacts, `steps-${width}-${theme}.png`), fullPage: true });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         expect(errors).toEqual([]);

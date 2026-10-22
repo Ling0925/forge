@@ -32,7 +32,7 @@ export function completedTurnExecutions(
     const speed = sessionUsage(events).speed;
     const rate = speed.durationMs > 0 ? speed.outputTokens * 1000 / speed.durationMs : 0;
     return {
-      finalMessageId: `message:${(snapshot.transcript?.messageOffset ?? 0) + finalIndex}`,
+      finalMessageId: final.generationId ? `generation:${final.generationId}` : `message:${(snapshot.transcript?.messageOffset ?? 0) + finalIndex}`,
       duration: Number.isFinite(durationMs) && durationMs >= 0 ? formatDuration(durationMs) : "—",
       speed: Number.isFinite(rate) && rate > 0
         ? `${speed.partial ? "≈ " : ""}${rate < 10 ? rate.toFixed(1) : Math.round(rate)} tok/s`

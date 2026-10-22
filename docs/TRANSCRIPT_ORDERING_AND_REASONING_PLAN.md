@@ -1,8 +1,8 @@
 # 对话流思考自动收起与工具调用时序归并修改计划
 
-> **状态：经源码审查修订的待实施方案，不是已完成修复或验收报告。**
+> **状态：核心修复已落地（2026-10-22）；实际实现与验证边界见 §9，不代表完整验收矩阵全部通过。**
 >
-> 本文针对共享 renderer 在多步工具调用中出现的「工具参数生成时思考未收起」「思考与工具卡片顺序倒置」及同步交接跳变，区分已确认的实现问题、拟新增的协议和验收边界。下文新增字段、事件与展示模型均为设计建议，当前代码尚未提供。
+> 本文针对共享 renderer 在多步工具调用中出现的「工具参数生成时思考未收起」「思考与工具卡片顺序倒置」及同步交接跳变。§1–8 保留修复前的源码审查、设计目标和验收矩阵；其中“当前代码”“拟新增”等描述是实施前基线，不应当作最新实现状态。
 >
 > 范围：`src/core/runtime.ts`、`src/shared/schemas.ts`、`src/renderer/state/{workbench-reducer,transcript-sync,timeline}.ts`、`src/renderer/components/workbench/{Transcript,Reasoning}.tsx`，以及协议经过的存储、bridge、恢复与 provider 序列化路径。
 >
@@ -290,3 +290,43 @@ pnpm exec vitest run tests/core/reasoning-preview.test.ts tests/renderer/transcr
 实施时只运行与当批改动相关的新增/已有测试，不默认以全量 renderer、typecheck、lint、桌面打包或安装作为前置门槛。若修改 runtime/共享核心，按仓库约定执行 `node scripts/build-core.mjs`；仅改文档无需编译。需要 CLI 启动检查时使用临时 `FORGE_HOME` 并清理，不读取真实密钥或改动用户会话。
 
 最终报告分别列出：代码/契约改动、实际执行的检查及结果、旧格式降级、未覆盖场景。真实 provider 端到端、读屏/高对比矩阵、极长内容及复杂 Markdown 的全部几何表现，若未实际验证必须明确保留为未验证项。
+## 9. 实施结果与验证边界（2026-10-22）
+
+### 9.1 已实现
+
+- **生成身份与生命周期**：runtime 为每次 provider attempt 分配 UUID，发出 `generation_started` / `generation_finished`，并把身份写入接受的 assistant 消息。工具事件使用 `generationId + callIndex`；重试只废弃旧 attempt，取消/异常仅关闭一次，迟到回调不能继续写预览。`projectToolContext` 从模型请求中去除本地身份与展示专用思考。
+- **冲刷与恢复**：非空正文和工具预览先冲刷已有思考；工具预览前也冲刷正文。同步抛错、异步失败、取消都会排空已接受的尾块并关闭计时器。host 恢复只拼接同一生成的有界预览，按开始→增量→结束回放。
+- **统一时间线**：`timeline-drafts.ts` 在轮次、阶段和工具分组之前归并正文与思考。新格式按唯一生成身份独立确认通道；相同前缀、复用的上游工具 ID、迟到快照均不能确认另一生成。纯思考不再产生空作者行；历史错误卡显示真实错误类型。未匹配执行记录的已保存工具意图不会伪装成运行中的工具卡。
+- **终态与交互**：正文、工具预览、执行、保存确认或生成终态锁存 done。失败/取消预览标明“未保存”并锚定原轮次，不随“继续”挂到历史末尾；展开状态按生成键保留。补回执行中步数/重试计数，回归测试断言实际执行内容及最终回复分区，不依赖不存在的 `data-step` 容器。
+- **Anthropic 兼容与诊断**：兼容缺失/空签名的展示思考和空工具 JSON 增量；无签名思考不回放成原生 thinking，不伪造签名。有签名、redacted 原生上下文仍保留；工具参数、结束帧、用量继续校验。错误使用静态阶段与原因码，不暴露原始响应或校验值，SDK 错误不能覆盖底层流截断诊断。未切换用户协议配置、未新增自动 fallback 或扩大重试范围。
+
+### 9.2 实际执行的检查
+
+| 范围 | 结果 |
+| --- | --- |
+| 下列 30 个聚焦测试文件 | **268 项通过**，不是全仓测试 |
+| 24 个变更/直接依赖文件的 TypeScript 语法与语义诊断 | **0 错误**；不是全仓 typecheck |
+| 真实 Transcript + reducer 的 Chromium 挂载交互 | 快照先到/后到、失败继续、相同前缀、展开/焦点保持、复制通过；相同文本 pending→saved 的 top/height 容差 1px |
+| 浏览器尺寸/显示模式 | 新同步用例覆盖 1280px、390px 和 reduced-motion；执行计数用例另覆盖浅色/深色 |
+| `node scripts/build-core.mjs` | 成功，更新 `dist/cli.mjs` |
+| `node scripts/build-web.mjs` | 成功，更新 Web 与共享 renderer 产物；有非阻断的包体积提示 |
+| CLI / Web `--help` 启动检查 | 临时 `FORGE_HOME`、无真实配置，退出码均为 0，临时目录已清理 |
+
+聚焦测试入口（支持 brace expansion 的 shell）：
+
+```sh
+pnpm exec vitest run \
+  tests/core/{reasoning-preview,provider-retries,runtime,tool-context,stream-persistence,tool-preview,tool-concurrency}.test.ts \
+  tests/desktop/{tool-preview,controller}.test.ts \
+  tests/provider/{anthropic,reasoning-stream,sse-compat,gemini,responses-compat}.test.ts \
+  tests/renderer/{generation-sync,generation-sync-mounted,transcript-sync,transcript-sync-mounted,reasoning-mounted,tool-live,tool-live-mounted,refresh-events,workbench-reducer,timeline,session-pages,turn-execution,execution-steps}.test.ts \
+  tests/cli/{reasoning-preview,reasoning-history,tool-preview}.test.ts
+```
+
+### 9.3 明确保留的边界
+
+- 原始两次失败的上游坏帧没有保存，不能倒推它们必然由缺失签名或空参数触发。本轮覆盖确定的适配缺陷，并让以后失败具备安全的细分诊断；没有重放真实模型请求，真实 provider 端到端仍未验证。
+- 新身份只覆盖新版 runtime 生成的数据。旧记录没有身份时仍是受轮次/步骤/位置约束的兼容降级，无法追溯补造可靠身份；不能把旧文本相同视为确证。
+- 失败思考预览仍是当前客户端内存中的展示状态，完整页面重载或客户端退出后不保证恢复；只有已接受 assistant 消息的 reasoning 持久化。不把失败预览伪装成已保存消息或发送给模型。
+- 不宣称 §8 的全部验收矩阵完成：完整高对比/读屏设备矩阵、极长内容/复杂 Markdown 的所有几何情况、真实 provider 流以及所有断线/重启组合仍未覆盖。
+- 本轮未重启正在使用的 Web 服务、未中断其他会话、未运行安装或桌面打包。重开 CLI 才加载新核心；Web 后端也需要在合适时机重启以加载新协议，前端需重新加载相应新版资源。

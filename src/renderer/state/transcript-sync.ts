@@ -10,11 +10,28 @@ export interface PendingOutput {
   readonly toolCallId?: string | undefined;
   readonly turn?: number | undefined;
   readonly step?: number | undefined;
+  readonly generationId?: string | undefined;
+  readonly live?: boolean | undefined;
+  readonly status?: "pending" | "failed" | "cancelled" | undefined;
+}
+
+/** Only a unique local identity can acknowledge a generation, never similar text. */
+export function generationMessage(snapshot: SessionSnapshot | null, generationId: string | undefined) {
+  if (!generationId) return undefined;
+  const matches = snapshot?.messages.filter(message => message.role === "assistant" && message.generationId === generationId) ?? [];
+  return matches.length === 1 && matches[0]?.role === "assistant" ? matches[0] : undefined;
 }
 
 function outputMessages(output: PendingOutput, snapshot: SessionSnapshot) {
+  if (output.generationId) {
+    const message = generationMessage(snapshot, output.generationId);
+    return message ? [message] : [];
+  }
   const offset = snapshot.transcript?.messageOffset ?? 0;
-  if (output.turn === undefined) return snapshot.messages.slice(Math.max(0, output.afterMessage - offset));
+  if (output.turn === undefined) {
+    if (output.afterMessage < offset || output.afterMessage > offset + snapshot.messages.length) return [];
+    return snapshot.messages.slice(output.afterMessage - offset);
+  }
   const turn = executionTurns(snapshot).find(item => item.turn === output.turn);
   if (!turn) return [];
   const steps = turn.events.filter(event => event.type === "step_started");
@@ -22,16 +39,17 @@ function outputMessages(output: PendingOutput, snapshot: SessionSnapshot) {
   const start = stepIndex >= 0 ? steps[stepIndex]?.messageIndex : undefined;
   const end = stepIndex >= 0 ? steps[stepIndex + 1]?.messageIndex : undefined;
   return snapshot.messages.slice(
-    Math.max(0, output.afterMessage - offset, start === undefined ? turn.messageStart + 1 : start - offset),
+    Math.max(0, start === undefined ? Math.max(output.afterMessage - offset, turn.messageStart + 1) : start - offset),
     end === undefined ? turn.messageEnd : end - offset,
   );
 }
 
 function messageSaved(output: PendingOutput, snapshot: SessionSnapshot): boolean {
   return outputMessages(output, snapshot).some(message =>
-    message.role === "assistant" && (output.toolCallId
-      ? message.tool_calls?.some(call => call.id === output.toolCallId) && Boolean(message.content)
-      : Boolean(message.content?.startsWith(output.text))),
+    message.role === "assistant" && (output.generationId
+      ? Boolean(message.content)
+      : Boolean(message.content?.startsWith(output.text)) &&
+        (!output.toolCallId || message.tool_calls?.some(call => call.id === output.toolCallId))),
   );
 }
 
@@ -41,23 +59,25 @@ export function retainedOutputs(snapshot: SessionSnapshot): readonly PendingOutp
     if (turn.finish?.status === "completed") continue;
     let step: number | undefined;
     let afterMessage = (snapshot.transcript?.messageOffset ?? 0) + turn.messageEnd;
-    const chunks = new Map<number | undefined, PendingOutput>();
+    const chunks = new Map<string, PendingOutput>();
     for (const [index, event] of turn.events.entries()) {
-      if (event.type === "step_started") {
+      const key = event.generationId ?? `step:${event.step ?? step}`;
+      if (event.type === "step_started" || event.type === "generation_started") {
         step = event.step;
         afterMessage = event.messageIndex;
-      } else if (event.type === "retry_reset") {
-        chunks.delete(step);
+      } else if (event.type === "retry_reset" || (event.type === "generation_finished" && event.status === "superseded")) {
+        chunks.delete(key);
       } else if (event.type === "text_delta") {
-        const key = event.step ?? step;
         const previous = chunks.get(key);
         chunks.set(key, {
-          id: previous?.id ?? `retained:${turn.turn}:${index}`,
+          id: event.generationId ? `generation:${event.generationId}` : previous?.id ?? `retained:${turn.turn}:${index}`,
+          generationId: event.generationId,
           text: (previous?.text ?? "") + event.text,
           truncated: false,
           afterMessage,
           turn: turn.turn,
-          ...(key === undefined ? {} : { step: key }),
+          step: event.step ?? step,
+          status: turn.finish?.status === "cancelled" ? "cancelled" : "failed",
         });
       }
     }
@@ -75,6 +95,7 @@ export function outputSaved(
   if (!snapshot) return false;
   if (messageSaved(output, snapshot)) return true;
   return retainedOutputs(snapshot).some(saved =>
+    (output.generationId === undefined || saved.generationId === output.generationId) &&
     (output.turn === undefined
       ? saved.afterMessage === output.afterMessage
       : saved.turn === output.turn) &&
@@ -88,16 +109,12 @@ export function reasoningSaved(
   output: PendingOutput,
   snapshot: SessionSnapshot | null,
 ): boolean {
-  return (
-    snapshot?.messages
-      .slice(Math.max(0, output.afterMessage - (snapshot?.transcript?.messageOffset ?? 0)))
-      .some(
-        (message) =>
-          message.role === "assistant" &&
-          Boolean(message.reasoning?.startsWith(output.text)) &&
-          (!output.toolCallId ||
-            message.tool_calls?.some((call) => call.id === output.toolCallId)),
-      ) ?? false
+  if (!snapshot) return false;
+  return outputMessages(output, snapshot).some(message =>
+    message.role === "assistant" && (output.generationId
+      ? Boolean(message.reasoning)
+      : Boolean(message.reasoning?.startsWith(output.text)) &&
+        (!output.toolCallId || message.tool_calls?.some(call => call.id === output.toolCallId))),
   );
 }
 

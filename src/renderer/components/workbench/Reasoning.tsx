@@ -29,12 +29,19 @@ export function Reasoning({
   text,
   live = false,
   truncated = false,
+  expanded: controlledExpanded,
+  onExpandedChange,
+  status,
 }: {
   readonly text: string;
   readonly live?: boolean;
   readonly truncated?: boolean;
+  readonly expanded?: boolean | undefined;
+  readonly onExpandedChange?: ((expanded: boolean) => void) | undefined;
+  readonly status?: "failed" | "cancelled" | "unconfirmed" | undefined;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [localExpanded, setExpanded] = useState(false);
+  const expanded = controlledExpanded ?? localExpanded;
   const viewport = useRef<HTMLDivElement>(null);
   // Keep the newest line in view as the thought grows. Runs after every render
   // (each delta re-renders), which is exactly when the viewport must re-pin.
@@ -55,13 +62,14 @@ export function Reasoning({
   return (
     <section
       className={`reasoning ${live ? "reasoning-live" : "reasoning-done"}`}
+      data-reasoning-status={status}
       aria-label={live ? "思考中" : `思考过程：${last}`}
     >
       <button
         type="button"
         className="reasoning-head"
         disabled={live}
-        onClick={live ? undefined : () => setExpanded((open) => !open)}
+        onClick={live ? undefined : () => onExpandedChange ? onExpandedChange(!expanded) : setExpanded(!expanded)}
         aria-expanded={live ? undefined : expanded}
         aria-label={live ? "思考中" : `思考过程：${last}`}
       >
@@ -78,6 +86,7 @@ export function Reasoning({
             {last}
           </span>
         )}
+        {status && <span className="wb-muted">未保存的思考预览{status === "failed" ? " · 失败" : status === "cancelled" ? " · 已取消" : " · 未确认"}</span>}
         {!live && (
           <CaretRight
             size={12}

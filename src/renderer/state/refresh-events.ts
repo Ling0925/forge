@@ -13,6 +13,7 @@ const REFRESH_EVENT_TYPES = new Set<AgentEvent["type"]>([
   "run_started",
   "step_started",
   "step_finished",
+  "generation_finished",
   "title_changed",
   "approval_requested",
   "tool_started",

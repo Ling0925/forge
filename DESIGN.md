@@ -276,19 +276,19 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
    - 持久化思考只来自助手消息的可选 `reasoning` 字段（`schemas.ts` 上限 131072，展示专用）：不进入正文字段、不发送给模型、不进入事件日志、不是 `providerState`。
    - 思考文本是不可信纯文本；渲染必须经 `Markdown`/`StreamingMarkdown` 的安全路径（`skipHtml`、图片只显示替代文字、链接走已校验的 host bridge），不得直接注入 HTML。
 
-2. **实时（live）思考**：思考中在对话流末尾、助手正文之前显示一个**自定义**（非原生 `<details>`）组件：标题行“思考中”（`Brain` 图标，带 `reasoning-pulse` 脉冲，尊重 `prefers-reduced-motion`），下方是一个固定高度（5 行）的**自动滚动视口**，只保留最新的若干行并随增量滚动到底，避免反复刷屏。到达答案正文（`streamingText` 非空）或运行结束时该块结束。实时块只显示文本本身，不伪造阶段、不伪造进度。
+2. **实时（live）思考**：在所属生成实例内、助手正文和本地工具卡之前显示一个**自定义**（非原生 `<details>`）组件：标题行“思考中”（`Brain` 图标，带 `reasoning-pulse` 脉冲，尊重 `prefers-reduced-motion`），下方是固定 5 行的自动滚动视口。首次非空正文、工具参数预览、工具执行、同实例保存确认或生成终态都会锁存 done；旧正文清空或旧快照刷新不能重新点亮 live，下一生成独立开始。实时块只显示实际返回的文本，不伪造阶段或进度。
 
 3. **持久（历史/已保存）思考**：结束后**只显示最后一行思考内容**作为静默摘要（单行、省略号截断），保证历史记录紧凑、不反复刷屏；点击标题行可展开查看完整思考（`Markdown` 安全渲染），再次点击收起，并带 `CaretRight` 旋转指示。截断时在展开正文顶部给出明确的“已达显示上限”提示，不静默丢失。
 
-4. **同步与去重**：思考的实时块与已保存消息由 `transcript-sync.ts` 的 `reasoningSaved` 独立判定；已保存消息acknowledge 同一段思考后必须移除对应的 `pendingReasoning`，避免重复显示。思考同步**不**触发整份 transcript 重取（`refresh-events.ts` 中 `reasoning_delta` 不参与 `shouldRefreshTranscript`）。
+4. **同步与去重**：runtime 为每次实际请求/重试生成本地 `generationId`，随增量、生命周期、保存的助手消息传播；工具另带同实例 `callIndex`，不能只凭上游工具 ID 关联。`transcript-sync.ts` 按唯一实例分别确认正文/思考，保存内容是权威结果，不用相似前缀确认新格式。live、pending、saved 统一进入时间线，再做轮次和工具分组；同一步多个本地工具只共享一块思考。失败/取消而未保存的预览标明状态并留在原轮次，不跟随“继续”移到底部。旧记录保守使用已有 turn/step/位置，缺少证据不能当作可靠确认。`reasoning_delta` 不触发快照重取，`generation_finished` 触发保存交接。
 
 5. **无障碍与动态**：摘要行为为原生 `<button>`（键盘可达、`aria-expanded`、`focus-visible` 焦点环、`aria-label` 保留完整摘要文本），不使用颜色作为唯一状态表达；实时视口脉冲与展开指示在 `prefers-reduced-motion: reduce` 下停止动画。
 
 6. **实现状态**：
    - `Reasoning` 已改为自定义组件：思考中渲染 `.reasoning-live`（`Brain` + “思考中” + `.reasoning-viewport` 自动滚动，`REASONING_LIVE_LINES = 5`，DOM 仅保留尾部 `LIVE_TAIL_LINES = 60` 行）；结束后渲染 `.reasoning-done`（`lastReasoningLine` 取最后非空行作摘要，点击展开 `.reasoning-full`）。
-   - `Transcript` 在助手正文之前渲染 `run.pendingReasoning`（已保存但未同步）与 `run.streamingReasoning`（live）；答案开始后同一块由 live 切换为 done；思考增量参与自动跟随滚动。
-   - 覆盖：`tests/renderer/reasoning-mounted.test.ts` 断言实时视口存在且滚动到底、无原生 `<details>`、结束后只留最后一行摘要、点击可展开、持久思考为独立摘要。
-   - 仍未覆盖：真实 provider 端到端推理流、窄屏/高对比/读屏矩阵、超长（>131072）思考的真实截断表现。
+   - `timeline-drafts.ts` 统一投影临时正文与思考；`Transcript` 不再在整段历史后单独追加思考。`Reasoning` 的展开状态由会话视图按生成键持有，纯思考不显示空作者/复制按钮。失败预览仍仅保存在当前客户端内存，不把未完成思考伪装成持久消息。
+   - `tests/renderer/generation-sync-mounted.test.ts` 挂载真实 Transcript/reducer，在 1280px、390px 和 reduced-motion 下覆盖工具预览收起、快照后到/先到、相同前缀的新步骤、失败后继续、轮次展开状态，以及相同文本 pending→saved 的 DOM 焦点、top/height（1px 容差）和整段复制。原 `reasoning-mounted.test.ts` 继续覆盖实时视口与自动滚动。
+   - 仍未覆盖：真实 provider 端到端推理流、完整设备/高对比/读屏矩阵、极长内容和复杂 Markdown 的全部几何表现。
 
 ## 10 一体化输入舱与移动端命中区精修 (Composer & Touch Refinement)
 
@@ -313,11 +313,11 @@ The execution inspector opens on Runtime, with Changes and Resources as separate
 
 测量方式同 §10：esbuild 挂载真实 `App` / 真实 `Transcript`，Chromium 读取几何与计算样式，逐步推进 reducer 状态。
 
-1. **作者标签对称**：用户消息保留 12px「你」+ 鼠尾草微点；助手消息新增同规格作者行「Forge」。两者共用 `.message-header` 的字号、字重与微点，避免此前「用户有作者、助手只在流式时有」的不对称。
+1. **作者标签对称**：用户消息保留 12px「你」+ 鼠尾草微点；有正文的助手消息使用同规格作者行「Forge」，纯思考不产生空作者头或复制按钮。两者共用 `.message-header` 的字号、字重与微点。
 2. **阶段标题不再冒充作者**：`StageHeader` 只有在 `transcriptStages` 给出**真实 AI 计划步骤名**时才渲染，且只渲染步骤名（12px/500 + 一条装饰性细线延伸到栏宽）。此前每条助手消息上方都有一行只有「Forge」的 12px 小字，与作者行重复；现在无计划步骤时该行完全不存在。
-3. **流式草稿与已保存消息不再重复**：`SET_ACTIVE_SNAPSHOT` 在快照已包含本轮 `streamingText` 时清空该缓冲（前缀匹配，滞后快照不会误清）。实测修复前 `saved` 阶段同一段文字同时出现两份（已保存消息 + 实时草稿）直到运行结束；修复后 `streaming` 块数为 0。
+3. **流式草稿与已保存消息不再重复**：`SET_ACTIVE_SNAPSHOT` 按 §9 的生成身份独立确认正文和思考；迟到增量不重新创建已保存通道，旧步骤的相同前缀不确认当前生成。只有不带生成身份的旧记录保留受轮次/步骤约束的前缀降级。
 4. **草稿→保存零跳动**：作者行高度固定为 22px（细指针），草稿块与保存块实测同为 54px、`top` 完全相同；修复前保存后高度 54→28+20，底部位移 34px。
-5. **思考块状态不被去重破坏**：`live` 判定改为「本轮是否已产出答案正文」（流式或已保存），不再依赖 `streamingText`。清空草稿后已完成的思考仍保持 `.reasoning-done` 折叠摘要，不会回退成「思考中」；流式思考缓冲仍按 §9 保留到运行结束。
+5. **思考块状态不被去重破坏**：done 按生成实例锁存，不依赖最后一条历史消息或可被清空的 `streamingText`。成功交接前保留未确认通道；失败/取消保留带状态的预览，重试 superseded 只丢弃被替换的 attempt，不能清空另一生成的草稿。
 6. **整段复制**：助手作者行右侧提供「复制」按钮，复制消息的原始 Markdown 文本（不是渲染后的 DOM 文本）。它是原生 `<button>`，`aria-label` 在「复制整段回答 / 已复制整段回答」间切换，2 秒后复位；剪贴板不可用时**不**切换文案（不谎报成功）。位于作者行内、`margin-left: auto` 右对齐，不覆盖正文、不引起位移。细指针 22px 高，粗指针 44px。实测对比度 4.84:1。
 
 仍未覆盖：真实 provider 端到端流式运行、读屏逐条朗读顺序、高对比模式下的复制确认态。
