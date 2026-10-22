@@ -2,6 +2,7 @@ import { createSlashActions } from "../../../shared/slash-actions";
 import { parseSlashCommand, SLASH_COMMANDS } from "../../../shared/slash-commands";
 import { parseSessionId, permissionSchema, settingsFields, type SessionId, type SessionSnapshot } from "../../../shared/schemas";
 import type { ForgeBridge } from "../../../shared/ipc";
+import type { SessionReviewInput } from "../../../shared/session-review";
 import { pageSnapshot } from "../../state/session-pages";
 
 // Limitations of the current desktop bridge, not a second command catalog.
@@ -23,6 +24,7 @@ export interface DesktopSlashHost {
   mode: "plan" | "build";
   permission: string;
   running: boolean;
+  review(input: SessionReviewInput): Promise<boolean>;
   steer?(text: string): Promise<boolean>;
   queueCommand?(value: string): void;
   setModel(value: string): void;
@@ -108,6 +110,11 @@ export async function executeDesktopSlash(line: string, host: DesktopSlashHost):
       const size = result?.type === "context_compacted"
         ? `投影上下文：${result.beforeChars} → ${result.afterChars} 字符。` : "";
       return { text: `${summary.fallback ? "已生成降级摘要（模型摘要未成功），内容可能不完整。" : "上下文压缩完成。"}${size}原始聊天记录保留，后续请求使用摘要；累计 token 用量不会清零。` };
+    }
+    case "/review": {
+      const input = await actions.review(id(), value);
+      if (!await host.review(input)) throw Error("审查未确认启动，草稿已保留；未自动重试。");
+      return { clearPrompt: true };
     }
     case "/plan": return data(await actions.plans(id()));
     case "/diagnostics": return data(await actions.diagnostics(id()));

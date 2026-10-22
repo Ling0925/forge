@@ -4,6 +4,7 @@ import { SLASH_COMMANDS, parseSlashCommand } from "../../src/shared/slash-comman
 import { executeDesktopSlash, desktopSlashLimitation, type DesktopSlashHost } from "../../src/renderer/components/workbench/desktop-slash";
 import type { ForgeBridge } from "../../src/shared/ipc";
 import { parseSessionId } from "../../src/shared/schemas";
+import { reviewSession } from "../fixtures/review-session";
 const id = parseSessionId("11111111-1111-4111-8111-111111111111");
 function fixture() {
   const bridge = {
@@ -26,7 +27,7 @@ function fixture() {
     getMcpHealth: vi.fn(async () => ({})),
   };
   const host: DesktopSlashHost = { bridge: bridge as unknown as ForgeBridge, sessionId:id,workspace:'/tmp',model:'test/model',mode:'build',permission:'workspace',running:false,
-    setModel:vi.fn(),setMode:vi.fn(),setPermission:vi.fn(async()=>{}),setReasoning:vi.fn(async()=>true),openModel:vi.fn(),applySnapshot:vi.fn(async()=>{}) };
+    review:vi.fn(async()=>true),setModel:vi.fn(),setMode:vi.fn(),setPermission:vi.fn(async()=>{}),setReasoning:vi.fn(async()=>true),openModel:vi.fn(),applySnapshot:vi.fn(async()=>{}) };
   return {host,bridge};
 }
 describe('shared slash semantics', () => {
@@ -89,6 +90,25 @@ describe('shared slash semantics', () => {
     await expect(executeDesktopSlash('/steer retry', runningHost)).rejects.toThrow('草稿已保留');
     queueCommand.mockImplementationOnce(() => { throw new Error('加入待发队列失败'); });
     await expect(executeDesktopSlash('/queue add retry', runningHost)).rejects.toThrow('加入待发队列失败');
+  });
+  it('starts a readonly review from the full session and preserves settings and failed drafts', async () => {
+    const {host} = fixture();
+    const snapshot = reviewSession({ id });
+    const getSession = vi.fn(async () => snapshot);
+    const review = vi.fn<DesktopSlashHost['review']>(async () => true);
+    const reviewHost = { ...host, review, bridge: { ...host.bridge, getSession } };
+    expect(await executeDesktopSlash('/review 检查边界', reviewHost)).toEqual({ clearPrompt: true });
+    expect(getSession).toHaveBeenCalledWith(id);
+    expect(review).toHaveBeenCalledWith(expect.objectContaining({ sessionId: id, permission: 'readonly', mode: 'build', prompt: expect.stringContaining('检查边界') }));
+    expect(review.mock.calls[0]?.[0].prompt).toContain('src/example.ts');
+    expect(host.setModel).not.toHaveBeenCalled();
+    expect(host.setMode).not.toHaveBeenCalled();
+    expect(host.setPermission).not.toHaveBeenCalled();
+    review.mockResolvedValueOnce(false);
+    await expect(executeDesktopSlash('/review', reviewHost)).rejects.toThrow('草稿已保留');
+    await expect(executeDesktopSlash('/review', { ...reviewHost, running: true })).rejects.toThrow('正在运行');
+    await expect(executeDesktopSlash('/review', { ...reviewHost, sessionId: undefined })).rejects.toThrow('No active session');
+    expect(review).toHaveBeenCalledTimes(2);
   });
   it('keeps no-argument mode/permission informational and accepts explicit values', async () => {
     const {host} = fixture();

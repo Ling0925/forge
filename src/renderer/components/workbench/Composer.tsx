@@ -498,6 +498,13 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
       mode,
       permission,
       running,
+      review: async (input) => {
+        if (!alive.current || selectedDraft.current !== draftId)
+          throw new Error("会话已切换，审查未启动；请返回原会话后重试。");
+        if (!isConfigured) throw new Error(configurationHint);
+        return startRun(input.prompt, input.permission, selectedRoute ? undefined : model,
+          input.sessionId, input.mode, providerSourceId, undefined, selectedRoute?.id);
+      },
       steer: async (text) => {
         const id = state.activeSessionId;
         return id ? sendSteering(text, id) : false;

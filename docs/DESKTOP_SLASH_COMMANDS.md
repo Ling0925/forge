@@ -1,6 +1,6 @@
 # 桌面 Slash 命令
 
-桌面与 CLI 使用同一份 `src/shared/slash-commands.ts` 命令表、参数说明、过滤及空白分词解析。会话与资源操作共用 `src/shared/slash-actions.ts`，桌面通过现有 ForgeBridge 调用，不向模型发送命令文本。
+桌面与 CLI 使用同一份 `src/shared/slash-commands.ts` 命令表、参数说明、过滤及空白分词解析。会话与资源操作共用 `src/shared/slash-actions.ts`，桌面通过现有 ForgeBridge 调用，不向模型发送原始命令文本。`/review` 会转换为带本会话变更证据的只读审查请求，通过现有运行通道发送给当前所选模型。
 
 输入 `/` 查看全部 CLI 命令；↑/↓ 选择，Tab 补全，Enter 执行，Esc 收起并保留草稿。参数按空白切分，与 CLI 一样不支持 shell 引号分组。输入法确认候选不会执行命令。
 
@@ -13,6 +13,7 @@
 - `/fork [boundary]`、`/rename <title>`、`/archive`、`/compact`：调用同一套会话操作。
 - `/plan`、`/diagnostics`、`/context`、`/skills`、`/export`：显示计划、统计、上下文、技能或会话 JSON。桌面继续使用脱敏 DTO，不扩展敏感数据访问。
 - `/checkpoints [list|diff ID|restore ID]`、`/mcp list|register|enable|disable|remove|health`：复用 CLI 操作与参数分发。注册格式为 `/mcp register ID LABEL COMMAND [ARGS...]`。
+- `/review [审查重点]`：使用当前所选模型/来源（或路由组）在原会话中只读审查变更，含会话中已提交的改动；结果显示在聊天记录中，不改变下一轮的模式和权限设置。读取完整会话期间切换到别的会话会取消启动，失败保留草稿且不自动重试。范围与限制见 [会话变更审查](SESSION_REVIEW.md)。
 - `/help`：列出同一套完整命令及桌面能力限制。
 
 ## 尚未接入桌面的能力（保留在列表中并明确提示）
