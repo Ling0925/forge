@@ -99,6 +99,7 @@ const friendlyLabels: Readonly<Record<string, string>> = {
   project_context: "读取项目上下文",
   load_skill: "加载技能",
   publish_file: "发布文件",
+  web_search: "网页搜索",
   web_fetch: "抓取网页",
   history_search: "搜索历史记录",
   history_read: "读取历史记录",
@@ -162,7 +163,7 @@ export function getToolIcon(name: string) {
   if (name === "load_skill") return <PuzzlePiece size={16} weight="regular" />;
   if (name === "publish_file")
     return <PaperPlaneTilt size={16} weight="regular" />;
-  if (name === "web_fetch") return <Globe size={16} weight="regular" />;
+  if (name === "web_search" || name === "web_fetch") return <Globe size={16} weight="regular" />;
   if (name === "list_models") return <Cpu size={16} weight="regular" />;
   if (name.startsWith("history_"))
     return <ListNumbers size={16} weight="regular" />;
@@ -1665,6 +1666,95 @@ function ListFilesResultView({
   );
 }
 
+function WebSearchResultView({
+  record,
+  isWaiting,
+}: {
+  readonly record: Record<string, unknown>;
+  readonly isWaiting: boolean;
+}) {
+  const sources = Array.isArray(record.sources)
+    ? record.sources.filter((s): s is string => typeof s === "string")
+    : [];
+  const citations = Array.isArray(record.citations)
+    ? (record.citations as readonly { readonly url: string; readonly title?: string }[])
+    : [];
+
+  if (isWaiting && !sources.length && !citations.length) {
+    return (
+      <div className="tool-section">
+        <SectionHead title="搜索结果" />
+        <span className="tool-section-empty">等待搜索返回…</span>
+      </div>
+    );
+  }
+
+  const openUrl = (url: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    void (window as unknown as { forge?: { openExternal?: (url: string) => Promise<void> } }).forge?.openExternal?.(url);
+  };
+
+  return (
+    <div className="tool-section tool-web-search-view">
+      {citations.length > 0 && (
+        <div className="tool-web-search-group">
+          <SectionHead title={`引用来源（${citations.length}）`} />
+          <ul className="tool-web-search-list">
+            {citations.map((c, i) => {
+              let hostname = "";
+              try { hostname = new URL(c.url).hostname; } catch {}
+              return (
+                <li key={`${c.url}-${i}`} className="tool-web-search-item">
+                  <span className="tool-web-search-badge">{i + 1}</span>
+                  <a
+                    href={c.url}
+                    onClick={openUrl(c.url)}
+                    className="tool-web-search-link"
+                    title={c.url}
+                    rel="noreferrer noopener"
+                  >
+                    <span className="tool-web-search-title">{c.title || hostname || "来源"}</span>
+                    {hostname && <span className="tool-web-search-host">{hostname}</span>}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      {sources.length > 0 && (
+        <div className="tool-web-search-group">
+          <SectionHead title={`检索来源（${sources.length}）`} />
+          <ul className="tool-web-search-list">
+            {sources.map((url, i) => {
+              let hostname = "";
+              try { hostname = new URL(url).hostname; } catch {}
+              return (
+                <li key={`${url}-${i}`} className="tool-web-search-item">
+                  <Globe size={13} className="tool-web-search-item-icon" aria-hidden="true" />
+                  <a
+                    href={url}
+                    onClick={openUrl(url)}
+                    className="tool-web-search-link"
+                    title={url}
+                    rel="noreferrer noopener"
+                  >
+                    <span className="tool-web-search-host">{hostname || url}</span>
+                    <span className="tool-web-search-url">{url}</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      {!sources.length && !citations.length && (
+        <span className="tool-section-empty">搜索未返回来源网页</span>
+      )}
+    </div>
+  );
+}
+
 export function ToolDisclosure({
   toolName,
   target,
@@ -1795,6 +1885,20 @@ export function ToolDisclosure({
         })()
       : undefined;
 
+  const isWebSearch = toolName === "web_search";
+  const webSearchTarget =
+    !target && isWebSearch && parsedParams && typeof parsedParams === "object"
+      ? (() => {
+          const rec = parsedParams as Record<string, unknown>;
+          if (typeof rec.query === "string" && rec.query) return rec.query;
+          if (Array.isArray(rec.queries) && rec.queries.length)
+            return rec.queries.filter((q): q is string => typeof q === "string").join("; ");
+          if (typeof rec.url === "string" && rec.url) return rec.url;
+          if (typeof rec.pattern === "string" && rec.pattern) return rec.pattern;
+          return undefined;
+        })()
+      : undefined;
+
   const commandTaskTarget =
     isCommandTask && parsedParams && typeof parsedParams === "object"
       ? (() => {
@@ -1828,7 +1932,7 @@ export function ToolDisclosure({
 
   const displayTarget = readPath
     ? readPath.split(/[\\/]/).pop() || readPath
-    : normalizedTarget || commandTaskTarget || planSummaryTarget || agentTarget || (isRunCommand ? command : undefined);
+    : normalizedTarget || commandTaskTarget || planSummaryTarget || agentTarget || webSearchTarget || (isRunCommand ? command : undefined);
   const showParameters =
     !writesFiles && !isRunCommand && !isCommandTask && !planData && !isAgentTool && !isReadFile;
   const showDebug = !isReadFile;
@@ -2179,6 +2283,11 @@ export function ToolDisclosure({
                 <ListFilesResultView
                   record={result?.kind === "object" ? result.record : {}}
                   parameters={parsedParams}
+                  isWaiting={isWaiting}
+                />
+              ) : isWebSearch ? (
+                <WebSearchResultView
+                  record={parsedOutputRecord ?? (result?.kind === "object" ? result.record : {})}
                   isWaiting={isWaiting}
                 />
               ) : (

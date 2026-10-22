@@ -11,6 +11,7 @@ import type {
 } from "../../shared-types";
 import { reduceTimeline, type TimelineItem } from "../../state/timeline";
 import type { PendingOutput } from "../../state/transcript-sync";
+import { streamedOutput, type ActiveRunState } from "../../state/workbench-reducer";
 import { completedTurnExecutions, type CompletedTurnExecution } from "../../state/turn-execution";
 import { TranscriptScrollState } from "../../state/transcript-scroll";
 import { useWorkbench } from "../../state/workbench-context";
@@ -512,6 +513,7 @@ function renderTimelineEntry(
   headers: readonly (TranscriptStage | null)[],
   phases: readonly number[],
   timeline?: readonly TimelineItem[],
+  reasoningView?: { expanded: Readonly<Record<string, boolean>>; toggle(id: string): void },
 ) {
   const { item, index } = entry;
   if (item.kind === "error" && item.historical) return null;
@@ -563,11 +565,11 @@ function renderTimelineEntry(
     return (
       <Fragment key={item.id}>
         {headers[index] && <StageHeader stage={headers[index]} />}
-        <article className={`message message-${item.role}`}>
+        <article className={`message message-${item.role}${item.streaming ? " message-streaming" : ""}`} data-generation-id={item.generationId}>
           {item.role === "user" && <div className="message-header">你</div>}
-          {item.role === "assistant" && (
+          {item.role === "assistant" && item.content && (
             <div className="message-header message-author-row">
-              <span>{item.incomplete ? "Forge · 未完成回复" : "Forge"}</span>
+              <span>{item.streaming ? "Forge · 实时草稿" : item.incomplete ? "Forge · 未完成回复" : "Forge"}</span>
               {item.content && <MessageCopyButton text={item.content} />}
             </div>
           )}
@@ -575,11 +577,13 @@ function renderTimelineEntry(
             <ImageAttachments key={snapshot.id} images={item.images} />
           )}
           {item.reasoning && (
-            <Reasoning text={item.reasoning} truncated={Boolean(item.reasoningTruncated)} />
+            <Reasoning text={item.reasoning} live={Boolean(item.reasoningLive)} truncated={Boolean(item.reasoningTruncated)}
+              status={item.reasoningStatus} expanded={reasoningView ? Boolean(reasoningView.expanded[item.id]) : undefined}
+              onExpandedChange={reasoningView ? () => reasoningView.toggle(item.id) : undefined} />
           )}
           {item.content && <div className="message-body">
             {item.truncated && <p className="wb-muted">实时预览已达显示上限，完整内容以同步后的记录为准。</p>}
-            <Markdown source={item.content} />
+            {item.streaming ? <StreamingMarkdown source={item.content} /> : <Markdown source={item.content} />}
           </div>}
           {item.webSearchDetails && <div className="message-body"><Markdown source={item.webSearchDetails} /></div>}
         </article>
@@ -590,11 +594,7 @@ function renderTimelineEntry(
       <ErrorState
         key={item.id}
         title="执行错误（历史记录）"
-        error={{
-          code: "internal",
-          message: item.message,
-          retryable: false,
-        }}
+        error={item.error ?? { code: "internal", message: item.message, retryable: false }}
         impact={`历史事件时间：${new Date(item.timestamp).toLocaleString()}。此错误不会覆盖当前会话状态。`}
       />
     );
@@ -699,8 +699,18 @@ function ExecutionProcess({
 export const StoredTranscript = memo(function StoredTranscript({
   snapshot,
   pendingOutputs,
-}: { readonly snapshot: SessionSnapshot; readonly pendingOutputs?: readonly PendingOutput[] | undefined }) {
-  const timeline = reduceTimeline(snapshot, pendingOutputs);
+  run,
+}: { readonly snapshot: SessionSnapshot; readonly pendingOutputs?: readonly PendingOutput[] | undefined; readonly run?: ActiveRunState | undefined }) {
+  const liveText = run && streamedOutput(run);
+  const liveReasoning = run && streamedOutput(run, true);
+  const outputs = [...(pendingOutputs ?? run?.pendingOutputs ?? []), ...(liveText ? [liveText] : [])];
+  const thoughts = [...(run?.pendingReasoning ?? []), ...(liveReasoning ? [liveReasoning] : [])];
+  const timeline = reduceTimeline(snapshot, outputs, thoughts);
+  const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({});
+  const toggleReasoning = useCallback((id: string) => {
+    setExpandedReasoning(previous => ({ ...previous, [id]: !previous[id] }));
+  }, []);
+  const reasoningView = { expanded: expandedReasoning, toggle: toggleReasoning };
   const { phases, headers } = transcriptStages(timeline);
   const [collapsedTurns, setCollapsedTurns] = useState<Record<string, boolean>>({});
   const toggleTurn = useCallback((turnId: string) => {
@@ -816,7 +826,7 @@ export const StoredTranscript = memo(function StoredTranscript({
                   <ExecutionProcess execution={finalEntry ? execution : undefined} counts={counts}>
                     {blocks.map((block) => {
                       if (block.kind === "single") {
-                        return <Fragment key={block.entry.item.id}>{renderTimelineEntry(block.entry, snapshot, headers, phases, timeline)}</Fragment>;
+                        return <Fragment key={block.entry.item.id}>{renderTimelineEntry(block.entry, snapshot, headers, phases, timeline, reasoningView)}</Fragment>;
                       }
                       return (
                         <div className="tool-call-group" key={block.id}>
@@ -829,7 +839,7 @@ export const StoredTranscript = memo(function StoredTranscript({
                       );
                     })}
                   </ExecutionProcess>
-                  {finalEntry && renderTimelineEntry(finalEntry, snapshot, headers, phases, timeline)}
+                  {finalEntry && renderTimelineEntry(finalEntry, snapshot, headers, phases, timeline, reasoningView)}
                   <PublishedFiles sessionId={snapshot.id} files={files} />
                 </div>
               )
@@ -974,13 +984,6 @@ export function Transcript() {
   // Reasoning deltas grow the live tail too, so they must count as arriving
   // content or the follow-scroll would stall while the model is still thinking.
   const contentVersion = `${snapshot?.id ?? ""}:${history?.messageOffset ?? ""}:${history?.eventOffset ?? ""}:${snapshot?.messages.length ?? 0}:${snapshot?.pendingSteering?.length ?? 0}:${snapshot?.events.length ?? 0}:${snapshot?.messages.at(-1)?.content?.length ?? 0}:${run?.pendingOutputs?.length ?? 0}:${run?.pendingReasoning?.length ?? 0}:${run?.streamingReasoning?.length ?? 0}:${run?.streamingText?.length ?? 0}:${run?.toolPreviews?.map((p) => `${p.previewId}:${p.argumentsChars}`).join(",") ?? ""}:${pendingApproval?.id ?? ""}`;
-  // Has this turn produced answer prose yet? Either the live draft is still
-  // streaming, or the snapshot already persisted it and the draft was cleared
-  // on sync. Both mean the model has left its reasoning phase.
-  const answerStarted =
-    Boolean(run?.streamingText) ||
-    (snapshot?.messages.at(-1)?.role === "assistant" &&
-      Boolean(snapshot?.messages.at(-1)?.content));
   const suppressProgrammaticScroll = () => {
     programmaticScrollUntil.current = Math.max(
       programmaticScrollUntil.current,
@@ -1339,7 +1342,7 @@ export function Transcript() {
           )}
           {state.isSnapshotLoading && <p className="wb-muted">正在读取会话…</p>}
           {snapshot ? (
-            <StoredTranscript key={snapshot.id} snapshot={snapshot} pendingOutputs={run?.pendingOutputs} />
+            <StoredTranscript key={snapshot.id} snapshot={snapshot} run={run} />
           ) : (
             !state.isSnapshotLoading && (
               <EmptyState
@@ -1357,43 +1360,28 @@ export function Transcript() {
               {message.content && <div className="message-body"><Markdown source={message.content} /></div>}
             </article>
           ))}
-          {/* Reasoning renders before the answer: saved-but-unsynchronized
-              thoughts first, then the live block still streaming in. */}
-          {run?.pendingReasoning?.map((output) => (
-            <Reasoning key={output.id} text={output.text} truncated={output.truncated} />
-          ))}
-          {run?.streamingReasoning && (
-            <Reasoning
-              key={`${sessionId}:${run.runId ?? "pending"}:${run.streamingTurn ?? 0}:reasoning`}
-              text={run.streamingReasoning}
-              // The runtime keeps this buffer after the answer starts, so the
-              // "live" state ends with the answer, not with the model's
-              // reasoning phase. "Answer started" must therefore include an
-              // answer that has already been persisted: clearing the live draft
-              // on sync must not flip a finished thought back to 思考中.
-              live={!run.streamingText && !answerStarted}
-              truncated={Boolean(run.reasoningTruncated)}
-            />
-          )}
-          {run?.streamingText && (
-            <article className="message message-assistant message-streaming">
-              <div className="message-header message-author message-author-row">
-                <span>Forge · 实时草稿</span>
+          {run?.webSearch && run.status === "running" && (
+            <div className="tool-call-group tool-live-list" role="status" aria-label="网页搜索中">
+              <div className="tool-disclosure tool-live-item" data-status="running" data-tool="web_search">
+                <div className="tool-disclosure-header tool-live-header">
+                  <div className="tool-disclosure-summary">
+                    <span className="tool-disclosure-icon tool-live-icon" aria-hidden="true">
+                      {getToolIcon("web_search")}
+                    </span>
+                    <span className="tool-disclosure-label tool-live-name">{friendlyLabel("web_search")}</span>
+                    <span className="tool-disclosure-target">
+                      <span className="tool-live-status">{webSearchStatus(run.webSearch)}</span>
+                    </span>
+                  </div>
+                  <div className="tool-disclosure-meta">
+                    <span className="tool-disclosure-status" data-status="running">
+                      <span className="tool-live-spinner" aria-hidden="true" />
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="message-body">
-                {run.streamingTruncated && (
-                  <p className="wb-muted">
-                    实时草稿已达显示上限；完整已保存内容请查看会话记录。
-                  </p>
-                )}
-                <StreamingMarkdown
-                  key={`${sessionId}:${run.runId ?? "pending"}:${run.streamingTurn ?? 0}`}
-                  source={run.streamingText}
-                />
-              </div>
-            </article>
+            </div>
           )}
-          {run?.webSearch && run.status === "running" && <p className="wb-muted" role="status">{webSearchStatus(run.webSearch)}</p>}
           {(run?.toolPreviews?.length ?? 0) > 0 && (
             <ToolPreviews previews={run?.toolPreviews ?? []} />
           )}

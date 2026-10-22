@@ -1,12 +1,15 @@
 import { fileChangeSchema } from "../../shared/schemas";
 import { executionTurns } from "../../shared/execution";
-import { webSearchDetails } from "../../shared/web-search-display";
 import type { ImageAttachment } from "../../shared/images";
 import { publishedFilesSchema } from "../../shared/published-files";
-import type { FileChange, PublishedFile, SessionSnapshot, ToolCall } from "../shared-types";
-import { outputSaved, retainedOutputs, type PendingOutput } from "./transcript-sync";
+import type { ErrorInfo, FileChange, PublishedFile, SessionSnapshot, ToolCall } from "../shared-types";
+import { retainedOutputs, type PendingOutput } from "./transcript-sync";
+import { draftPosition, mergeTranscriptDrafts } from "./timeline-drafts";
 
-export type TimelineItem = { readonly turn?: number; readonly step?: number; readonly messageIndex?: number } & (
+export type TimelineItem = {
+  readonly turn?: number | undefined; readonly step?: number | undefined;
+  readonly messageIndex?: number; readonly generationId?: string | undefined;
+} & (
   | {
       readonly kind: "message";
       readonly id: string;
@@ -15,10 +18,13 @@ export type TimelineItem = { readonly turn?: number; readonly step?: number; rea
       readonly webSearchDetails?: string;
       readonly images?: readonly ImageAttachment[];
       readonly reasoning?: string;
-      readonly reasoningTruncated?: boolean;
+      readonly reasoningTruncated?: boolean | undefined;
+      readonly reasoningLive?: boolean;
+      readonly reasoningStatus?: "failed" | "cancelled" | "unconfirmed" | undefined;
+      readonly streaming?: boolean;
       readonly origin?: "agent_reconciliation";
       readonly incomplete?: boolean;
-      readonly truncated?: boolean;
+      readonly truncated?: boolean | undefined;
     }
   | {
       readonly kind: "tool";
@@ -37,6 +43,7 @@ export type TimelineItem = { readonly turn?: number; readonly step?: number; rea
       readonly kind: "error";
       readonly id: string;
       readonly message: string;
+      readonly error?: ErrorInfo;
       readonly timestamp: string;
       readonly historical?: boolean;
     }
@@ -85,12 +92,10 @@ function insertOutputs(
   if (!outputs.length) return timeline;
   const result = [...timeline];
   for (const output of outputs) {
-    const index = result.findIndex(item =>
-      (output.turn !== undefined && item.turn === output.turn && item.kind === "error") ||
-      (item.messageIndex !== undefined && item.messageIndex >= output.afterMessage),
-    );
-    result.splice(index < 0 ? result.length : index, 0, {
+    const index = draftPosition(result, output);
+    result.splice(index, 0, {
       kind: "message", id: output.id, role: "assistant", content: output.text,
+      generationId: output.generationId, messageIndex: output.afterMessage,
       incomplete: true, truncated: output.truncated,
       ...(output.turn === undefined ? {} : { turn: output.turn }),
       ...(output.step === undefined ? {} : { step: output.step }),
@@ -104,9 +109,10 @@ const timelineCache = new WeakMap<SessionSnapshot, readonly TimelineItem[]>();
 export function reduceTimeline(
   snapshot: SessionSnapshot,
   pendingOutputs: readonly PendingOutput[] = [],
+  pendingReasoning: readonly PendingOutput[] = [],
 ): readonly TimelineItem[] {
   const cached = timelineCache.get(snapshot);
-  if (cached) return insertOutputs(cached, pendingOutputs.filter(output => !outputSaved(output, snapshot)));
+  if (cached) return mergeTranscriptDrafts(cached, snapshot, pendingOutputs, pendingReasoning);
   const items: TimelineItem[] = [];
   const messageOffset = snapshot.transcript?.messageOffset ?? 0;
   const eventOffset = snapshot.transcript?.eventOffset ?? 0;
@@ -143,7 +149,7 @@ export function reduceTimeline(
         items.push({
           kind: "error",
           id: `error:${eventOffset + index}`,
-          message: event.error.message,
+          message: event.error.message, error: event.error,
           timestamp: event.timestamp,
           ...(errorTurn === undefined ? {} : { turn: errorTurn }),
           ...(event.step === undefined ? {} : { step: event.step }),
@@ -195,16 +201,97 @@ export function reduceTimeline(
       // Internal child joins do not start a human turn or break pending results.
       if (message.role !== "user" || message.origin !== "agent_reconciliation")
         pending.clear();
-      if (message.content || (message.role === "user" && message.images?.length) || (message.role === "assistant" && (message.reasoning || message.citations?.length || message.webSearches?.length)))
+      if (message.role === "assistant" && (message.webSearches?.length || message.citations?.length)) {
+        if (message.webSearches?.length) {
+          for (const [searchIndex, search] of message.webSearches.entries()) {
+            const target =
+              search.action === "search"
+                ? search.queries?.join("; ") || ""
+                : (search.action === "open_page" || (search.action as string) === "open_url")
+                  ? search.url || ""
+                  : [search.url, search.pattern].filter(Boolean).join(" · ");
+            const status =
+              search.status === "failed"
+                ? "failed"
+                : search.status === "completed"
+                  ? "completed"
+                  : "running";
+            items.push({
+              kind: "tool",
+              id: message.generationId
+                ? `generation:${message.generationId}:web_search:${searchIndex}`
+                : `tool:web_search:${search.id || searchIndex}:message:${messageOffset + index}`,
+              generationId: message.generationId,
+              messageIndex: messageOffset + index,
+              ...positions.get(index),
+              call: {
+                id: search.id || `web_search_${searchIndex}`,
+                type: "function",
+                function: {
+                  name: "web_search",
+                  arguments: JSON.stringify({
+                    action: search.action,
+                    query: target,
+                    ...(search.queries?.length ? { queries: search.queries } : {}),
+                    ...(search.url ? { url: search.url } : {}),
+                    ...(search.pattern ? { pattern: search.pattern } : {}),
+                  }),
+                },
+              },
+              status,
+              output: JSON.stringify({
+                action: search.action,
+                target,
+                sources: search.sources ?? [],
+                ...(searchIndex === message.webSearches.length - 1 && message.citations?.length
+                  ? { citations: message.citations }
+                  : {}),
+              }),
+            });
+          }
+        } else if (message.citations?.length) {
+          items.push({
+            kind: "tool",
+            id: message.generationId
+              ? `generation:${message.generationId}:web_search:citations`
+              : `tool:web_search:citations:message:${messageOffset + index}`,
+            generationId: message.generationId,
+            messageIndex: messageOffset + index,
+            ...positions.get(index),
+            call: {
+              id: `web_search_citations_${index}`,
+              type: "function",
+              function: {
+                name: "web_search",
+                arguments: JSON.stringify({
+                  action: "search",
+                  query: message.citations.map((c) => c.title || c.url).slice(0, 3).join("; "),
+                }),
+              },
+            },
+            status: "completed",
+            output: JSON.stringify({
+              action: "search",
+              sources: message.citations.map((c) => c.url),
+              citations: message.citations,
+            }),
+          });
+        }
+      }
+      const shouldPushMessage = Boolean(
+        message.content ||
+        (message.role === "user" && message.images?.length) ||
+        (message.role === "assistant" && message.reasoning)
+      );
+      if (shouldPushMessage)
         items.push({
           kind: "message",
-          id: `message:${messageOffset + index}`,
+          id: message.role === "assistant" && message.generationId ? `generation:${message.generationId}` : `message:${messageOffset + index}`,
+          ...(message.role === "assistant" && message.generationId ? { generationId: message.generationId } : {}),
           messageIndex: messageOffset + index,
           ...positions.get(index),
           role: message.role,
           content: message.content ?? "",
-          ...(message.role === "assistant" && (message.citations?.length || message.webSearches?.length)
-            ? { webSearchDetails: webSearchDetails(message) } : {}),
           ...(message.role === "user" && message.images?.length ? { images: message.images } : {}),
           ...(message.role === "assistant" && message.reasoning
             ? { reasoning: message.reasoning }
@@ -219,7 +306,7 @@ export function reduceTimeline(
             : {}),
         });
       if (message.role === "assistant")
-        for (const call of message.tool_calls ?? []) {
+        for (const [callIndex, call] of (message.tool_calls ?? []).entries()) {
           const occurrence = occurrences.get(call.id) ?? 0;
           occurrences.set(call.id, occurrence + 1);
           const runEvents =
@@ -231,10 +318,10 @@ export function reduceTimeline(
           const scopedFinishes =
             runEvents?.filter((e) => e.type === "tool_finished") ?? finishes;
           const matchingStarts = scopedStarts.filter(
-            (e) => e.call.id === call.id,
+            (e) => e.call.id === call.id && (!message.generationId || (e.generationId === message.generationId && e.callIndex === callIndex)),
           );
           const matchingFinishes = scopedFinishes.filter(
-            (e) => e.toolCallId === call.id,
+            (e) => e.toolCallId === call.id && (!message.generationId || (e.generationId === message.generationId && e.callIndex === callIndex)),
           );
           const total = runEvents
             ? snapshot.messages
@@ -273,21 +360,24 @@ export function reduceTimeline(
             !snapshot.messages
               .slice(index + 1)
               .some((m) => m.role === "tool" && m.tool_call_id === call.id);
-          const start =
-            matchingStarts.length === total
+          const start = message.generationId
+            ? matchingStarts.length === 1 ? matchingStarts[0] : undefined
+            : matchingStarts.length === total
               ? matchingStarts[localOccurrence]
               : finalUnresolved &&
                   matchingStarts.length > matchingFinishes.length
                 ? matchingStarts.at(-1)
                 : undefined;
-          const finish =
-            matchingFinishes.length === total
+          const finish = message.generationId
+            ? matchingFinishes.length === 1 ? matchingFinishes[0] : undefined
+            : matchingFinishes.length === total
               ? matchingFinishes[localOccurrence]
               : undefined;
           pending.set(call.id, [...(pending.get(call.id) ?? []), items.length]);
           items.push({
             kind: "tool",
-            id: snapshot.transcript ? `tool:${call.id}:message:${messageOffset + index}` : `tool:${call.id}:${occurrence}`,
+            id: message.generationId ? `generation:${message.generationId}:tool:${callIndex}` : snapshot.transcript ? `tool:${call.id}:message:${messageOffset + index}` : `tool:${call.id}:${occurrence}`,
+            generationId: message.generationId,
             messageIndex: messageOffset + index,
             ...positions.get(index),
             call,
@@ -365,7 +455,7 @@ export function reduceTimeline(
       (event.turn === undefined ? historical : anchoredErrors).push({
         kind: "error",
         id: `error:${eventOffset + index}`,
-        message: event.error.message,
+        message: event.error.message, error: event.error,
         timestamp: event.timestamp,
         ...(event.turn === undefined ? { historical: true } : { turn: event.turn }),
         ...(event.step === undefined ? {} : { step: event.step }),
@@ -401,24 +491,28 @@ export function reduceTimeline(
       ? snapshot.messages.slice(turns.at(-1)?.messageStart)
       : snapshot.messages;
     const represented = new Map<string, number>();
-    const key = (call: ToolCall) => JSON.stringify(call);
+    const key = (call: ToolCall, generationId?: string, callIndex?: number) => generationId ? `${generationId}:${callIndex}` : JSON.stringify(call);
     for (const message of currentMessages)
       if (message.role === "assistant")
-        for (const call of message.tool_calls ?? [])
-          represented.set(key(call), (represented.get(key(call)) ?? 0) + 1);
+        for (const [callIndex, call] of (message.tool_calls ?? []).entries()) {
+          const identity = key(call, message.generationId, callIndex);
+          represented.set(identity, (represented.get(identity) ?? 0) + 1);
+        }
     const open = new Map<string, (number | undefined)[]>();
     for (let index = from + 1; index < snapshot.events.length; index++) {
       const event = snapshot.events[index];
       if (!event) continue;
       if (event.type === "tool_started") {
-        const count = represented.get(key(event.call)) ?? 0;
+        const identity = key(event.call, event.generationId, event.callIndex);
+        const count = represented.get(identity) ?? 0;
         let position: number | undefined;
-        if (count) represented.set(key(event.call), count - 1);
+        if (count) represented.set(identity, count - 1);
         else {
           const occurrence = occurrences.get(event.call.id) ?? 0;
           occurrences.set(event.call.id, occurrence + 1);
           position = result.length;
-          result.push({ kind: "tool", id: `tool:${event.call.id}:${occurrence}`,
+          result.push({ kind: "tool", id: event.generationId ? `generation:${event.generationId}:tool:${event.callIndex}` : `tool:${event.call.id}:${occurrence}`,
+            generationId: event.generationId,
             ...(event.turn === undefined ? {} : { turn: event.turn }),
             ...(event.step === undefined ? {} : { step: event.step }),
             call: event.call, status: "running", output: "",
@@ -426,13 +520,15 @@ export function reduceTimeline(
         }
         // Include represented starts as queue placeholders so their results can
         // never be consumed by a later same-ID live occurrence.
-        const queue = open.get(event.call.id) ?? [];
+        const occurrenceKey = event.generationId ? `${event.generationId}:${event.callIndex}` : event.call.id;
+        const queue = open.get(occurrenceKey) ?? [];
         queue.push(position);
-        open.set(event.call.id, queue);
+        open.set(occurrenceKey, queue);
       } else if (event.type === "tool_finished") {
-        const position = open.get(event.toolCallId)?.shift();
+        const occurrenceKey = event.generationId ? `${event.generationId}:${event.callIndex}` : event.toolCallId;
+        const position = open.get(occurrenceKey)?.shift();
         const item = position === undefined ? undefined : result[position];
-        if (position === undefined || item?.kind !== "tool") continue;
+        if (position === undefined || item?.kind !== "tool" || item.call.id !== event.toolCallId) continue;
         result[position] = { ...item, status: event.result.isError ? "failed" : "completed",
           output: event.result.content,
           ...(item.startedAt === undefined
@@ -451,5 +547,5 @@ export function reduceTimeline(
   }
   const restored = insertOutputs(result, retainedOutputs(snapshot));
   timelineCache.set(snapshot, restored);
-  return insertOutputs(restored, pendingOutputs.filter(output => !outputSaved(output, snapshot)));
+  return mergeTranscriptDrafts(restored, snapshot, pendingOutputs, pendingReasoning);
 }
