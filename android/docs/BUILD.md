@@ -1,5 +1,19 @@
 # 构建与验证边界
 
+## Kotlin 原生版 `:nativeApp`
+
+新版构建使用仓库同一 Gradle 8.9 / AGP 8.7.3，新增 Kotlin/Compose compiler 2.0.21，SDK Platform 35，minSdk 26。JDK 17/21，设置 `ANDROID_HOME` 后：
+
+```sh
+./gradlew :nativeApp:assembleDebug :nativeApp:testDebugUnitTest
+./gradlew :nativeApp:lintDebug
+```
+
+APK：`nativeApp/build/outputs/apk/debug/nativeApp-debug.apk`。
+模拟器集成测试需要先启动隔离的离线 Core fixture 并配置 adb reverse，见 `NATIVE_FIXTURE.md`；然后执行 `./gradlew :nativeApp:connectedDebugAndroidTest`。它实际操作 Compose 界面，不调用真实模型。
+
+原生版架构、接入和未完成范围见 `NATIVE_ANDROID.md`。以下为 **旧版 `:app` 的历史构建说明和验证记录**，不代表新版的限制或检查结果。
+
 本文只描述 `android/` 内部，不涉及根 `package.json` / `pnpm-lock.yaml` / `src/`。
 
 ## 1. 环境要求

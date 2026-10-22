@@ -1,5 +1,6 @@
 # Android / Gradle local state. Nothing here is source.
 .gradle/
+.kotlin/
 build/
 app/build/
 */build/

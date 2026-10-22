@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "forge-mobile"
-include(":app")
+include(":app", ":nativeApp")

@@ -1,4 +1,32 @@
-# Forge Mobile — 原生 Android 轻客户端
+# Forge Android
+
+本目录包含两个可以并存安装的应用：
+
+| 模块 | 技术 | 定位 |
+| --- | --- | --- |
+| **`:nativeApp`** | **Kotlin + Jetpack Compose / Material 3** | 新版原生聊天客户端，直接接入 forge-core 的 HTTP RPC + WebSocket，不依赖 Web UI |
+| `:app` | Java + Android WebView | 原有兼容客户端，继续复用服务器 Web 工作台，原有功能保留 |
+
+## 新版：Forge Native
+
+以聊天为中心：会话搜索与切换、历史分页、流式回复、思考/工具折叠、常见 Markdown 与代码复制、按服务器/会话保存草稿、模型选择、停止运行、逐次工具审批、前后台恢复与断线重连。默认只读，工作区操作需显式选择；网络失败不自动重发消息。
+
+```sh
+# JDK 17/21 + Android SDK 35；ANDROID_HOME 指向本机 SDK
+./gradlew :nativeApp:assembleDebug :nativeApp:testDebugUnitTest
+adb install -r nativeApp/build/outputs/apk/debug/nativeApp-debug.apk
+```
+
+- 应用名 **Forge Native**，debug 包名 `dev.forge.nativeapp.debug`，Android 8.0+。
+- 连接 Core 服务地址即可；原生应用不加载网页，也不在手机上运行 Node/Core。
+- 可选设备 Bearer 凭据 / 一次性配对码，仅保存在本次进程内，不保存模型密钥。
+- 公网接入需安全部署；HTTP 只适用于可信局域网，不忽略 TLS 错误。
+- 架构、接入、协议与当前限制见 **[docs/NATIVE_ANDROID.md](docs/NATIVE_ANDROID.md)**。
+- 离线真实 Core 联调与模拟器测试见 **[docs/NATIVE_FIXTURE.md](docs/NATIVE_FIXTURE.md)**。
+
+---
+
+## 旧版：Forge Mobile（以下内容仅描述 `:app`）
 
 一个**独立**的 Android 客户端，用 Java + Android `WebView` 复用服务器上的 Web 工作台。
 
