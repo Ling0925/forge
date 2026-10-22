@@ -1253,81 +1253,101 @@ function CommandConsole({
 
   return (
     <div className="tool-terminal-card">
-      {command && (
-        <div className="tool-terminal-header tool-section">
-          <div className="tool-terminal-prompt">
+      <div className="tool-terminal-header tool-section">
+        <div className="tool-terminal-prompt">
+          <span className="tool-terminal-dots" aria-hidden="true">
+            <span className="tool-terminal-dot tool-dot-red" />
+            <span className="tool-terminal-dot tool-dot-yellow" />
+            <span className="tool-terminal-dot tool-dot-green" />
+          </span>
+          {cwd ? (
+            <span
+              className="tool-command-cwd tool-terminal-cwd"
+              title={`工作目录：${cwd}`}
+            >
+              工作目录 {cwd}
+            </span>
+          ) : (
+            <span className="tool-terminal-title" aria-hidden="true">
+              terminal
+            </span>
+          )}
+        </div>
+        {command && (
+          <div className="tool-terminal-header-meta">
+            <ToolCopyButton text={command} label="复制命令" />
+          </div>
+        )}
+      </div>
+
+      <div className="tool-terminal-screen">
+        {command && (
+          <div className="tool-terminal-cmd-row">
             <span className="tool-terminal-sigil" aria-hidden="true">
               $
             </span>
-            <pre className="tool-section-content tool-command">{command}</pre>
+            <pre className="tool-command">{command}</pre>
           </div>
-          <div className="tool-terminal-header-meta">
-            {cwd && (
-              <span className="tool-command-cwd" title={`工作目录：${cwd}`}>
-                工作目录 {cwd}
-              </span>
-            )}
-            <ToolCopyButton text={command} label="复制命令" />
-          </div>
-        </div>
-      )}
-      <div className="tool-terminal-output tool-section">
-        <div className="tool-terminal-output-body">
+        )}
+        <div className="tool-terminal-output tool-section">
           {failure && (
-            <pre className="tool-section-content tool-section-error">
-              {failure}
-            </pre>
+            <pre className="tool-terminal-stream-error">{failure}</pre>
           )}
           {model.stderr !== null && model.stderr !== "" && (
-            <>
+            <div className="tool-terminal-stream-group">
               <span className="tool-section-title tool-stream-title">
                 标准错误
               </span>
-              <pre className="tool-section-content tool-console-stderr">
-                {model.stderr}
-              </pre>
-            </>
+              <pre className="tool-terminal-stream-stderr">{model.stderr}</pre>
+            </div>
           )}
-          {model.body !== null ? (
-            <pre className="tool-section-content tool-terminal-pre">
-              {model.body}
-            </pre>
+          {model.body !== null && model.body !== "" ? (
+            <pre className="tool-terminal-stream-stdout">{model.body}</pre>
           ) : (
             !failure &&
             (!model.stderr || model.stderr === "") && (
-              <span className="tool-section-empty tool-terminal-empty">
+              <span className="tool-terminal-empty">
                 {emptyText}
+                {status === "running" && (
+                  <span className="tool-terminal-cursor" aria-hidden="true" />
+                )}
               </span>
             )
           )}
         </div>
-        <div className="tool-terminal-output-actions">
-          {resolvedExit !== undefined && resolvedExit !== null && (
-            <span
-              className={`tool-exit tool-exit-${resolvedExit === 0 ? "ok" : "bad"}`}
-            >
-              退出码 {resolvedExit}
-            </span>
-          )}
-          {outputCopyText !== null && (
-            <ToolCopyButton text={outputCopyText} label="复制输出" />
-          )}
-        </div>
       </div>
+
       {model.notices.map((notice) => (
         <p className="tool-notice" key={notice}>
           <WarningCircle size={13} weight="regular" aria-hidden="true" />
           {notice}
         </p>
       ))}
-      {model.facts.length > 0 && (
-        <div className="tool-console-facts">
-          {model.facts.map((fact) => (
-            <span className="tool-fact" key={fact.label}>
-              <span className="tool-fact-label">{fact.label}</span>
-              <span className="tool-fact-value">{fact.value}</span>
-            </span>
-          ))}
+
+      {(resolvedExit !== undefined && resolvedExit !== null ||
+        model.facts.length > 0 ||
+        outputCopyText !== null) && (
+        <div className="tool-terminal-statusbar">
+          <div className="tool-terminal-status-info">
+            {resolvedExit !== undefined && resolvedExit !== null && (
+              <span
+                className={`tool-exit tool-exit-${resolvedExit === 0 ? "ok" : "bad"}`}
+              >
+                退出码 {resolvedExit}
+              </span>
+            )}
+            {model.facts.map((fact) => (
+              <span className="tool-fact" key={fact.label}>
+                <span className="tool-fact-label">{fact.label}</span>
+                <span className="tool-fact-value">{fact.value}</span>
+              </span>
+            ))}
+          </div>
+          {outputCopyText !== null && (
+            <div className="tool-terminal-status-actions">
+              <ToolCopyButton text={outputCopyText} label="复制输出" />
+            </div>
+          )}
         </div>
       )}
     </div>
