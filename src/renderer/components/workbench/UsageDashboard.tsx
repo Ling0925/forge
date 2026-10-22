@@ -17,10 +17,12 @@ import type {
 import { compactTokens } from "../../state/session-usage";
 import { useWorkbench } from "../../state/workbench-context";
 import { Tabs } from "../primitives/Tabs";
+import { UsageOverview, renderUsageKpiGrid } from "./UsageOverview";
 import { UsageRequests } from "./UsageRequests";
 import "./usage-dashboard.css";
 
 const usageTabs = [
+  { id: "usage-overview", label: "概览" },
   { id: "usage-summary", label: "用量统计" },
   { id: "usage-requests", label: "请求记录" },
 ];
@@ -155,7 +157,7 @@ export function UsageDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<UsageStatsDto | null>(null);
-  const [activeTab, setActiveTab] = useState("usage-summary");
+  const [activeTab, setActiveTab] = useState("usage-overview");
   const [dailyChartMode, setDailyChartMode] = useState<"tokens" | "cost">(
     "tokens",
   );
@@ -599,6 +601,31 @@ export function UsageDashboard() {
               <output className="usage-empty-state">加载中…</output>
             )}
 
+            {data && activeTab === "usage-overview" && (
+              <UsageOverview
+                kpiCards={renderUsageKpiGrid({
+                  data,
+                  costSummary,
+                  requestAnalytics,
+                  requestsCount: requests.length,
+                  aggregateCostExplanation,
+                  formatCostUsd,
+                  formatDuration,
+                  percent,
+                  shortModelName,
+                })}
+                data={data}
+                settings={state.settings}
+                sessions={state.sessions}
+                activeRuns={state.activeRuns ?? {}}
+                workspaceFilter={workspaceFilter}
+                onSelectSession={(sessionId) => {
+                  openUsageDashboard(false);
+                  void selectSession(sessionId);
+                }}
+              />
+            )}
+
             {data && activeTab === "usage-requests" && (
               <div
                 id="tabpanel-usage-requests"
@@ -617,127 +644,17 @@ export function UsageDashboard() {
                 className="usage-summary"
               >
                 {/* 6-Card KPI Strip */}
-                <div className="usage-kpi-grid">
-                  <div className="usage-kpi-card">
-                    <div className="usage-kpi-label">
-                      <span>总消耗 Tokens</span>
-                      <Lightning size={14} />
-                    </div>
-                    <div className="usage-kpi-value">
-                      {compactTokens(data.totalTokens)}
-                    </div>
-                    <div className="usage-kpi-sub">
-                      <span>入 {compactTokens(data.totalPromptTokens)}</span>
-                      <span>·</span>
-                      <span>
-                        出 {compactTokens(data.totalCompletionTokens)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="usage-kpi-card">
-                    <div className="usage-kpi-label">
-                      <span>平均缓存命中率</span>
-                      <Database size={14} />
-                    </div>
-                    <div className="usage-kpi-value">
-                      {percent(data.averageCacheRate)}
-                    </div>
-                    <div className="usage-kpi-sub">
-                      <span>
-                        命中 {compactTokens(data.totalCachedTokens)} tokens
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="usage-kpi-card">
-                    <div className="usage-kpi-label">
-                      <span>预估总费用 (USD)</span>
-                      <ChartBar size={14} />
-                    </div>
-                    <div className="usage-kpi-value">
-                      {formatCostUsd(costSummary.totalCostUsd)}
-                    </div>
-                    <div className="usage-kpi-sub" title={costSummary.hasAggregateEstimate ? aggregateCostExplanation : undefined}>
-                      {costSummary.totalCostUsd !== undefined ? (
-                        <span>
-                          {costSummary.incomplete ? "部分计价" : "已计价"}
-                          {requests.length > 0 && ` ${requestAnalytics.pricedCount} / ${requests.length} 次请求`}
-                          {costSummary.hasAggregateEstimate && " · 含历史汇总估算"}
-                        </span>
-                      ) : (
-                        <span>{data.pricing?.state === "unavailable"
-                          ? "价格目录加载失败，点击刷新重试"
-                          : "缺少价格或用量，费用未知"}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="usage-kpi-card">
-                    <div className="usage-kpi-label">
-                      <span>平均输出速度</span>
-                      <Lightning size={14} />
-                    </div>
-                    <div className="usage-kpi-value">
-                      {requestAnalytics.avgSpeed !== undefined
-                        ? `${requestAnalytics.avgSpeed.toFixed(1)}`
-                        : "—"}
-                      {requestAnalytics.avgSpeed !== undefined && (
-                        <span className="usage-kpi-unit">tok/s</span>
-                      )}
-                    </div>
-                    <div className="usage-kpi-sub">
-                      <span>
-                        峰值{" "}
-                        {requestAnalytics.peakSpeed !== undefined
-                          ? `${requestAnalytics.peakSpeed.toFixed(1)} tok/s`
-                          : "—"}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        均耗时 {formatDuration(requestAnalytics.avgDurationMs)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="usage-kpi-card">
-                    <div className="usage-kpi-label">
-                      <span>会话与运行总数</span>
-                      <Calendar size={14} />
-                    </div>
-                    <div className="usage-kpi-value">
-                      {data.totalSessions}{" "}
-                      <span className="usage-kpi-unit">会话</span>
-                    </div>
-                    <div className="usage-kpi-sub">
-                      <span>累计运行 {data.totalRuns} 次任务</span>
-                      {requests.length > 0 && (
-                        <>
-                          <span>·</span>
-                          <span>{requests.length} 请求</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="usage-kpi-card">
-                    <div className="usage-kpi-label">
-                      <span>主力模型</span>
-                      <Cpu size={14} />
-                    </div>
-                    <div
-                      className="usage-kpi-value usage-kpi-model-value"
-                      title={data.models[0]?.model || "暂无模型"}
-                    >
-                      {data.models[0]?.model
-                        ? shortModelName(data.models[0].model)
-                        : "—"}
-                    </div>
-                    <div className="usage-kpi-sub">
-                      <span>共 {data.models.length} 个使用中的模型</span>
-                    </div>
-                  </div>
-                </div>
+                {renderUsageKpiGrid({
+                  data,
+                  costSummary,
+                  requestAnalytics,
+                  requestsCount: requests.length,
+                  aggregateCostExplanation,
+                  formatCostUsd,
+                  formatDuration,
+                  percent,
+                  shortModelName,
+                })}
 
                 {/* Row 1: Daily Trend Chart & Token Structure Donut Chart */}
                 <div className="usage-charts-primary-grid">

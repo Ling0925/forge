@@ -99,9 +99,17 @@ beforeAll(async () => {
           const C=createContext(null);export const useWorkbench=()=>useContext(C);
           export function TestProvider({children}){
             const [open,setOpen]=useState(true);
-            const state={isUsageDashboardOpen:open,sessions:[{workspace:'/workspace/a'},{workspace:'/workspace/b'}],settings:{
+            const [extraSessions,setExtraSessions]=useState([]);
+            const [activeRuns,setActiveRuns]=useState({});
+            window.setExtraSessions=setExtraSessions;
+            window.setActiveRuns=setActiveRuns;
+            const defaultSessions=[
+              {id:'${sessionA}',title:'会话 A',workspace:'/workspace/a',model:'source-a:vendor/gpt-6-astra',status:'running',createdAt:'${stamp(-240)}',updatedAt:'${stamp(0)}',messageCount:4,changeCount:1},
+              {id:'${sessionB}',title:'会话 B',workspace:'/workspace/b',model:'old/model',status:'completed',createdAt:'${stamp(-240)}',updatedAt:'${stamp(-192)}',messageCount:2,changeCount:0},
+            ];
+            const state={isUsageDashboardOpen:open,sessions:[...defaultSessions,...extraSessions],activeRuns,settings:{
               reasoningEffort:'max',
-              providerSources:[{id:'source-a',label:'供应商 A',credentials:[{id:'default',label:'主密钥'}]}],
+              providerSources:[{id:'source-a',label:'供应商 A',model:'vendor/gpt-6-astra',models:['vendor/gpt-6-astra','deepseek-v4.1-flash'],credentials:[{id:'default',label:'主密钥'}]}],
               routeGroups:[{id:'r1',label:'路由 A'}]}};
             return <C.Provider value={{state,openUsageDashboard:setOpen,selectSession:async id=>{window.selected.push(id)}}}>{children}</C.Provider>;
           }
@@ -135,17 +143,106 @@ async function mount(snapshots: readonly SessionSnapshot[] = fixtures, pricingSe
   await page.goto("https://forge.test/");
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: js });
-  await expect.poll(() => page.locator(".usage-summary").count()).toBe(1);
+  await expect.poll(() => page.locator(".usage-overview").count()).toBe(1);
   return page;
 }
+
+it("opens on the Overview tab before Usage Statistics with total KPI cards and a 3D Forge energy network that scales with sessions and sub-agents", async () => {
+  const page = await mount();
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  try {
+    const tabs = page.getByRole("tab");
+    expect(await tabs.allTextContents()).toEqual(["概览", "用量统计", "请求记录"]);
+    const overviewTab = page.getByRole("tab", { name: "概览", exact: true });
+    expect(await overviewTab.getAttribute("aria-selected")).toBe("true");
+
+    // 6 Total KPI cards are displayed at the top of Overview
+    expect(await page.locator(".usage-overview .usage-kpi-card").count()).toBe(6);
+    expect(await page.locator(".usage-overview").innerText()).toContain("总消耗 Tokens");
+    expect(await page.locator(".usage-overview").innerText()).toContain("预估总费用 (USD)");
+
+    // 3D Energy Network topology is rendered with Forge core, peripheral providers/models, and session lines
+    const section3d = page.getByTestId("usage-overview-3d");
+    expect(await section3d.count()).toBe(1);
+    const canvas = page.locator(".usage-3d-canvas");
+    expect(await canvas.count()).toBe(1);
+    const box = await canvas.boundingBox();
+    expect(box?.width).toBeGreaterThan(200);
+    expect(box?.height).toBeGreaterThan(200);
+
+    const initialLineCount = Number(await section3d.getAttribute("data-session-line-count"));
+    const initialSubagentCount = Number(await section3d.getAttribute("data-subagent-count"));
+    const initialSpeed = Number(await section3d.getAttribute("data-energy-speed"));
+    expect(initialLineCount).toBe(2);
+    expect(initialSubagentCount).toBe(0);
+    expect(initialSpeed).toBeGreaterThan(1);
+
+    // Add more sessions including sub-agents (parentSessionId) and active runs -> more lines & faster energy transmission
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        setExtraSessions: (sessions: unknown[]) => void;
+        setActiveRuns: (runs: Record<string, unknown>) => void;
+      };
+      w.setExtraSessions([
+        {
+          id: "00000000-0000-0000-0000-000000000003",
+          title: "子代理：代码审查",
+          workspace: "/workspace/a",
+          model: "source-a:deepseek-v4.1-flash",
+          status: "running",
+          parentSessionId: "00000000-0000-0000-0000-000000000001",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messageCount: 3,
+          changeCount: 0,
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000004",
+          title: "子代理：测试验证",
+          workspace: "/workspace/a",
+          model: "source-a:deepseek-v4.1-flash",
+          status: "running",
+          parentSessionId: "00000000-0000-0000-0000-000000000001",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messageCount: 2,
+          changeCount: 0,
+        },
+      ]);
+      w.setActiveRuns({
+        "00000000-0000-0000-0000-000000000003": { status: "running" },
+        "00000000-0000-0000-0000-000000000004": { status: "running" },
+      });
+    });
+
+    await expect.poll(async () => Number(await section3d.getAttribute("data-session-line-count"))).toBe(4);
+    expect(Number(await section3d.getAttribute("data-subagent-count"))).toBe(2);
+    const boostedSpeed = Number(await section3d.getAttribute("data-energy-speed"));
+    expect(boostedSpeed).toBeGreaterThan(initialSpeed);
+    expect(await section3d.innerText()).toContain("子代理");
+    expect(await section3d.innerText()).toContain("供应商 A");
+
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBe(true);
+    }
+    expect(errors).toEqual([]);
+  } finally {
+    await page.close();
+  }
+}, 30000);
 
 it("moves individual request metadata into a tab with details and session navigation", async () => {
   const page = await mount();
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   try {
+    const overview = page.getByRole("tab", { name: "概览", exact: true });
     const summary = page.getByRole("tab", { name: "用量统计", exact: true });
     const requests = page.getByRole("tab", { name: "请求记录", exact: true });
+    expect(await overview.getAttribute("aria-selected")).toBe("true");
+    await summary.click();
     expect(await summary.getAttribute("aria-selected")).toBe("true");
     expect(await page.locator(".usage-dashboard-subtitle").count()).toBe(0);
     expect(await page.locator(".usage-request-row").count()).toBe(0);
@@ -259,6 +356,7 @@ it("shows download failures in both tabs and retries prices immediately from the
     .mockResolvedValue(Response.json({ lab: { models: { "gpt-6-astra": { cost: { input: 3, output: 15 } } } } }));
   const page = await mount(fixtures, createModelPricingService({ fetch: fetcher }));
   try {
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
     expect(await page.getByRole("status").innerText()).toBe("价格加载失败");
     expect(await page.locator(".usage-model-cost-tag").allTextContents()).toContain("价格未加载");
     await page.setViewportSize({ width: 390, height: 900 });
@@ -288,6 +386,7 @@ it("labels stale prices without hiding still-usable estimates", async () => {
   now += 24 * 3600000;
   const page = await mount(fixtures, pricing);
   try {
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
     expect(await page.getByRole("status").innerText()).toBe("使用缓存价格");
     expect(await page.locator(".usage-model-cost-tag").allTextContents()).toContain("预估 $0.0016（部分）");
     await page.getByRole("tab", { name: "请求记录", exact: true }).click();
@@ -417,6 +516,7 @@ it("refreshes, retries failures, paginates without dropping records and handles 
 it("renders full-screen usage dashboard charts, cost mode switch, and back button", async () => {
   const page = await mount();
   try {
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
     await page.evaluate(() => { (window as unknown as { richSummary: boolean }).richSummary = true; });
     await page.getByRole("button", { name: "刷新统计数据", exact: true }).click();
     await expect.poll(() => page.locator(".usage-donut-svg").count()).toBe(1);
@@ -465,6 +565,7 @@ it("prices legacy-only model distribution with labelled base estimates, matching
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   try {
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
     const rows = page.locator(".usage-model-item");
     expect(await rows.count()).toBe(4);
     expect(await rows.locator(".usage-model-name").allTextContents()).toEqual(models);
@@ -518,6 +619,7 @@ it("shows all historical and actual models with exact cost subtotals, unknown pr
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   try {
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
     const rows = page.locator(".usage-model-item");
     await expect.poll(() => rows.count()).toBe(5);
     const row = (model: string) => rows.filter({ has: page.locator(`.usage-model-name[title="${model}"]`) });

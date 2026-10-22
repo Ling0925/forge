@@ -489,6 +489,10 @@ it("shows actual route, source and credential usage in the stats panel", async (
         "",
     });
 
+    const overviewTab = page.getByRole("tab", { name: "概览", exact: true });
+    await expect.poll(() => overviewTab.getAttribute("aria-selected")).toBe("true");
+    await page.getByRole("tab", { name: "用量统计", exact: true }).click();
+
     const section = page
       .locator(".usage-dashboard-section")
       .filter({ hasText: "来源调用统计" });
