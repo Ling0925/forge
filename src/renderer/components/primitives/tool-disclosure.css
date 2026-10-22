@@ -409,7 +409,7 @@
 .tool-terminal-header {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: nowrap;
   gap: var(--space-2);
@@ -421,7 +421,7 @@
 .tool-terminal-prompt {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -440,6 +440,7 @@
   color: var(--accent-sage);
   user-select: none;
   line-height: 1.45;
+  flex-shrink: 0;
 }
 
 .tool-terminal-header .tool-section-title {
@@ -463,6 +464,8 @@
   word-break: break-word;
   overflow-wrap: anywhere;
   line-height: 1.45;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .tool-terminal-header-meta {
@@ -472,6 +475,7 @@
   flex-shrink: 0;
   margin-left: auto;
   min-width: 0;
+  align-self: flex-start;
 }
 
 .tool-command-cwd {
@@ -481,15 +485,41 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  max-width: 140px;
 }
 
 .tool-terminal-output {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  min-width: 0;
+}
+
+.tool-terminal-output-body {
+  display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tool-terminal-output-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.tool-terminal-empty {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 /* Console output keeps the recorded line structure and scrolls on its own. */
@@ -509,9 +539,16 @@
 }
 
 .tool-console-stderr {
+  margin: 0;
+  padding: 2px 6px;
   border-left: 2px solid var(--error-border);
   background-color: var(--surface-soft);
-  color: var(--text-secondary);
+  color: var(--error, var(--text-secondary));
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Console facts: decoded envelope metadata (process time, page offsets, …). */
@@ -1050,15 +1087,6 @@
 
   .tool-param-key {
     color: var(--text-secondary);
-  }
-
-  .tool-terminal-header {
-    flex-wrap: wrap;
-    align-items: flex-start;
-  }
-
-  .tool-terminal-header-meta {
-    margin-left: 0;
   }
 }
 

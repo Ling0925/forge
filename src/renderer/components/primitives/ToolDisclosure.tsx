@@ -1237,12 +1237,28 @@ function CommandConsole({
     ? "命令仍在运行，输出尚未生成。"
     : status === "running"
       ? "等待命令输出…"
-      : "工具未返回文本";
+      : "无输出";
+
+  const outputParts: string[] = [];
+  if (model.body !== null && model.body !== "") {
+    outputParts.push(model.body);
+  }
+  if (model.stderr !== null && model.stderr !== "") {
+    outputParts.push(model.stderr);
+  }
+  if (outputParts.length === 0 && failure) {
+    outputParts.push(failure);
+  }
+  const outputCopyText = outputParts.length > 0 ? outputParts.join("\n") : null;
+
   return (
     <div className="tool-terminal-card">
       {command && (
         <div className="tool-terminal-header tool-section">
           <div className="tool-terminal-prompt">
+            <span className="tool-terminal-sigil" aria-hidden="true">
+              $
+            </span>
             <pre className="tool-section-content tool-command">{command}</pre>
           </div>
           <div className="tool-terminal-header-meta">
@@ -1256,64 +1272,64 @@ function CommandConsole({
         </div>
       )}
       <div className="tool-terminal-output tool-section">
-        <SectionHead
-          title="结果"
-          action={
-            <div className="tool-section-actions">
-              {resolvedExit !== undefined && resolvedExit !== null && (
-                <span
-                  className={`tool-exit tool-exit-${resolvedExit === 0 ? "ok" : "bad"}`}
-                >
-                  退出码 {resolvedExit}
-                </span>
-              )}
-              {model.body !== null && (
-                <ToolCopyButton text={model.body} label="复制输出" />
-              )}
-            </div>
-          }
-        />
-        {failure && (
-          <pre className="tool-section-content tool-section-error">
-            {failure}
-          </pre>
-        )}
-        {model.stderr !== null && model.stderr !== "" && (
-          <>
-            <span className="tool-section-title tool-stream-title">
-              标准错误
-            </span>
-            <pre className="tool-section-content tool-console-stderr">
-              {model.stderr}
+        <div className="tool-terminal-output-body">
+          {failure && (
+            <pre className="tool-section-content tool-section-error">
+              {failure}
             </pre>
-          </>
-        )}
-        {model.body === null ? (
-          failure ? null : (
-            <span className="tool-section-empty">{emptyText}</span>
-          )
-        ) : (
-          <pre className="tool-section-content tool-terminal-pre">
-            {model.body}
-          </pre>
-        )}
-        {model.notices.map((notice) => (
-          <p className="tool-notice" key={notice}>
-            <WarningCircle size={13} weight="regular" aria-hidden="true" />
-            {notice}
-          </p>
-        ))}
-        {model.facts.length > 0 && (
-          <div className="tool-console-facts">
-            {model.facts.map((fact) => (
-              <span className="tool-fact" key={fact.label}>
-                <span className="tool-fact-label">{fact.label}</span>
-                <span className="tool-fact-value">{fact.value}</span>
+          )}
+          {model.stderr !== null && model.stderr !== "" && (
+            <>
+              <span className="tool-section-title tool-stream-title">
+                标准错误
               </span>
-            ))}
-          </div>
-        )}
+              <pre className="tool-section-content tool-console-stderr">
+                {model.stderr}
+              </pre>
+            </>
+          )}
+          {model.body !== null ? (
+            <pre className="tool-section-content tool-terminal-pre">
+              {model.body}
+            </pre>
+          ) : (
+            !failure &&
+            (!model.stderr || model.stderr === "") && (
+              <span className="tool-section-empty tool-terminal-empty">
+                {emptyText}
+              </span>
+            )
+          )}
+        </div>
+        <div className="tool-terminal-output-actions">
+          {resolvedExit !== undefined && resolvedExit !== null && (
+            <span
+              className={`tool-exit tool-exit-${resolvedExit === 0 ? "ok" : "bad"}`}
+            >
+              退出码 {resolvedExit}
+            </span>
+          )}
+          {outputCopyText !== null && (
+            <ToolCopyButton text={outputCopyText} label="复制输出" />
+          )}
+        </div>
       </div>
+      {model.notices.map((notice) => (
+        <p className="tool-notice" key={notice}>
+          <WarningCircle size={13} weight="regular" aria-hidden="true" />
+          {notice}
+        </p>
+      ))}
+      {model.facts.length > 0 && (
+        <div className="tool-console-facts">
+          {model.facts.map((fact) => (
+            <span className="tool-fact" key={fact.label}>
+              <span className="tool-fact-label">{fact.label}</span>
+              <span className="tool-fact-value">{fact.value}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

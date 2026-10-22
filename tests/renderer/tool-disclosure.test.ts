@@ -122,7 +122,7 @@ describe("tool disclosure row", () => {
     });
     expect(expanded).toContain('aria-expanded="true"');
     expect(expanded).toContain("rm -rf /");
-    expect(expanded).toContain("结果");
+    expect(expanded).toContain("等待命令输出…");
   });
 
   it("renders parsed parameter rows instead of a raw JSON blob", () => {
