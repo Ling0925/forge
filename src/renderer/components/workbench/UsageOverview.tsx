@@ -72,8 +72,7 @@ export interface SessionEnergyConduit {
 export interface EnergyNetworkTopology {
   readonly providers: readonly ProviderNode3D[];
   readonly models: readonly ModelNode3D[];
-  readonly allConduits: readonly SessionEnergyConduit[];
-  readonly liveConduits: readonly SessionEnergyConduit[];
+  readonly activeConduits: readonly SessionEnergyConduit[];
   readonly mainSessionCount: number;
   readonly subagentSessionCount: number;
   readonly liveRunningCount: number;
@@ -294,7 +293,6 @@ export function buildEnergyNetworkTopology(
   for (const req of data.requests ?? []) {
     if (req.sourceId && req.model) {
       rawModelToSource.set(req.model, req.sourceId);
-      resolveProviderAndModel(req.model, req.sourceId);
     }
   }
 
@@ -312,7 +310,7 @@ export function buildEnergyNetworkTopology(
     modelStatsMap.set(canonicalId, prev);
   }
 
-  // 4. Collect all current sessions (including sub-agents)
+  // 4. Collect ONLY currently active sessions (including active sub-agents)
   interface MergedSession {
     sessionId: SessionId;
     title: string;
@@ -323,104 +321,152 @@ export function buildEnergyNetworkTopology(
     isSubagent: boolean;
     status: SessionStatus;
     totalTokens: number;
-    hasStartedRequest: boolean;
+  }
+
+  const isActiveStatus = (status: SessionStatus | undefined): boolean =>
+    status === "running" || status === "awaiting_approval";
+
+  const sessionsById = new Map<string, SessionSummary>();
+  for (const s of sessions) {
+    if (!s || typeof s.id !== "string" || !s.id || s.archived) continue;
+    if (workspaceFilter && s.workspace !== workspaceFilter) continue;
+    sessionsById.set(s.id, s);
+  }
+
+  const getEffectiveStatus = (
+    sid: string,
+    fallback?: SessionStatus,
+  ): SessionStatus => {
+    const activeRun = activeRuns[sid];
+    if (activeRun?.pendingApproval) return "awaiting_approval";
+    if (activeRun?.status) return activeRun.status;
+    return fallback ?? sessionsById.get(sid)?.status ?? "idle";
+  };
+
+  // Pre-collect token totals and model/source hints from topSessions & requests
+  const sessionTokenTotals = new Map<string, number>();
+  const sessionModelHints = new Map<string, string>();
+  const sessionSourceHints = new Map<string, string>();
+
+  for (const ts of data.topSessions) {
+    if (workspaceFilter && ts.workspace !== workspaceFilter) continue;
+    sessionTokenTotals.set(
+      ts.sessionId,
+      Math.max(sessionTokenTotals.get(ts.sessionId) ?? 0, ts.totalTokens),
+    );
+    if (ts.model) sessionModelHints.set(ts.sessionId, ts.model);
+  }
+
+  const requestTokensBySession = new Map<string, number>();
+  for (const req of data.requests ?? []) {
+    if (workspaceFilter && req.workspace !== workspaceFilter) continue;
+    if (req.sourceId && !sessionSourceHints.has(req.sessionId)) {
+      sessionSourceHints.set(req.sessionId, req.sourceId);
+    }
+    if (req.model && !sessionModelHints.has(req.sessionId)) {
+      sessionModelHints.set(req.sessionId, req.model);
+    }
+    if (req.usage?.totalTokens) {
+      requestTokensBySession.set(
+        req.sessionId,
+        (requestTokensBySession.get(req.sessionId) ?? 0) +
+          req.usage.totalTokens,
+      );
+    }
   }
 
   const sessionMap = new Map<string, MergedSession>();
 
   // From state.sessions (includes both primary sessions and sub-agents with parentSessionId)
-  for (const s of sessions) {
-    if (!s || typeof s.id !== "string" || !s.id) continue;
-    if (s.archived) continue;
-    if (workspaceFilter && s.workspace !== workspaceFilter) continue;
-    const activeRun = activeRuns[s.id];
-    const effectiveStatus: SessionStatus =
-      activeRun?.status ?? s.status ?? "idle";
+  for (const s of sessionsById.values()) {
+    const effectiveStatus = getEffectiveStatus(s.id, s.status);
+    if (!isActiveStatus(effectiveStatus)) continue;
+
+    // If this is a sub-agent whose parent session is known and already finished,
+    // ignore stale status unless the sub-agent itself has a live activeRun entry.
+    if (s.parentSessionId && sessionsById.has(s.parentSessionId)) {
+      const parentStatus = getEffectiveStatus(s.parentSessionId);
+      const hasDirectActiveRun =
+        Boolean(activeRuns[s.id]?.pendingApproval) ||
+        isActiveStatus(activeRuns[s.id]?.status);
+      if (!isActiveStatus(parentStatus) && !hasDirectActiveRun) {
+        continue;
+      }
+    }
+
+    const totalTokens = Math.max(
+      sessionTokenTotals.get(s.id) ?? 0,
+      requestTokensBySession.get(s.id) ?? 0,
+    );
+
     sessionMap.set(s.id, {
       sessionId: s.id,
       title: s.title || (s.parentSessionId ? "子代理任务" : "未命名会话"),
       workspace: s.workspace || "",
-      model: s.model || settings?.model || "default-model",
-      providerSourceId: s.providerSourceId,
+      model:
+        s.model ||
+        sessionModelHints.get(s.id) ||
+        settings?.model ||
+        "default-model",
+      providerSourceId: s.providerSourceId ?? sessionSourceHints.get(s.id),
       parentSessionId: s.parentSessionId,
       isSubagent: Boolean(s.parentSessionId),
       status: effectiveStatus,
-      totalTokens: 0,
-      hasStartedRequest: false,
+      totalTokens,
     });
   }
 
-  // Enrich or add from data.topSessions
-  for (const ts of data.topSessions) {
-    if (workspaceFilter && ts.workspace !== workspaceFilter) continue;
-    const existing = sessionMap.get(ts.sessionId);
-    if (existing) {
-      existing.totalTokens = Math.max(existing.totalTokens, ts.totalTokens);
-      if (!existing.model || existing.model === "default-model") {
-        existing.model = ts.model;
-      }
-    } else {
-      const activeRun = activeRuns[ts.sessionId];
-      sessionMap.set(ts.sessionId, {
-        sessionId: ts.sessionId,
-        title: ts.title || "会话",
-        workspace: ts.workspace,
-        model: ts.model || settings?.model || "default-model",
-        isSubagent: false,
-        status: activeRun?.status ?? "completed",
-        totalTokens: ts.totalTokens,
-        hasStartedRequest: false,
-      });
-    }
+  // Also include any live activeRuns not yet present in state.sessions
+  for (const [sid, run] of Object.entries(activeRuns)) {
+    if (sessionMap.has(sid)) continue;
+    const effectiveStatus: SessionStatus = run.pendingApproval
+      ? "awaiting_approval"
+      : run.status;
+    if (!isActiveStatus(effectiveStatus)) continue;
+    const knownSession = sessionsById.get(sid);
+    sessionMap.set(sid, {
+      sessionId: run.sessionId,
+      title: knownSession?.title || "实时运行会话",
+      workspace: knownSession?.workspace ?? workspaceFilter ?? "",
+      model:
+        knownSession?.model ||
+        sessionModelHints.get(sid) ||
+        settings?.model ||
+        "default-model",
+      providerSourceId:
+        knownSession?.providerSourceId ??
+        sessionSourceHints.get(sid) ??
+        settings?.activeSourceId,
+      parentSessionId: knownSession?.parentSessionId,
+      isSubagent: Boolean(knownSession?.parentSessionId),
+      status: effectiveStatus,
+      totalTokens: Math.max(
+        sessionTokenTotals.get(sid) ?? 0,
+        requestTokensBySession.get(sid) ?? 0,
+      ),
+    });
   }
 
-  // Enrich or add from data.requests
+  // Fallback for in-flight requests (strictly outcome === "started") when state.sessions does not list the session
   for (const req of data.requests ?? []) {
     if (workspaceFilter && req.workspace !== workspaceFilter) continue;
-    const existing = sessionMap.get(req.sessionId);
-    const isStarted = req.outcome === "started" || req.outcome === "unknown";
-    if (existing) {
-      if (!existing.providerSourceId && req.sourceId) {
-        existing.providerSourceId = req.sourceId;
-      }
-      if (!existing.model || existing.model === "default-model") {
-        existing.model = req.model;
-      }
-      if (isStarted) existing.hasStartedRequest = true;
-      if (req.usage?.totalTokens) {
-        existing.totalTokens += req.usage.totalTokens;
-      }
-    } else {
-      const activeRun = activeRuns[req.sessionId];
-      sessionMap.set(req.sessionId, {
-        sessionId: req.sessionId,
-        title: req.sessionTitle || "会话",
-        workspace: req.workspace,
-        model: req.model || settings?.model || "default-model",
-        providerSourceId: req.sourceId,
-        isSubagent: false,
-        status: activeRun?.status ?? (isStarted ? "running" : "completed"),
-        totalTokens: req.usage?.totalTokens ?? 0,
-        hasStartedRequest: isStarted,
-      });
+    if (req.outcome !== "started") continue;
+    if (sessionMap.has(req.sessionId) || sessionsById.has(req.sessionId)) {
+      continue;
     }
-  }
-
-  // Also include any activeRuns not yet in sessionMap
-  for (const [sid, run] of Object.entries(activeRuns)) {
-    if (!sessionMap.has(sid)) {
-      sessionMap.set(sid, {
-        sessionId: run.sessionId,
-        title: "实时运行会话",
-        workspace: workspaceFilter ?? "",
-        model: settings?.model || "default-model",
-        providerSourceId: settings?.activeSourceId,
-        isSubagent: false,
-        status: run.status,
-        totalTokens: 0,
-        hasStartedRequest: true,
-      });
-    }
+    sessionMap.set(req.sessionId, {
+      sessionId: req.sessionId,
+      title: req.sessionTitle || "会话",
+      workspace: req.workspace,
+      model: req.model || settings?.model || "default-model",
+      providerSourceId: req.sourceId,
+      isSubagent: false,
+      status: "running",
+      totalTokens: Math.max(
+        sessionTokenTotals.get(req.sessionId) ?? 0,
+        requestTokensBySession.get(req.sessionId) ?? 0,
+      ),
+    });
   }
 
   // Ensure at least one provider & model exist for the 3D periphery even on empty state
@@ -452,10 +498,6 @@ export function buildEnergyNetworkTopology(
     const explicitSource = s.providerSourceId ?? rawModelToSource.get(s.model);
     const resolved = resolveProviderAndModel(s.model, explicitSource);
     const modelNodeId = `${resolved.providerId}::${resolved.modelKey}`;
-    const isLiveRunning =
-      s.status === "running" ||
-      s.status === "awaiting_approval" ||
-      s.hasStartedRequest;
 
     modelSessionCounter.set(
       modelNodeId,
@@ -472,7 +514,7 @@ export function buildEnergyNetworkTopology(
       providerLabel: resolved.providerLabel,
       modelNodeId,
       modelLabel: shortModelLabel(resolved.modelKey),
-      isLiveRunning,
+      isLiveRunning: true,
     });
   }
 
@@ -484,29 +526,38 @@ export function buildEnergyNetworkTopology(
   }
 
   // 5. Compute 3D positions for Providers (inner 3D orbital ring) and Models (outer 3D orbital shell)
+  // Allocate angular sectors proportionally to each provider's model count so dense providers never pile up.
   const providerList = Array.from(sourceById.values());
   const providerCount = providerList.length;
-  const providerRadius = providerCount === 1 ? 135 : 155;
-  const modelRadius = 258;
+  const providerRadius = providerCount === 1 ? 135 : 150;
+  const modelRadius = 256;
+
+  const providerWeights = providerList.map((p) =>
+    Math.max(1.6, Math.max(1, p.models.size) ** 0.78),
+  );
+  const totalWeight =
+    providerWeights.reduce((acc, w) => acc + w, 0) ||
+    Math.max(providerCount, 1);
 
   const providers3D: ProviderNode3D[] = [];
   const models3D: ModelNode3D[] = [];
 
+  let cumulativeAngle = -Math.PI / 2;
   providerList.forEach((prov, pIdx) => {
-    const baseAngle =
-      (pIdx / Math.max(providerCount, 1)) * Math.PI * 2 - Math.PI / 2;
-    const provY = providerCount > 1 ? Math.sin(baseAngle * 2 + 0.6) * 32 : 0;
+    const weight = providerWeights[pIdx] ?? 1.6;
+    const allocatedSpan = (weight / totalWeight) * Math.PI * 2;
+    const baseAngle = cumulativeAngle + allocatedSpan * 0.5;
+    cumulativeAngle += allocatedSpan;
+
+    const provY = providerCount > 1 ? Math.sin(baseAngle * 2 + 0.6) * 28 : 0;
     const provX = Math.cos(baseAngle) * providerRadius;
     const provZ = Math.sin(baseAngle) * providerRadius;
 
     const modelKeys = Array.from(prov.models);
     const sectorSpan =
       providerCount === 1
-        ? Math.PI * 1.65
-        : Math.min(
-            ((Math.PI * 2) / providerCount) * 0.78,
-            Math.max(0.45, modelKeys.length * 0.36),
-          );
+        ? Math.PI * 1.72
+        : Math.max(0.28, allocatedSpan * 0.84);
 
     let providerTokens = 0;
     const childModelNodeIds: string[] = [];
@@ -522,15 +573,16 @@ export function buildEnergyNetworkTopology(
       const offsetRatio =
         modelKeys.length === 1 ? 0 : mIdx / (modelKeys.length - 1) - 0.5;
       const mAngle = baseAngle + offsetRatio * sectorSpan;
-      // Give models a 3D spherical vertical distribution around their provider plane
+      // 3-layer vertical & radial distribution prevents adjacent model labels from colliding
+      const layerBand = (mIdx % 3) - 1;
       const elevationWave =
-        Math.cos(mIdx * 1.7 + pIdx * 1.1) * 48 + (mIdx % 2 === 0 ? 18 : -18);
-      const radialJitter = mIdx % 3 === 0 ? 0 : mIdx % 3 === 1 ? 16 : -12;
+        layerBand * 44 + Math.cos(mIdx * 1.7 + pIdx * 1.1) * 18;
+      const radialJitter = mIdx % 3 === 0 ? 0 : mIdx % 3 === 1 ? 18 : -16;
       const r = modelRadius + radialJitter;
 
       const mx = Math.cos(mAngle) * r;
       const mz = Math.sin(mAngle) * r;
-      const my = provY * 0.7 + elevationWave;
+      const my = provY * 0.6 + elevationWave;
 
       models3D.push({
         id: canonicalId,
@@ -555,7 +607,7 @@ export function buildEnergyNetworkTopology(
     });
   });
 
-  // Group conduits by modelNodeId so multiple sessions on the same model fan out cleanly in 3D
+  // Group conduits by modelNodeId so multiple active sessions on the same model fan out cleanly in 3D
   const byModel = new Map<string, RawConduit[]>();
   for (const rc of rawConduits) {
     const group = byModel.get(rc.modelNodeId) ?? [];
@@ -563,11 +615,11 @@ export function buildEnergyNetworkTopology(
     byModel.set(rc.modelNodeId, group);
   }
 
-  const allConduits: SessionEnergyConduit[] = [];
+  const activeConduits: SessionEnergyConduit[] = [];
   let conduitIdx = 0;
   for (const group of byModel.values()) {
     group.forEach((rc, siblingIndex) => {
-      allConduits.push({
+      activeConduits.push({
         id: `conduit-${rc.session.sessionId}`,
         sessionId: rc.session.sessionId,
         title: rc.session.title,
@@ -588,18 +640,18 @@ export function buildEnergyNetworkTopology(
     });
   }
 
-  const liveConduits = allConduits.filter((c) => c.isLiveRunning);
-  const subagentSessionCount = allConduits.filter((c) => c.isSubagent).length;
-  const mainSessionCount = allConduits.length - subagentSessionCount;
+  const subagentSessionCount = activeConduits.filter(
+    (c) => c.isSubagent,
+  ).length;
+  const mainSessionCount = activeConduits.length - subagentSessionCount;
 
   return {
     providers: providers3D,
     models: models3D,
-    allConduits,
-    liveConduits,
+    activeConduits,
     mainSessionCount,
     subagentSessionCount,
-    liveRunningCount: liveConduits.length,
+    liveRunningCount: activeConduits.length,
   };
 }
 
@@ -676,8 +728,8 @@ function quadraticBezier3D(p0: Vec3, p1: Vec3, p2: Vec3, t: number): Vec3 {
 }
 
 /**
- * Computes a unique 3D control point for a session conduit between a Model node and Forge (0,0,0),
- * so multiple sessions on the same model fan out in 3D space.
+ * Computes a bounded 3D control point for a session conduit between a Model node and Forge (0,0,0),
+ * so multiple active sessions on the same model fan out cleanly without ever overflowing the canvas.
  */
 function conduitControlPoint(
   modelPos: Vec3,
@@ -694,11 +746,22 @@ function conduitControlPoint(
   const perpX = -modelPos[2] / lenXZ;
   const perpZ = modelPos[0] / lenXZ;
 
-  const spreadIndex =
-    siblingCount <= 1 ? 0 : siblingIndex - (siblingCount - 1) / 2;
-  const lateralSpread = spreadIndex * 42;
+  // Normalized spread in [-1, 1] so curves stay tightly bounded regardless of siblingCount
+  const normalizedSpread =
+    siblingCount <= 1 ? 0 : (siblingIndex / (siblingCount - 1)) * 2 - 1;
+  const maxLateral = Math.min(64, 20 + siblingCount * 10);
+  const lateralSpread = normalizedSpread * maxLateral;
+  const archSign =
+    siblingCount <= 1
+      ? conduitIndex % 2 === 0
+        ? 1
+        : -1
+      : siblingIndex % 2 === 0
+        ? 1
+        : -1;
   const verticalArch =
-    (conduitIndex % 2 === 0 ? 1 : -1) * (36 + Math.abs(spreadIndex) * 22);
+    archSign *
+    (24 + Math.abs(normalizedSpread) * Math.min(34, siblingCount * 7));
 
   return [
     midX + perpX * lateralSpread,
@@ -736,18 +799,16 @@ export function UsageOverview({
     [data, settings, sessions, activeRuns, workspaceFilter],
   );
 
-  const [conduitScope, setConduitScope] = useState<"all" | "live">("all");
   const [autoRotate, setAutoRotate] = useState(true);
   const [selectedConduitId, setSelectedConduitId] = useState<string | null>(
     null,
   );
   const [hoveredNodeLabel, setHoveredNodeLabel] = useState<string | null>(null);
 
-  const activeConduits =
-    conduitScope === "live" ? topology.liveConduits : topology.allConduits;
-  const activeSubagentCount = activeConduits.filter((c) => c.isSubagent).length;
-  const activeMainCount = activeConduits.length - activeSubagentCount;
-  const activeLiveCount = activeConduits.filter((c) => c.isLiveRunning).length;
+  const activeConduits = topology.activeConduits;
+  const activeSubagentCount = topology.subagentSessionCount;
+  const activeMainCount = topology.mainSessionCount;
+  const activeLiveCount = topology.liveRunningCount;
 
   const transferSpeed = useMemo(
     () => computeEnergyTransferSpeed(activeConduits.length, activeLiveCount),
@@ -809,6 +870,18 @@ export function UsageOverview({
       providerById.set(p.id, p);
     }
 
+    // Identify primary model per provider so dense catalogs don't overlap all labels on canvas
+    const primaryModelIds = new Set<string>();
+    for (const p of topology.providers) {
+      const childModels = topology.models.filter((m) => m.providerId === p.id);
+      const topModel = [...childModels].sort(
+        (a, b) =>
+          b.activeSessionCount - a.activeSessionCount ||
+          b.totalTokens - a.totalTokens,
+      )[0];
+      if (topModel) primaryModelIds.add(topModel.id);
+    }
+
     const renderFrame = (now: number) => {
       const dt = Math.min((now - lastTime) / 1000, 0.1);
       lastTime = now;
@@ -839,9 +912,6 @@ export function UsageOverview({
       const orbitRingStroke = isDark
         ? "rgba(170, 167, 159, 0.16)"
         : "rgba(104, 102, 95, 0.16)";
-      const tetherStroke = isDark
-        ? "rgba(170, 167, 159, 0.26)"
-        : "rgba(104, 102, 95, 0.25)";
       const activeTetherStroke = isDark
         ? "rgba(220, 148, 119, 0.55)"
         : "rgba(165, 79, 53, 0.48)";
@@ -894,7 +964,7 @@ export function UsageOverview({
       const sceneScale = Math.max(0.54, Math.min(1.08, minDim / 610));
 
       // Draw 3D orbital reference rings (Provider inner orbit & Model outer orbit)
-      for (const orbitRadius of [155, 258]) {
+      for (const orbitRadius of [150, 256]) {
         ctx.beginPath();
         const segments = 72;
         for (let i = 0; i <= segments; i++) {
@@ -916,8 +986,9 @@ export function UsageOverview({
         ctx.setLineDash([]);
       }
 
-      // Draw Provider -> Model 3D structural tethers
+      // Draw Provider -> Model feeder links ONLY for models with active sessions
       for (const mNode of topology.models) {
+        if (mNode.activeSessionCount <= 0) continue;
         const pNode = providerById.get(mNode.providerId);
         if (!pNode) continue;
         const pRot = transformPoint(pNode.pos, cam.yaw, cam.pitch);
@@ -925,24 +996,22 @@ export function UsageOverview({
         const pProj = projectPoint(pRot, cx, cy, fov, sceneScale);
         const mProj = projectPoint(mRot, cx, cy, fov, sceneScale);
 
-        const isActiveLink = mNode.activeSessionCount > 0;
         ctx.beginPath();
         ctx.moveTo(pProj.x, pProj.y);
         ctx.lineTo(mProj.x, mProj.y);
-        ctx.strokeStyle = isActiveLink ? activeTetherStroke : tetherStroke;
-        ctx.lineWidth = isActiveLink ? 1.6 : 1;
+        ctx.strokeStyle = activeTetherStroke;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([3, 4]);
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        // If sessions are active on this model, show a feeder pulse from Provider -> Model
-        if (isActiveLink) {
-          const feederT = (cam.energyPhase * 1.3) % 1;
-          const fx = pProj.x + (mProj.x - pProj.x) * feederT;
-          const fy = pProj.y + (mProj.y - pProj.y) * feederT;
-          ctx.beginPath();
-          ctx.arc(fx, fy, 2.6 * mProj.scale, 0, Math.PI * 2);
-          ctx.fillStyle = providerStroke;
-          ctx.fill();
-        }
+        const feederT = (cam.energyPhase * 1.3) % 1;
+        const fx = pProj.x + (mProj.x - pProj.x) * feederT;
+        const fy = pProj.y + (mProj.y - pProj.y) * feederT;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 2.5 * mProj.scale, 0, Math.PI * 2);
+        ctx.fillStyle = providerStroke;
+        ctx.fill();
       }
 
       // Draw Session Energy Conduits (Model -> Forge Core (0,0,0))
@@ -1316,12 +1385,18 @@ export function UsageOverview({
             ctx.fillText(String(mNode.activeSessionCount), x, y);
           }
 
-          // Model short name
-          ctx.font = `500 ${Math.max(9, Math.round(10.5 * scale))}px var(--font-mono, monospace)`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.fillStyle = hasActive ? textPrimary : textSecondary;
-          ctx.fillText(mNode.label, x, y + r + 4 * scale);
+          // Model short name: always render for energized models, primary provider models, or when total models <= 12
+          const showModelLabel =
+            hasActive ||
+            topology.models.length <= 12 ||
+            primaryModelIds.has(mNode.id);
+          if (showModelLabel) {
+            ctx.font = `500 ${Math.max(9, Math.round(10.5 * scale))}px var(--font-mono, monospace)`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = hasActive ? textPrimary : textSecondary;
+            ctx.fillText(mNode.label, x, y + r + 4 * scale);
+          }
 
           newHitNodes.push({
             x,
@@ -1388,30 +1463,11 @@ export function UsageOverview({
             </span>
             <span className="usage-section-subtitle-meta">
               中心 Forge 核心 · 周边 {topology.providers.length} 个供应商与{" "}
-              {topology.models.length} 个模型 · 会话与子代理实时能量汇聚
+              {topology.models.length} 个模型 · 当前活跃会话与子代理实时能量汇聚
             </span>
           </div>
 
           <div className="usage-section-header-right">
-            <div className="usage-mode-switch">
-              <button
-                type="button"
-                className={`usage-mode-btn ${conduitScope === "all" ? "is-active" : ""}`}
-                aria-pressed={conduitScope === "all"}
-                onClick={() => setConduitScope("all")}
-              >
-                全部会话 ({topology.allConduits.length})
-              </button>
-              <button
-                type="button"
-                className={`usage-mode-btn ${conduitScope === "live" ? "is-active" : ""}`}
-                aria-pressed={conduitScope === "live"}
-                onClick={() => setConduitScope("live")}
-              >
-                仅运行中 ({topology.liveConduits.length})
-              </button>
-            </div>
-
             <div className="usage-3d-camera-actions">
               <button
                 type="button"
@@ -1455,7 +1511,7 @@ export function UsageOverview({
 
           <div className="usage-energy-telemetry-item">
             <span className="usage-energy-telemetry-label">
-              能量连接线 (含子代理)
+              当前能量连接线 (含子代理)
             </span>
             <strong
               className="usage-energy-telemetry-val"
@@ -1480,7 +1536,7 @@ export function UsageOverview({
             </div>
             <div
               className="usage-energy-speed-track"
-              title={`当前 ${activeConduits.length} 个会话通道，能量传输速率 ${transferSpeed}x（会话越多线条越多、传输越快）`}
+              title={`当前 ${activeConduits.length} 个活跃会话通道，能量传输速率 ${transferSpeed}x（会话越多线条越多、传输越快）`}
             >
               <div
                 className="usage-energy-speed-fill"
@@ -1582,7 +1638,7 @@ export function UsageOverview({
           >
             <div className="usage-3d-sidebar-block">
               <div className="usage-3d-sidebar-head">
-                <span>活跃能量通道 (会话 & 子代理)</span>
+                <span>当前活跃能量通道 (会话 & 子代理)</span>
                 <span className="usage-kpi-badge">
                   {activeConduits.length} 条
                 </span>
@@ -1591,9 +1647,8 @@ export function UsageOverview({
               {activeConduits.length === 0 ? (
                 <div className="usage-3d-empty-conduits">
                   <p>
-                    {conduitScope === "live"
-                      ? "当前没有正在执行的实时会话；可切换至「全部会话」查看所有已连接会话通道。"
-                      : "当前暂无会话连接，启动主会话或子代理后将自动建立通往 Forge 的 3D 能量传输线。"}
+                    当前没有正在运行的会话或子代理；启动会话后将自动建立从对应模型通往
+                    Forge 的 3D 能量传输线。
                   </p>
                 </div>
               ) : (

@@ -174,11 +174,12 @@ it("opens on the Overview tab before Usage Statistics with total KPI cards and a
     const initialLineCount = Number(await section3d.getAttribute("data-session-line-count"));
     const initialSubagentCount = Number(await section3d.getAttribute("data-subagent-count"));
     const initialSpeed = Number(await section3d.getAttribute("data-energy-speed"));
-    expect(initialLineCount).toBe(2);
+    // Only the 1 active/running session (sessionA) connects an energy line; completed sessionB does not
+    expect(initialLineCount).toBe(1);
     expect(initialSubagentCount).toBe(0);
     expect(initialSpeed).toBeGreaterThan(1);
 
-    // Add more sessions including sub-agents (parentSessionId) and active runs -> more lines & faster energy transmission
+    // Add more sessions including active sub-agents (parentSessionId) and a completed session -> only active ones add lines & speed
     await page.evaluate(() => {
       const w = window as unknown as {
         setExtraSessions: (sessions: unknown[]) => void;
@@ -209,6 +210,18 @@ it("opens on the Overview tab before Usage Statistics with total KPI cards and a
           messageCount: 2,
           changeCount: 0,
         },
+        {
+          id: "00000000-0000-0000-0000-000000000005",
+          title: "已结束的历史子代理",
+          workspace: "/workspace/a",
+          model: "source-a:deepseek-v4.1-flash",
+          status: "completed",
+          parentSessionId: "00000000-0000-0000-0000-000000000002",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messageCount: 2,
+          changeCount: 0,
+        },
       ]);
       w.setActiveRuns({
         "00000000-0000-0000-0000-000000000003": { status: "running" },
@@ -216,12 +229,13 @@ it("opens on the Overview tab before Usage Statistics with total KPI cards and a
       });
     });
 
-    await expect.poll(async () => Number(await section3d.getAttribute("data-session-line-count"))).toBe(4);
+    await expect.poll(async () => Number(await section3d.getAttribute("data-session-line-count"))).toBe(3);
     expect(Number(await section3d.getAttribute("data-subagent-count"))).toBe(2);
     const boostedSpeed = Number(await section3d.getAttribute("data-energy-speed"));
     expect(boostedSpeed).toBeGreaterThan(initialSpeed);
     expect(await section3d.innerText()).toContain("子代理");
     expect(await section3d.innerText()).toContain("供应商 A");
+    expect(await section3d.innerText()).not.toContain("已结束的历史子代理");
 
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
