@@ -130,9 +130,39 @@ forge resume <session-uuid>
 
 四种协议为 Chat Completions、Responses、Anthropic Messages 和原生 Gemini。云鉴权、真实账号验证、迁移/回退及尚未移植的平台见 [接入状态与用法](docs/MODEL_ACCESS_PORT_STATUS.md)；目录存在不代表账号可调用。只有显式选择路由组才允许跨模型切换。
 
-### 源码开发（仅限源码检出仓库）
+### 源码开发（主仓 + 三个子模块）
 
-本机 CLI 开发流程是：**改代码 → 编译 CLI → 重开 `forge`**。首次检出或依赖变更时执行 `pnpm install`，日常修改 CLI 或共享核心后，在仓库根目录执行：
+本仓库作为主仓（superproject），通过 Git submodule 固定三个独立仓库的版本：
+
+| 子模块路径 | GitHub 仓库 | 职责 |
+| :--- | :--- | :--- |
+| `repos/forge-core` | `Ling0925/forge-core` | 核心运行时、共享契约与服务端 API |
+| `repos/forge-cli` | `Ling0925/forge-cli` | 命令行、TUI 与终端渲染 |
+| `repos/forge-web-ui` | `Ling0925/forge-web-ui` | React 界面、Web 构建与启动装配 |
+
+主仓记录 `.gitmodules` 与各子仓的提交指针，不把子仓源码复制回主仓历史。主仓和三个
+子仓均为公开仓库，可通过 HTTPS 克隆；推送仍需对应仓库的写权限。
+
+```sh
+# 首次克隆（远端主仓须已包含子模块关联提交）
+git clone --recurse-submodules https://github.com/Ling0925/forge.git
+cd forge
+
+# 已有主仓：在取得包含关联配置的提交后，初始化或同步到主仓固定版本
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+新 Core、CLI、Web UI 开发在各自子仓进行；先构建 Core，再按各仓 README 安装和构建
+CLI/Web。三者保持同级，兼容现有 `file:../forge-core` 依赖。更新主仓版本组合时，
+**先提交并推送子仓，再在主仓提交对应的 `repos/...` 指针**；主仓的普通提交不会提交
+子仓里的文件。完整检出、更新和 detached HEAD 说明见 [仓库组织指南](docs/REPOSITORY_SPLIT.md)。
+
+#### 兼容期：原仓本机 CLI
+
+原 `src/`、桌面壳和构建脚本暂时保留，不与子模块自动同步；本机 `forge` 仍使用这些
+兼容源码的产物，尚未切换到新 CLI。其开发流程仍是：**改代码 → 编译 CLI → 重开 `forge`**。
+首次检出或依赖变更时执行 `pnpm install`，修改兼容 CLI 或共享核心后，在主仓根目录执行：
 
 ```sh
 node scripts/build-core.mjs
@@ -164,9 +194,12 @@ node --check dist/cli.mjs
 
 ### 项目目录
 
+`repos/` 是新的独立组件源码；根目录 `src/` 暂为兼容现有入口保留，不自动同步子仓。
+
 | 路径 | 职责 |
 | :--- | :--- |
-| `src/core/`、`src/store/` | 共享代理运行时、会话与设置持久化 |
+| `.gitmodules`、`repos/` | 三个子模块的地址与固定提交；协同方式见 [仓库组织指南](docs/REPOSITORY_SPLIT.md) |
+| `src/core/`、`src/store/` | 兼容源码：共享代理运行时、会话与设置持久化 |
 | `src/provider/`、`src/tools/`、`src/mcp/`、`src/context/` | 模型协议、工具执行、MCP、项目指令与技能发现 |
 | `src/cli/` | CLI 入口与 Ink 终端交互 |
 | `src/desktop/`、`src/renderer/`、`src/web/` | Electron 宿主、共享 React 界面、Web 开发宿主 |

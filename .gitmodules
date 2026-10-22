@@ -1,0 +1,9 @@
+[submodule "forge-core"]
+	path = repos/forge-core
+	url = https://github.com/Ling0925/forge-core.git
+[submodule "forge-cli"]
+	path = repos/forge-cli
+	url = https://github.com/Ling0925/forge-cli.git
+[submodule "forge-web-ui"]
+	path = repos/forge-web-ui
+	url = https://github.com/Ling0925/forge-web-ui.git
