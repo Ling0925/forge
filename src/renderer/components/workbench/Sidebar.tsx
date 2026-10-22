@@ -59,8 +59,8 @@ export function Sidebar() {
       (showArchived || !session.archived) &&
       `${session.title} ${session.workspace}`.toLowerCase().includes(needle),
   );
-  // Sessions arrive newest-first, so first-seen insertion order already lists the
-  // folders by most recent activity; the order inside a folder is preserved too.
+  // Keep navigation independent of activity-ordered API results: folders follow
+  // their names and sessions follow creation time, with fixed tie-breakers.
   const groups: readonly SessionGroup[] = (() => {
     const byWorkspace = new Map<string, SessionSummary[]>();
     for (const session of filtered) {
@@ -68,10 +68,22 @@ export function Sidebar() {
       if (existing) existing.push(session);
       else byWorkspace.set(session.workspace, [session]);
     }
-    return [...byWorkspace].map(([workspace, sessions]) => ({
-      workspace,
-      sessions,
-    }));
+    return [...byWorkspace]
+      .map(([workspace, sessions]) => ({
+        workspace,
+        sessions: sessions.sort(
+          (a, b) =>
+            b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id),
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          workspaceName(a.workspace).localeCompare(
+            workspaceName(b.workspace),
+            "zh-CN",
+            { numeric: true },
+          ) || a.workspace.localeCompare(b.workspace),
+      );
   })();
   const toggleFolder = (workspace: string) =>
     setCollapsedFolders((previous) => ({
