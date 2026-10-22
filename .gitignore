@@ -35,3 +35,7 @@ org.chromium.Chromium.*/
 # Local upstream checkout for reference only; not part of Forge sources.
 /references/CometixCode/
 /references/magpie/
+
+# Independent repositories extracted from this legacy checkout.
+# Each child owns its Git history; never stage it in this repository.
+/repos/
