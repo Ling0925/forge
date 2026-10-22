@@ -1,4 +1,4 @@
-import { chmod, mkdir, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { build as buildRenderer } from "vite";
@@ -16,17 +16,8 @@ const common = {
   legalComments: "eof",
   logLevel: "info",
 };
-await build({
-  ...common,
-  entryPoints: ["src/cli/index.ts"],
-  outfile: "dist/cli.mjs",
-  format: "esm",
-  external: [...common.external, "ink", "react"],
-  banner: {
-    js: '#!/usr/bin/env node\nimport { createRequire as forgeCreateRequire } from "node:module"; const require = forgeCreateRequire(import.meta.url);',
-  },
-});
-await chmod("dist/cli.mjs", 0o755);
+// Share the production bootstrap with the CLI-only build.
+await import("./build-core.mjs");
 for (const name of ["main", "preload", "worker"]) {
   await build({
     ...common,

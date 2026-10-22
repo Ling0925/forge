@@ -177,7 +177,8 @@ try {
   await copyPublicAssets(join(stage, "desktop"));
   const cli = join(stage, "cli");
   await mkdir(join(cli, "node_modules"), { recursive: true });
-  await cp(join(root, "dist", "cli.mjs"), join(cli, "cli.mjs"));
+  for (const name of ["cli.mjs", "cli-main.mjs"])
+    await cp(join(root, "dist", name), join(cli, name));
   for (const [name, path] of Object.entries(packages))
     await cp(path, join(cli, "node_modules", name), {
       recursive: true,
