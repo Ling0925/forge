@@ -1,6 +1,31 @@
 import type { ModelCatalog, ModelCatalogEntry } from "../../shared/model-catalog";
 import type { ConfigureInput, PublicProviderSource, PublicSettings } from "../../shared/schemas";
 
+type ConfiguredModelSource = Pick<PublicProviderSource, "model" | "modelSelection">;
+
+/** Discovery is metadata, not permission to offer an unconfigured model. */
+export function configuredModelIds(source: ConfiguredModelSource): string[] {
+  const selection = source.modelSelection;
+  return [...new Set([
+    source.model,
+    ...(selection?.models ?? []),
+    ...(selection?.manual ?? []).map((entry) => entry.id),
+    ...Object.entries(selection?.overrides ?? {})
+      .filter(([, override]) => Object.entries(override).some(([key, value]) =>
+        key !== "provenance" && value != null && (!Array.isArray(value) || value.length > 0)))
+      .map(([id]) => id),
+  ].filter((id) => id.trim().length > 0))];
+}
+
+export function selectableModelIds(source: ConfiguredModelSource): string[] {
+  const selection = source.modelSelection;
+  if (selection?.mode === "none") return [];
+  const configured = configuredModelIds(source);
+  return selection?.mode === "selected"
+    ? configured.filter((id) => selection.models?.includes(id))
+    : configured;
+}
+
 /** The catalog is already merged by the host. Local settings also work before
  * it arrives (or for a selected custom ID hidden from discovery). Null inherits. */
 export function composerModelMetadata(

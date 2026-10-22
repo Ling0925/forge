@@ -20,10 +20,10 @@ it("keeps a picked model paired with the source it came from", async () => {
         import {WorkbenchProvider} from './src/renderer/state/workbench-context';
         import {defaultPublicSettings} from './src/shared/schemas';
         window.starts=[]; window.refreshes=[]; window.creates=[];
-        window.forge={listModels:async(id,refresh)=>{if(refresh)window.refreshes.push(id);return [id+'/one',id+'/two'];},listSessions:async()=>[],
+        window.forge={listModels:async(id,refresh)=>{if(refresh)window.refreshes.push(id);return [id+'/one',id+'/two',id+'/unconfigured'];},listSessions:async()=>[],
           getSettings:async()=>({...defaultPublicSettings,isConfigured:true,baseUrl:'https://a.test/v1',model:'a/one',activeSourceId:'a',
-            providerSources:[{id:'a',label:'Source A',baseUrl:'https://a.test/v1',model:'a/one',revision:1,hasApiKey:false},
-                             {id:'b',label:'Source B',baseUrl:'https://b.test/v1',model:'b/one',revision:1,hasApiKey:false}],
+            providerSources:[{id:'a',label:'Source A',baseUrl:'https://a.test/v1',model:'a/one',revision:1,hasApiKey:false,modelSelection:{mode:'all',manual:[{id:'a/two',contextWindowTokens:null}]}},
+                             {id:'b',label:'Source B',baseUrl:'https://b.test/v1',model:'b/one',revision:1,hasApiKey:false,modelSelection:{mode:'all',manual:[{id:'b/two',contextWindowTokens:null}]}}],
             routeGroups:[{id:'r1',label:'Route One',strategy:'order',members:[{sourceId:'a',model:'a/one',credentialId:'default',enabled:true}]}]}),
           createSession:async input=>{window.creates.push(input);return {id:'11111111-1111-4111-8111-111111111111',workspace:'/tmp',title:'t',model:input.model??'a/one',
             providerSourceId:input.providerSourceId,status:'idle',createdAt:'2026-01-01T00:00:00.000Z',updatedAt:'2026-01-01T00:00:00.000Z',
@@ -106,6 +106,7 @@ it("keeps a picked model paired with the source it came from", async () => {
       await page.locator(".composer-model-panel").textContent(),
     ).not.toMatch(/默认|default/);
     const sourceA = page.getByRole("group", { name: "Source A", exact: true });
+    expect(await page.locator(".model-catalog-option").filter({ hasText: "unconfigured" }).count()).toBe(0);
     await sourceA.getByRole("button", { name: /a\/two/ }).click();
     await expect.poll(() => summary.getAttribute("title")).toContain("a/two");
     await expect

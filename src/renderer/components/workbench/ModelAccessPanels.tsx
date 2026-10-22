@@ -24,6 +24,7 @@ import type {
 } from "../../../shared/model-catalog";
 import type { PublicProviderSource } from "../../../shared/schemas";
 import { useWorkbench } from "../../state/workbench-context";
+import { configuredModelIds } from "../../state/composer-model";
 import { Button } from "../primitives/Button";
 import { Field } from "../primitives/Field";
 import { Input } from "../primitives/Input";
@@ -290,7 +291,9 @@ export function modelSelectionObject(selection: EditableModelSelection) {
   const cleanedOverrides = cleanModelOverrides(selection.overrides);
   return {
     mode: selection.mode,
-    ...(selection.mode === "selected" ? { models: [...selection.models] } : {}),
+    // Keep explicit IDs when changing visibility; disabling a source is not
+    // deleting its model configuration.
+    ...(selection.mode === "selected" || selection.models.length ? { models: [...selection.models] } : {}),
     ...(selection.manual.length ? { manual: [...selection.manual] } : {}),
     ...(cleanedOverrides ? { overrides: cleanedOverrides } : {}),
   };
@@ -359,6 +362,7 @@ export function hasModelOverride(
       override.contextWindowTokens !== null) ||
     (override.maxOutputTokens !== undefined &&
       override.maxOutputTokens !== null) ||
+    override.apiMode !== undefined ||
     override.reasoningEffort !== undefined ||
     (override.reasoningEfforts !== undefined &&
       override.reasoningEfforts.length > 0) ||
@@ -403,6 +407,7 @@ export function updateModelOverride(
     readonly maxOutputTokens: number | null | undefined;
     readonly reasoningEffort: ModelReasoningEffort | undefined;
     readonly reasoningEfforts: readonly string[] | undefined;
+    readonly apiMode: ProviderProtocol | undefined;
   }>,
 ): EditableModelSelection {
   const current = selection.overrides?.[modelId] ?? {};
@@ -644,6 +649,7 @@ export function ModelParameterEditor({
       readonly maxOutputTokens: number | null | undefined;
       readonly reasoningEffort: ModelReasoningEffort | undefined;
       readonly reasoningEfforts: readonly string[] | undefined;
+      readonly apiMode: ProviderProtocol | undefined;
     }>,
   ) => void;
   readonly onReset: () => void;
@@ -739,6 +745,23 @@ export function ModelParameterEditor({
       )}
 
       <div className="model-param-rows">
+        <div className="model-param-row">
+          <div className="model-param-row-meta">
+            <span className="model-param-label">请求协议</span>
+            <span className="model-param-sub">
+              仅影响此模型；使用来源中对应协议的端点和匹配凭据
+            </span>
+          </div>
+          <div className="model-param-row-control">
+            <Select
+              aria-label={`模型 ${entry.id} 请求协议`}
+              value={override?.apiMode ?? ""}
+              disabled={disabled}
+              options={[{ value: "", label: "继承来源（别名优先继承实际模型）" }, ...protocolOptions]}
+              onChange={(event) => onChange({ apiMode: event.target.value === "" ? undefined : event.target.value as ProviderProtocol })}
+            />
+          </div>
+        </div>
         <div className="model-param-row">
           <div className="model-param-row-meta">
             <span className="model-param-label">默认思考等级</span>
@@ -1106,7 +1129,7 @@ export function ModelSelectionEditor({
   const addManual = () => {
     const id = manual.trim();
     if (!id) return;
-    if (!byId.has(id)) {
+    if (!selection.manual.some((entry) => entry.id === id)) {
       const entry: ModelCatalogEntry = { id, contextWindowTokens: null };
       onSelection({
         ...selection,
@@ -1160,7 +1183,7 @@ export function ModelSelectionEditor({
       >
         {(
           [
-            ["all", "全部"],
+            ["all", "已配置"],
             ["selected", "选择"],
             ["none", "不提供"],
           ] as const
@@ -1176,8 +1199,8 @@ export function ModelSelectionEditor({
                   ...selection,
                   mode: value,
                   models:
-                    value === "selected" && selection.models.length === 0
-                      ? entries.map((entry) => entry.id)
+                    value === "selected" && selection.mode !== "selected" && selection.models.length === 0
+                      ? configuredModelIds({ model, modelSelection: selection })
                       : selection.models,
                 })
               }
@@ -1468,7 +1491,6 @@ export function SourceCardModelPanel({
   readonly onResetDraft: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pinnedModels, setPinnedModels] = useState<readonly string[]>([]);
   const [query, setQuery] = useState("");
   const [manualInput, setManualInput] = useState("");
   const [visible, setVisible] = useState(24);
@@ -1481,36 +1503,13 @@ export function SourceCardModelPanel({
       byId.set(id, { id, contextWindowTokens: null });
     }
   }
-  for (const id of pinnedModels) {
-    if (!byId.has(id)) {
-      byId.set(id, { id, contextWindowTokens: null });
-    }
-  }
   const defaultModelId = model.trim();
   if (defaultModelId && !byId.has(defaultModelId)) {
     byId.set(defaultModelId, { id: defaultModelId, contextWindowTokens: null });
   }
 
-  const configuredIds: string[] = [];
-  const configuredSet = new Set<string>();
-  const pushConfigured = (id: string) => {
-    const trimmed = id.trim();
-    if (!trimmed || configuredSet.has(trimmed)) return;
-    configuredSet.add(trimmed);
-    configuredIds.push(trimmed);
-  };
-
-  if (defaultModelId) {
-    pushConfigured(defaultModelId);
-  }
-  for (const [id, override] of Object.entries(selection.overrides ?? {})) {
-    if (hasModelOverride(override)) {
-      pushConfigured(id);
-    }
-  }
-  for (const id of pinnedModels) {
-    pushConfigured(id);
-  }
+  const configuredIds = configuredModelIds({ model: defaultModelId, modelSelection: selection });
+  const configuredSet = new Set(configuredIds);
 
   const configuredEntries = configuredIds.map(
     (id) => byId.get(id) ?? { id, contextWindowTokens: null },
@@ -1529,38 +1528,32 @@ export function SourceCardModelPanel({
   const addModelToCards = (id: string) => {
     const trimmed = id.trim();
     if (!trimmed) return;
-    if (!pinnedModels.includes(trimmed)) {
-      setPinnedModels((old) => [...old, trimmed]);
-    }
+    // Persist even a model with all-default parameters. Do not snapshot upstream
+    // capability values into manual metadata, which would freeze future refreshes.
+    onSelection({
+      ...selection,
+      ...(selection.mode === "selected"
+        ? { models: [...new Set([...selection.models, trimmed])] }
+        : {}),
+      manual: selection.manual.some((entry) => entry.id === trimmed)
+        ? selection.manual
+        : [...selection.manual, { id: trimmed, contextWindowTokens: null }],
+    });
     setPickerOpen(false);
     setQuery("");
   };
 
   const addManualModel = () => {
-    const id = manualInput.trim();
-    if (!id) return;
-    if (!byId.has(id)) {
-      const entry: ModelCatalogEntry = { id, contextWindowTokens: null };
-      onSelection({
-        ...selection,
-        ...(selection.mode === "selected"
-          ? { models: [...selection.models, id] }
-          : {}),
-        manual: [...selection.manual, entry],
-      });
-    }
-    if (!pinnedModels.includes(id)) {
-      setPinnedModels((old) => [...old, id]);
-    }
+    addModelToCards(manualInput);
     setManualInput("");
-    setPickerOpen(false);
   };
 
   const removeModelCard = (id: string) => {
-    setPinnedModels((old) => old.filter((item) => item !== id));
-    if (hasModelOverride(selection.overrides?.[id])) {
-      onSelection(clearModelOverride(selection, id));
-    }
+    onSelection({
+      ...clearModelOverride(selection, id),
+      manual: selection.manual.filter((entry) => entry.id !== id),
+      models: selection.models.filter((modelId) => modelId !== id),
+    });
   };
 
   return (
@@ -1575,7 +1568,11 @@ export function SourceCardModelPanel({
             {configuredEntries.length} 个模型卡片
           </span>
           <span className="provider-configured-subtitle">
-            默认仅展示当前默认模型与已定制参数的模型
+            {selection.mode === "none"
+              ? "此来源设置为不提供模型；请在编辑连接中调整模型范围"
+              : selection.mode === "selected"
+                ? "选择器仅展示已保存且勾选的模型；添加后请保存模型配置"
+                : "选择器仅展示已保存的配置模型；添加后请保存模型配置"}
           </span>
         </div>
         <div className="provider-configured-actions">

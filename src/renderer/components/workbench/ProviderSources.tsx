@@ -338,6 +338,7 @@ export function ProviderSources({
           const result = await window.forge.modelAccess({
             type: "catalog",
             sourceId,
+            includeUnselected: true,
             ...(refresh ? { refresh: true } : {}),
           });
           if (result.type !== "catalog") throw new Error("目录响应类型错误。");

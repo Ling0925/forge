@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { composerEffortUpdate, composerModelMetadata, composerReasoningEffort } from "../../src/renderer/state/composer-model";
+import { composerEffortUpdate, composerModelMetadata, composerReasoningEffort, configuredModelIds, selectableModelIds } from "../../src/renderer/state/composer-model";
 import { configureInputSchema, publicProviderSourceSchema } from "../../src/shared/schemas";
 
 const source = publicProviderSourceSchema.parse({
@@ -10,10 +10,40 @@ const source = publicProviderSourceSchema.parse({
     manual: [{ id: "wire", contextWindowTokens: 128000, reasoningEffort: "max" }],
     overrides: {
       wire: { reasoningEffort: "high", contextWindowTokens: 256000, maxOutputTokens: 8192, reasoningEfforts: ["low", "high"] },
-      alias: { reasoningEffort: "default", maxOutputTokens: 16384 },
+      alias: { reasoningEffort: "default", maxOutputTokens: 16384, apiMode: "responses" },
     },
   },
   credentials: [{ id: "default", label: "Key", type: "api-key", enabled: true, status: "ready" }],
+});
+
+it("lists only explicit saved models, including defaults and all-default manual registrations", () => {
+  const configured = publicProviderSourceSchema.parse({ ...source, model: "default", modelSelection: {
+    mode: "all",
+    manual: [{ id: "manual", contextWindowTokens: null }, { id: "default", contextWindowTokens: null }],
+    overrides: {
+      tuned: { reasoningEffort: "default" },
+      protocolOnly: { apiMode: "anthropic" },
+      disabledCapability: { tools: false },
+      empty: {}, cleared: { contextWindowTokens: null, reasoningEfforts: [] },
+      provenanceOnly: { provenance: { contextWindowTokens: "user" } },
+    },
+  } });
+  expect(configuredModelIds(configured)).toEqual(["default", "manual", "tuned", "protocolOnly", "disabledCapability"]);
+  expect(selectableModelIds(configured)).toEqual(configuredModelIds(configured));
+  expect(selectableModelIds({ model: "legacy" })).toEqual(["legacy"]);
+  expect(selectableModelIds({ model: "" })).toEqual([]);
+});
+
+it("respects none and selected visibility without reinserting defaults, aliases or past choices", () => {
+  expect(configuredModelIds(source)).toEqual(["alias", "wire"]);
+  expect(selectableModelIds(source)).toEqual(["alias"]);
+  expect(selectableModelIds({ ...source, modelSelection: { mode: "selected", models: ["only-local", "only-local"] } })).toEqual(["only-local"]);
+  expect(selectableModelIds({ ...source, modelSelection: { mode: "selected", models: [] } })).toEqual([]);
+  expect(selectableModelIds({ ...source, modelSelection: { ...source.modelSelection!, mode: "none" } })).toEqual([]);
+  const disabled = { model: "", modelSelection: { mode: "none" as const, models: ["saved-before-disable"] } };
+  expect(configuredModelIds(disabled)).toEqual(["saved-before-disable"]);
+  expect(selectableModelIds(disabled)).toEqual([]);
+  expect(selectableModelIds({ ...disabled, modelSelection: { ...disabled.modelSelection, mode: "all" } })).toEqual(["saved-before-disable"]);
 });
 
 it("uses exact source/model metadata before discovery arrives, including alias inheritance", () => {
@@ -52,7 +82,7 @@ it("saves only the picked model's effort while preserving selection and other ov
     type: "save", expectedRevision: 3,
     source: { id: "a", model: "alias", modelAliases: source.modelAliases, modelSelection: {
       ...source.modelSelection,
-      overrides: { ...source.modelSelection!.overrides, alias: { reasoningEffort: "high", maxOutputTokens: 16384 } },
+      overrides: { ...source.modelSelection!.overrides, alias: { reasoningEffort: "high", maxOutputTokens: 16384, apiMode: "responses" } },
     } },
   });
   if (input.source?.type !== "save") throw new Error("Missing source save");

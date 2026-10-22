@@ -23,7 +23,7 @@ import {
 import { parseDrafts } from "../../state/drafts";
 import type { ModelCatalog } from "../../../shared/model-catalog";
 import { modelCatalogCache, modelCatalogKey } from "../../state/model-catalog-cache";
-import { composerEffortUpdate, composerModelMetadata, composerReasoningEffort } from "../../state/composer-model";
+import { composerEffortUpdate, composerModelMetadata, composerReasoningEffort, selectableModelIds } from "../../state/composer-model";
 import { useWorkbench } from "../../state/workbench-context";
 import { hostCapabilities } from "../../web-host";
 import { Button } from "../primitives/Button";
@@ -260,27 +260,18 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
   }, [catalogSignature, !!state.settings]);
   const sourceCatalog = catalogs[modelSource] ?? modelCatalogCache.read(modelSource) ?? [];
   const selectedMetadata = composerModelMetadata(model, providerSource, sourceCatalog);
-  const allKnownModels = [...new Set([model, ...sourceCatalog.map((entry) => entry.id)].filter(Boolean))];
-  // Custom IDs stay allowed, but flag one this source never advertised.
-  const modelUnlisted =
-    Boolean(model && providerSource) &&
-    sourceCatalog.length > 0 &&
-    !sourceCatalog.some((entry) => entry.id === model) &&
-    model !== providerSource?.model;
-  const modelGroups = sourceProfiles.length ? [
-    ...sourceProfiles.map((source) => ({
-      sourceId: source.id,
-      label: source.label,
-      models: [...new Set([
-        ...(source.id === providerSourceId && model ? [model] : []),
-        source.model,
-        ...(catalogs[modelCatalogKey(source)] ?? modelCatalogCache.read(modelCatalogKey(source)) ?? []).map((entry) => entry.id),
-      ].filter(Boolean))],
-    })),
-    ...(!providerSource && providerSourceId
-      ? [{ sourceId: providerSourceId, label: `${providerSourceId}（来源已删除）`, models: model ? [model] : [] }]
-      : []),
-  ] : undefined;
+  // Keep discovery for context/effort metadata, but offer only saved models.
+  // A pinned historical/custom ID remains visible as the current selection,
+  // never as a newly selectable option merely because it was used before.
+  const configuredModels = providerSource
+    ? selectableModelIds(providerSource)
+    : providerSourceId ? [] : [state.settings?.model ?? ""].filter(Boolean);
+  const modelUnlisted = !selectedRoute && !!model && !configuredModels.includes(model);
+  const modelGroups = sourceProfiles.length ? sourceProfiles.map((source) => ({
+    sourceId: source.id,
+    label: source.label,
+    models: selectableModelIds(source),
+  })).filter((group) => group.models.length > 0) : undefined;
   const [savingEffort, setSavingEffort] = useState(false);
   const effortSaving = useRef(false);
   const changeEffort = async (value: string) => {
@@ -1182,7 +1173,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
             )}
             {modelUnlisted && (
               <span className="wb-muted composer-plan-note">
-                当前模型 {model} 不在来源 {providerSource?.label} 的目录中，调用可能失败。
+                当前模型 {model} 未在{providerSource?.label ? `来源 ${providerSource.label} 的` : ""}设置中启用，请先添加配置或选择已配置模型。
               </span>
             )}
             {error && (
@@ -1540,7 +1531,7 @@ export function Composer({ isNew = false }: { readonly isNew?: boolean }) {
           <div className="composer-toolbar-end">
             <ModelPicker
               value={model}
-              models={allKnownModels}
+              models={configuredModels}
               hideSearch={true}
               sourceLabel={selectedRoute ? undefined : providerSource?.label}
               routes={routes.map((route) => ({ id: route.id, label: route.label }))}

@@ -38,7 +38,7 @@ export function ModelCatalog({
   const id = useId();
   const listRef = useRef<HTMLDivElement>(null);
   const needle = query.trim();
-  const catalogs = groups ?? [{ sourceId: undefined, label: "", models: [value, ...models] }];
+  const catalogs = groups ?? [{ sourceId: undefined, label: "", models: hideSearch ? models : [value, ...models] }];
   const filtered = catalogs.map((group) => ({
     ...group,
     models: [...new Set(group.models.filter(Boolean))].filter((model) =>
@@ -104,7 +104,7 @@ export function ModelCatalog({
         </div>
       ) : (
         <div className="model-catalog-header">
-          <span>可用模型</span>
+          <span>已配置模型</span>
           <Button
             size="sm"
             variant="ghost"
@@ -162,7 +162,7 @@ export function ModelCatalog({
         {loading
           ? "正在读取模型目录…"
           : count
-            ? `${count} 个可用模型`
+            ? `${count} 个${hideSearch ? "已配置" : "可用"}模型`
             : "暂无可用模型，请在设置中配置"}
       </output>
     </div>
