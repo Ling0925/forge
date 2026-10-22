@@ -1,5 +1,6 @@
 import {
   Archive,
+  ArrowClockwise,
   CaretRight,
   ChartBar,
   Folder,
@@ -38,10 +39,12 @@ export function Sidebar() {
     setMobileSidebar,
     openSettings,
     openUsageDashboard,
+    createSession,
   } = useWorkbench();
 
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [creatingWorkspace, setCreatingWorkspace] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<
     Readonly<Record<string, boolean>>
   >({});
@@ -81,6 +84,43 @@ export function Sidebar() {
       ...previous,
       [workspace]: currentEffectiveLimit + PAGE_SIZE,
     }));
+  };
+
+  const handleCreateSessionInWorkspace = async (
+    workspace: string,
+    e: React.MouseEvent,
+  ) => {
+    e.stopPropagation();
+    if (creatingWorkspace) return;
+    setCreatingWorkspace(workspace);
+    try {
+      const allSessionsInWorkspace = state.sessions.filter(
+        (s) => s.workspace === workspace,
+      );
+      const latest = allSessionsInWorkspace[0];
+      const candidateModel =
+        latest?.model || state.activeSnapshot?.model || state.settings?.model;
+      const snapshot = await createSession({
+        workspace,
+        ...(candidateModel ? { model: candidateModel } : {}),
+      });
+      if (snapshot) {
+        setCollapsedFolders((previous) => ({
+          ...previous,
+          [workspace]: false,
+        }));
+        setMobileSidebar(false);
+        requestAnimationFrame(() => {
+          const el =
+            document.getElementById(`prompt-${snapshot.id}`) ??
+            document.getElementById("new-prompt") ??
+            document.querySelector<HTMLTextAreaElement>(".composer-input");
+          el?.focus();
+        });
+      }
+    } finally {
+      setCreatingWorkspace(null);
+    }
   };
 
   return (
@@ -170,42 +210,56 @@ export function Sidebar() {
             const hasMore = visibleSessions.length < group.sessions.length;
             return (
               <section className="session-folder" key={group.workspace}>
-                <button
-                  type="button"
-                  className={`session-folder-header${isCollapsed ? " is-collapsed" : ""}`}
-                  onClick={() => toggleFolder(group.workspace)}
-                  aria-expanded={!isCollapsed}
-                  aria-controls={bodyId}
-                  title={group.workspace}
-                >
-                  <CaretRight
-                    size={11}
-                    weight="bold"
-                    className="session-folder-caret"
-                    aria-hidden="true"
-                  />
-                  {isCollapsed ? (
-                    <Folder
-                      size={13}
-                      weight="regular"
-                      className="session-folder-icon"
+                <div className="session-folder-header-row">
+                  <button
+                    type="button"
+                    className={`session-folder-header${isCollapsed ? " is-collapsed" : ""}`}
+                    onClick={() => toggleFolder(group.workspace)}
+                    aria-expanded={!isCollapsed}
+                    aria-controls={bodyId}
+                    title={group.workspace}
+                  >
+                    <CaretRight
+                      size={11}
+                      weight="bold"
+                      className="session-folder-caret"
                       aria-hidden="true"
                     />
-                  ) : (
-                    <FolderOpen
-                      size={13}
-                      weight="regular"
-                      className="session-folder-icon"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="session-folder-name">
-                    {workspaceName(group.workspace)}
-                  </span>
-                  <span className="session-folder-count">
-                    {group.sessions.length}
-                  </span>
-                </button>
+                    {isCollapsed ? (
+                      <Folder
+                        size={13}
+                        weight="regular"
+                        className="session-folder-icon"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <FolderOpen
+                        size={13}
+                        weight="regular"
+                        className="session-folder-icon"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="session-folder-name">
+                      {workspaceName(group.workspace)}
+                    </span>
+                    <span className="session-folder-count">
+                      {group.sessions.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="session-folder-create-btn"
+                    onClick={(e) =>
+                      handleCreateSessionInWorkspace(group.workspace, e)
+                    }
+                    disabled={creatingWorkspace === group.workspace}
+                    title={`在 ${workspaceName(group.workspace)} 中新建会话`}
+                    aria-label={`在 ${workspaceName(group.workspace)} 中新建会话`}
+                  >
+                    <Plus size={12} weight="bold" />
+                  </button>
+                </div>
                 <div
                   className={`session-folder-collapse${isCollapsed ? " is-collapsed" : ""}`}
                   id={bodyId}
@@ -265,6 +319,15 @@ export function Sidebar() {
           </button>
         </div>
         <div className="wb-row sidebar-footer-status">
+          <button
+            type="button"
+            className="sidebar-refresh-btn"
+            onClick={() => window.location.reload()}
+            title="刷新界面"
+            aria-label="刷新界面"
+          >
+            <ArrowClockwise size={14} />
+          </button>
           {!state.settings?.isConfigured && (
             <span className="wb-status-warning" title="尚未配置 API 端点或模型">
               <WarningCircle size={12} weight="bold" />

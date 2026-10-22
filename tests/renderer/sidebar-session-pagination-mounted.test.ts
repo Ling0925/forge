@@ -55,6 +55,7 @@ it("limits sessions per workspace to 10 by default, expands by 10 on see more, a
                 setMobileSidebar: () => {},
                 selectSession: (id) => { window.activeSessionId = id; window.render(); },
                 refreshActiveSession: () => {},
+                createSession: (input) => (window.createSession ? window.createSession(input) : Promise.resolve({ id: "mock-new-id" })),
               });
             `,
           }));
@@ -165,6 +166,23 @@ it("limits sessions per workspace to 10 by default, expands by 10 on see more, a
     await headerA.click();
     expect(await collapseEl.getAttribute("class")).not.toContain("is-collapsed");
     expect(await headerA.getAttribute("aria-expanded")).toBe("true");
+
+    // 7. Test create session button in folder header
+    const createBtnB = folderB.locator(".session-folder-create-btn");
+    expect(await createBtnB.count()).toBe(1);
+    expect(await createBtnB.getAttribute("title")).toBe("在 project-b 中新建会话");
+    let createdWorkspace: string | null = null;
+    await page.exposeFunction("trackCreateSession", (input: { workspace: string }) => {
+      createdWorkspace = input.workspace;
+    });
+    await page.evaluate(() => {
+      window.createSession = async (input: { workspace: string }) => {
+        await (window as unknown as { trackCreateSession: (val: unknown) => Promise<void> }).trackCreateSession(input);
+        return { id: "new-session-b", workspace: input.workspace };
+      };
+    });
+    await createBtnB.click();
+    expect(createdWorkspace).toBe("/tmp/project-b");
   } finally {
     await browser.close();
   }

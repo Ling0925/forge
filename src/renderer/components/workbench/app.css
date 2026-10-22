@@ -568,7 +568,8 @@
   .session-item-main {
     min-height: 38px;
   }
-  .session-folder-header {
+  .session-folder-header,
+  .session-folder-header-row {
     min-height: 38px;
   }
   .wb-app .workbench-conversation-scroll {
@@ -1661,7 +1662,8 @@
   .session-item-main {
     min-height: var(--icon-size-touch);
   }
-  .session-folder-header {
+  .session-folder-header,
+  .session-folder-header-row {
     min-height: var(--icon-size-touch);
   }
 }
