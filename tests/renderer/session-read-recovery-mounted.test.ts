@@ -32,7 +32,7 @@ beforeAll(async () => {
           createdAt:'2026-10-01T00:00:00.000Z',updatedAt:'2026-10-01T00:00:01.000Z',
           messages:[{role:'user',content:'persisted transcript'}],events:[],changes:[]}));
         let receive=()=>{};
-        const fixture=window.fixture={snapshots,scenarios:{},reads:[],writes:[],alerts:[]};
+        const fixture=window.fixture={snapshots,scenarios:{},reads:[],writes:[],alerts:[],emit:event=>receive(event)};
         window.forge=createTransportBridge({
           onEvent:callback=>{receive=callback;},
           request:async input=>{
@@ -248,4 +248,98 @@ it("loads only a tail page, coalesces history requests and ignores stale history
   await page.getByRole("button", { name: "再次读取" }).click();
   await expect.poll(readCount).toBe(6);
   expect(await windowState()).toEqual({ offset: 2, count: 4, loading: false, error: null });
+});
+
+async function selectExternalSession(status = "running") {
+  await page.clock.install();
+  await page.evaluate(status => { Reflect.get(window, "fixture").snapshots[0].status = status; }, status);
+  await page.getByRole("button", { name: "选择 A" }).click();
+  await title("Session A");
+}
+
+it.each(["running", "awaiting_approval"])("syncs an external %s session until completion without replaying effects", async status => {
+  await selectExternalSession(status);
+  await page.evaluate(() => {
+    const snapshot = Reflect.get(window, "fixture").snapshots[0];
+    snapshot.title = "CLI advanced";
+    snapshot.updatedAt = "2026-10-01T00:00:02.000Z";
+    snapshot.messages.push({ role: "assistant", content: "new CLI output" });
+  });
+  await page.clock.runFor(2100);
+  await title("CLI advanced");
+  expect(await readCount()).toBe(2);
+  expect(await page.evaluate(() => Reflect.get(window, "controller").state.activeSnapshot.messages.at(-1).content)).toBe("new CLI output");
+  await page.evaluate(() => {
+    const snapshot = Reflect.get(window, "fixture").snapshots[0];
+    snapshot.status = "completed";
+    snapshot.updatedAt = "2026-10-01T00:00:03.000Z";
+  });
+  await page.clock.runFor(2100);
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, "controller").state.activeSnapshot.status)).toBe("completed");
+  expect(await readCount()).toBe(3);
+  await page.clock.runFor(6000);
+  expect(await readCount()).toBe(3);
+  expect(await page.evaluate(() => Reflect.get(window, "fixture").writes)).toEqual([]);
+});
+
+it("coalesces slow external reads and stops observing when selecting another session", async () => {
+  await selectExternalSession();
+  await script(first, ["hold", "ok"]);
+  await page.clock.runFor(2100);
+  await page.waitForFunction(() => Reflect.get(window, "fixture").release);
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event("visibilitychange"));
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.runFor(6000);
+  expect(await readCount()).toBe(2);
+  await page.getByRole("button", { name: "选择 B" }).click();
+  await title("Session B");
+  await page.evaluate(() => Reflect.get(window, "fixture").release());
+  await page.clock.runFor(6000);
+  expect(await readCount()).toBe(3);
+  await title("Session B");
+});
+
+it.each(["corrupt", "not_found", "network", "conflict"])("stops external observation after a %s read failure", async mode => {
+  await selectExternalSession();
+  await script(first, [mode]);
+  await page.clock.runFor(2500);
+  await page.getByRole("alert").waitFor();
+  const count = mode === "conflict" ? 4 : 2;
+  expect(await readCount()).toBe(count);
+  await page.clock.runFor(10000);
+  expect(await readCount()).toBe(count);
+  expect(await page.getByTestId("transcript").innerText()).toBe("persisted transcript");
+  expect(await page.evaluate(() => Reflect.get(window, "fixture").writes)).toEqual([]);
+});
+
+it("pauses external observation in hidden tabs and cleans it up on unmount", async () => {
+  await selectExternalSession();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.runFor(6000);
+  expect(await readCount()).toBe(1);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(readCount).toBe(2);
+  await page.evaluate(() => Reflect.get(window, "fixture").unmount());
+  await page.clock.runFor(6000);
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  expect(await readCount()).toBe(2);
+});
+
+it("leaves host-owned runs on their live event stream without additional reads", async () => {
+  await selectExternalSession();
+  await page.evaluate(id => Reflect.get(window, "fixture").emit({
+    runId: "33333333-3333-4333-8333-333333333333",
+    event: { type: "state_changed", sessionId: id, status: "running", timestamp: "2026-10-01T00:00:02.000Z" },
+  }), first);
+  await expect.poll(() => page.evaluate(id => Boolean(Reflect.get(window, "controller").state.activeRuns[id]?.runId), first)).toBe(true);
+  await page.clock.runFor(6000);
+  expect(await readCount()).toBe(1);
 });

@@ -274,6 +274,50 @@ function useController() {
       for (const timer of titleRefreshes.values()) clearTimeout(timer);
     };
   }, [dispatch, fail, loadSettings, loadSessions, refreshSession, updateQueue]);
+  // CLI/other-process writes do not reach this host's event stream. Observe only
+  // the visible selected active snapshot; never take ownership or replay a run.
+  const selectedId = state.activeSessionId;
+  const selectedRun = selectedId ? state.activeRuns[selectedId] : undefined;
+  const externalSessionId = selectedId && !state.isNewSessionOpen &&
+    state.activeSnapshot?.id === selectedId &&
+    ["running", "awaiting_approval"].includes(state.activeSnapshot.status) &&
+    !["running", "awaiting_approval"].includes(selectedRun?.status ?? "") &&
+    state.alertReadSessionId !== selectedId ? selectedId : null;
+  useEffect(() => {
+    if (!externalSessionId) return;
+    let disposed = false;
+    let pending = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (!disposed && document.visibilityState === "visible")
+        timer = setTimeout(() => void refresh(), 2000);
+    };
+    const refresh = async () => {
+      clearTimeout(timer);
+      if (disposed || pending || document.visibilityState !== "visible" ||
+          current.current.activeSessionId !== externalSessionId) return;
+      pending = true;
+      try {
+        // Reuse an in-flight read without invalidating it. A slow read must not
+        // accumulate follow-ups, and read errors retain the normal retry bound.
+        await refreshSession(externalSessionId, false);
+      } finally {
+        pending = false;
+        schedule();
+      }
+    };
+    const onVisibility = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") void refresh();
+    };
+    schedule();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [externalSessionId, refreshSession]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
