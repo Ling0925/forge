@@ -7,8 +7,6 @@ import {
   GitBranch,
   GlobeHemisphereWest,
   Lightning,
-  Pause,
-  Play,
   Sparkle,
 } from "@phosphor-icons/react";
 import {
@@ -787,19 +785,31 @@ export function UsageOverview({
   readonly workspaceFilter?: string | undefined;
   readonly onSelectSession: (sessionId: SessionId) => void;
 }) {
+  // Ignore high-frequency streaming text/reasoning deltas on activeRuns:
+  // only recompute topology when session IDs, statuses, or pending approvals actually change.
+  const activeRunsKey = Object.entries(activeRuns)
+    .map(
+      ([sid, run]) =>
+        `${sid}:${run?.pendingApproval ? "awaiting_approval" : (run?.status ?? "")}`,
+    )
+    .sort()
+    .join("|");
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by activeRunsKey to avoid rebuilding topology on every streaming token delta
+  const stableActiveRuns = useMemo(() => activeRuns, [activeRunsKey]);
+
   const topology = useMemo(
     () =>
       buildEnergyNetworkTopology(
         data,
         settings,
         sessions,
-        activeRuns,
+        stableActiveRuns,
         workspaceFilter,
       ),
-    [data, settings, sessions, activeRuns, workspaceFilter],
+    [data, settings, sessions, stableActiveRuns, workspaceFilter],
   );
 
-  const [autoRotate, setAutoRotate] = useState(true);
   const [selectedConduitId, setSelectedConduitId] = useState<string | null>(
     null,
   );
@@ -822,6 +832,7 @@ export function UsageOverview({
       : Math.min(100, Math.round((transferSpeed / 4.0) * 100));
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasSizeRef = useRef({ width: 0, height: 0 });
   const cameraRef = useRef({
     yaw: 0.35,
     pitch: 0.38,
@@ -830,7 +841,51 @@ export function UsageOverview({
     lastY: 0,
     energyPhase: 0,
     corePhase: 0,
+    lastFrameTime: 0,
   });
+
+  // Lookup maps & primary label set memoized once per topology change
+  const topologyLookups = useMemo(() => {
+    const modelById = new Map<string, ModelNode3D>();
+    for (const m of topology.models) {
+      modelById.set(m.id, m);
+    }
+    const providerById = new Map<string, ProviderNode3D>();
+    for (const p of topology.providers) {
+      providerById.set(p.id, p);
+    }
+    const primaryModelIds = new Set<string>();
+    for (const p of topology.providers) {
+      const childModels = topology.models.filter((m) => m.providerId === p.id);
+      const topModel = [...childModels].sort(
+        (a, b) =>
+          b.activeSessionCount - a.activeSessionCount ||
+          b.totalTokens - a.totalTokens,
+      )[0];
+      if (topModel) primaryModelIds.add(topModel.id);
+    }
+    return { modelById, providerById, primaryModelIds };
+  }, [topology]);
+
+  // Keep latest scene inputs in a ref so the RAF loop never restarts or stacks on React re-renders
+  const sceneStateRef = useRef({
+    topology,
+    topologyLookups,
+    activeConduits,
+    activeMainCount,
+    activeSubagentCount,
+    transferSpeed,
+    selectedConduitId,
+  });
+  sceneStateRef.current = {
+    topology,
+    topologyLookups,
+    activeConduits,
+    activeMainCount,
+    activeSubagentCount,
+    transferSpeed,
+    selectedConduitId,
+  };
 
   // Hit targets populated on each frame for pointer hover/click
   const hitNodesRef = useRef<
@@ -843,596 +898,603 @@ export function UsageOverview({
     }>
   >([]);
 
-  const resetCamera = useCallback(() => {
-    cameraRef.current.yaw = 0.35;
-    cameraRef.current.pitch = 0.38;
-  }, []);
-
-  useEffect(() => {
+  const drawScene = useCallback((now: number, advancePhase: boolean) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const reducedMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const {
+      topology: curTopology,
+      topologyLookups: lookups,
+      activeConduits: curConduits,
+      activeMainCount: curMainCount,
+      activeSubagentCount: curSubCount,
+      transferSpeed: curSpeed,
+      selectedConduitId: curSelectedId,
+    } = sceneStateRef.current;
 
-    let animationFrameId = 0;
-    let lastTime = performance.now();
+    const cam = cameraRef.current;
+    const dt =
+      cam.lastFrameTime > 0
+        ? Math.max(0, Math.min((now - cam.lastFrameTime) / 1000, 0.05))
+        : 0;
+    cam.lastFrameTime = now;
 
-    const modelById = new Map<string, ModelNode3D>();
-    for (const m of topology.models) {
-      modelById.set(m.id, m);
-    }
-    const providerById = new Map<string, ProviderNode3D>();
-    for (const p of topology.providers) {
-      providerById.set(p.id, p);
-    }
-
-    // Identify primary model per provider so dense catalogs don't overlap all labels on canvas
-    const primaryModelIds = new Set<string>();
-    for (const p of topology.providers) {
-      const childModels = topology.models.filter((m) => m.providerId === p.id);
-      const topModel = [...childModels].sort(
-        (a, b) =>
-          b.activeSessionCount - a.activeSessionCount ||
-          b.totalTokens - a.totalTokens,
-      )[0];
-      if (topModel) primaryModelIds.add(topModel.id);
+    if (advancePhase && curConduits.length > 0) {
+      // Only energy particles flow along conduits; peripheral nodes NEVER auto-rotate
+      const flowRate = 0.22 * Math.min(curSpeed, 3.2);
+      cam.energyPhase = (cam.energyPhase + dt * flowRate) % 1000;
+      cam.corePhase = (cam.corePhase + dt * 1.2) % (Math.PI * 20);
     }
 
-    const renderFrame = (now: number) => {
-      const dt = Math.min((now - lastTime) / 1000, 0.1);
-      lastTime = now;
+    const cssWidth =
+      canvasSizeRef.current.width ||
+      canvas.clientWidth ||
+      canvas.getBoundingClientRect().width;
+    const cssHeight =
+      canvasSizeRef.current.height ||
+      canvas.clientHeight ||
+      canvas.getBoundingClientRect().height;
+    const width = Math.max(cssWidth, 300);
+    const height = Math.max(cssHeight, 360);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-      const rect = canvas.getBoundingClientRect();
-      const width = Math.max(rect.width, 300);
-      const height = Math.max(rect.height, 360);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetW = Math.round(width * dpr);
+    const targetH = Math.round(height * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
 
-      if (
-        canvas.width !== Math.round(width * dpr) ||
-        canvas.height !== Math.round(height * dpr)
-      ) {
-        canvas.width = Math.round(width * dpr);
-        canvas.height = Math.round(height * dpr);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    const isDark =
+      document.documentElement.getAttribute("data-theme") === "dark" ||
+      document.documentElement.dataset.theme === "dark";
+
+    // Palette aligned with DESIGN.md Warm Light-First & Charcoal Dark tokens
+    const bgCenter = isDark ? "#20221f" : "#f7f6f1";
+    const bgEdge = isDark ? "#151614" : "#efeee8";
+    const orbitRingStroke = isDark
+      ? "rgba(170, 167, 159, 0.16)"
+      : "rgba(104, 102, 95, 0.16)";
+    const activeTetherStroke = isDark
+      ? "rgba(220, 148, 119, 0.55)"
+      : "rgba(165, 79, 53, 0.48)";
+    const textPrimary = isDark ? "#eeede8" : "#292824";
+    const textSecondary = isDark ? "#aaa79f" : "#68665f";
+    const forgeCoreMain = isDark ? "#dc9477" : "#a54f35";
+    const forgeCoreGlow = isDark
+      ? "rgba(220, 148, 119, 0.34)"
+      : "rgba(165, 79, 53, 0.24)";
+    const providerFill = isDark ? "#2c332a" : "#e7ece3";
+    const providerStroke = isDark ? "#8fad82" : "#55684d";
+    const modelFill = isDark ? "#25292e" : "#e8eef5";
+    const modelStroke = isDark ? "#6ca6d9" : "#3b6998";
+    const mainConduitColor = isDark ? "#dc9477" : "#a54f35";
+    const subagentConduitColor = isDark ? "#56b881" : "#226d40";
+    const fontSans =
+      '"Geist", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif';
+    const fontMono = '"Geist Mono", "SFMono-Regular", monospace';
+
+    // Background radial gradient
+    const bgGrad = ctx.createRadialGradient(
+      width * 0.5,
+      height * 0.5,
+      20,
+      width * 0.5,
+      height * 0.5,
+      Math.max(width, height) * 0.65,
+    );
+    bgGrad.addColorStop(0, bgCenter);
+    bgGrad.addColorStop(1, bgEdge);
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    const cx = width * 0.5;
+    const cy = height * 0.52;
+    const fov = 640;
+    const minDim = Math.min(width, height);
+    const sceneScale = Math.max(0.54, Math.min(1.08, minDim / 610));
+
+    // Draw 3D orbital reference rings (Provider inner orbit & Model outer orbit)
+    for (const orbitRadius of [150, 256]) {
+      ctx.beginPath();
+      const segments = 64;
+      for (let i = 0; i <= segments; i++) {
+        const theta = (i / segments) * Math.PI * 2;
+        const pt3d: Vec3 = [
+          Math.cos(theta) * orbitRadius,
+          0,
+          Math.sin(theta) * orbitRadius,
+        ];
+        const rotated = transformPoint(pt3d, cam.yaw, cam.pitch);
+        const proj = projectPoint(rotated, cx, cy, fov, sceneScale);
+        if (i === 0) ctx.moveTo(proj.x, proj.y);
+        else ctx.lineTo(proj.x, proj.y);
       }
+      ctx.strokeStyle = orbitRingStroke;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
-      ctx.save();
-      ctx.scale(dpr, dpr);
+    // Draw Provider -> Model feeder links ONLY for models with active sessions
+    for (const mNode of curTopology.models) {
+      if (mNode.activeSessionCount <= 0) continue;
+      const pNode = lookups.providerById.get(mNode.providerId);
+      if (!pNode) continue;
+      const pRot = transformPoint(pNode.pos, cam.yaw, cam.pitch);
+      const mRot = transformPoint(mNode.pos, cam.yaw, cam.pitch);
+      const pProj = projectPoint(pRot, cx, cy, fov, sceneScale);
+      const mProj = projectPoint(mRot, cx, cy, fov, sceneScale);
 
-      const isDark =
-        document.documentElement.getAttribute("data-theme") === "dark" ||
-        document.documentElement.dataset.theme === "dark";
+      ctx.beginPath();
+      ctx.moveTo(pProj.x, pProj.y);
+      ctx.lineTo(mProj.x, mProj.y);
+      ctx.strokeStyle = activeTetherStroke;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([3, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
 
-      // Palette aligned with DESIGN.md Warm Light-First & Charcoal Dark tokens
-      const bgCenter = isDark ? "#20221f" : "#f7f6f1";
-      const bgEdge = isDark ? "#151614" : "#efeee8";
-      const orbitRingStroke = isDark
-        ? "rgba(170, 167, 159, 0.16)"
-        : "rgba(104, 102, 95, 0.16)";
-      const activeTetherStroke = isDark
-        ? "rgba(220, 148, 119, 0.55)"
-        : "rgba(165, 79, 53, 0.48)";
-      const textPrimary = isDark ? "#eeede8" : "#292824";
-      const textSecondary = isDark ? "#aaa79f" : "#68665f";
-      const forgeCoreMain = isDark ? "#dc9477" : "#a54f35";
-      const forgeCoreGlow = isDark
-        ? "rgba(220, 148, 119, 0.34)"
-        : "rgba(165, 79, 53, 0.24)";
-      const providerFill = isDark ? "#2c332a" : "#e7ece3";
-      const providerStroke = isDark ? "#8fad82" : "#55684d";
-      const modelFill = isDark ? "#25292e" : "#e8eef5";
-      const modelStroke = isDark ? "#6ca6d9" : "#3b6998";
-      const mainConduitColor = isDark ? "#dc9477" : "#a54f35";
-      const subagentConduitColor = isDark ? "#56b881" : "#226d40";
+      const feederT = (cam.energyPhase * 1.3) % 1;
+      const fx = pProj.x + (mProj.x - pProj.x) * feederT;
+      const fy = pProj.y + (mProj.y - pProj.y) * feederT;
+      ctx.beginPath();
+      ctx.arc(fx, fy, 2.5 * mProj.scale, 0, Math.PI * 2);
+      ctx.fillStyle = providerStroke;
+      ctx.fill();
+    }
 
-      // Background radial gradient
-      const bgGrad = ctx.createRadialGradient(
-        width * 0.5,
-        height * 0.5,
-        20,
-        width * 0.5,
-        height * 0.5,
-        Math.max(width, height) * 0.65,
+    // Draw Session Energy Conduits (Model -> Forge Core (0,0,0))
+    const forgeCenter3D: Vec3 = [0, 0, 0];
+    const forgeCenterProj = projectPoint(
+      forgeCenter3D,
+      cx,
+      cy,
+      fov,
+      sceneScale,
+    );
+
+    curConduits.forEach((conduit, cIdx) => {
+      const mNode = lookups.modelById.get(conduit.modelNodeId);
+      if (!mNode) return;
+
+      const cp3D = conduitControlPoint(
+        mNode.pos,
+        conduit.siblingIndex,
+        conduit.siblingCount,
+        cIdx,
       );
-      bgGrad.addColorStop(0, bgCenter);
-      bgGrad.addColorStop(1, bgEdge);
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, width, height);
 
-      // Update camera & animation phases
-      const cam = cameraRef.current;
-      if (!reducedMotion) {
-        if (autoRotate && !cam.isDragging) {
-          const baseSpin = 0.16 + Math.min(transferSpeed * 0.04, 0.22);
-          cam.yaw += dt * baseSpin;
-        }
-        // Energy flow speed scales directly with session count / transferSpeed
-        const flowRate =
-          activeConduits.length > 0 ? 0.28 * transferSpeed : 0.08;
-        cam.energyPhase = (cam.energyPhase + dt * flowRate) % 1000;
-        cam.corePhase =
-          (cam.corePhase + dt * (0.6 + transferSpeed * 0.55)) % (Math.PI * 20);
+      const isSelected = curSelectedId === conduit.id;
+      const baseColor = conduit.isSubagent
+        ? subagentConduitColor
+        : mainConduitColor;
+
+      // Sample 3D curve points from Model -> Forge
+      const steps = 24;
+      ctx.beginPath();
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const pt3D = quadraticBezier3D(mNode.pos, cp3D, forgeCenter3D, t);
+        const rot = transformPoint(pt3D, cam.yaw, cam.pitch);
+        const proj = projectPoint(rot, cx, cy, fov, sceneScale);
+        if (s === 0) ctx.moveTo(proj.x, proj.y);
+        else ctx.lineTo(proj.x, proj.y);
       }
 
-      const cx = width * 0.5;
-      const cy = height * 0.52;
-      const fov = 640;
-      const minDim = Math.min(width, height);
-      const sceneScale = Math.max(0.54, Math.min(1.08, minDim / 610));
+      ctx.strokeStyle = baseColor;
+      ctx.globalAlpha = isSelected ? 0.95 : conduit.isLiveRunning ? 0.78 : 0.52;
+      ctx.lineWidth = isSelected ? 2.8 : conduit.isLiveRunning ? 2.1 : 1.5;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
 
-      // Draw 3D orbital reference rings (Provider inner orbit & Model outer orbit)
-      for (const orbitRadius of [150, 256]) {
+      // Energy particles traveling from Model (t=0) -> Forge Core (t=1)
+      const particleCount = Math.min(
+        5,
+        2 +
+          Math.floor(curConduits.length / 2) +
+          (conduit.isLiveRunning ? 1 : 0),
+      );
+      for (let p = 0; p < particleCount; p++) {
+        const rawT =
+          (cam.energyPhase + conduit.phaseOffset + p / particleCount) % 1;
+        const t = rawT < 0 ? rawT + 1 : rawT;
+        const head3D = quadraticBezier3D(mNode.pos, cp3D, forgeCenter3D, t);
+        const headRot = transformPoint(head3D, cam.yaw, cam.pitch);
+        const headProj = projectPoint(headRot, cx, cy, fov, sceneScale);
+
+        // Comet tail
+        const tailT = Math.max(0, t - 0.065);
+        const tail3D = quadraticBezier3D(mNode.pos, cp3D, forgeCenter3D, tailT);
+        const tailRot = transformPoint(tail3D, cam.yaw, cam.pitch);
+        const tailProj = projectPoint(tailRot, cx, cy, fov, sceneScale);
+
+        const grad = ctx.createLinearGradient(
+          tailProj.x,
+          tailProj.y,
+          headProj.x,
+          headProj.y,
+        );
+        grad.addColorStop(0, "rgba(0,0,0,0)");
+        grad.addColorStop(1, baseColor);
         ctx.beginPath();
-        const segments = 72;
-        for (let i = 0; i <= segments; i++) {
-          const theta = (i / segments) * Math.PI * 2;
-          const pt3d: Vec3 = [
-            Math.cos(theta) * orbitRadius,
-            0,
-            Math.sin(theta) * orbitRadius,
-          ];
-          const rotated = transformPoint(pt3d, cam.yaw, cam.pitch);
-          const proj = projectPoint(rotated, cx, cy, fov, sceneScale);
-          if (i === 0) ctx.moveTo(proj.x, proj.y);
-          else ctx.lineTo(proj.x, proj.y);
-        }
-        ctx.strokeStyle = orbitRingStroke;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 6]);
+        ctx.moveTo(tailProj.x, tailProj.y);
+        ctx.lineTo(headProj.x, headProj.y);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 3.2 * headProj.scale;
         ctx.stroke();
-        ctx.setLineDash([]);
-      }
 
-      // Draw Provider -> Model feeder links ONLY for models with active sessions
-      for (const mNode of topology.models) {
-        if (mNode.activeSessionCount <= 0) continue;
-        const pNode = providerById.get(mNode.providerId);
-        if (!pNode) continue;
-        const pRot = transformPoint(pNode.pos, cam.yaw, cam.pitch);
-        const mRot = transformPoint(mNode.pos, cam.yaw, cam.pitch);
-        const pProj = projectPoint(pRot, cx, cy, fov, sceneScale);
-        const mProj = projectPoint(mRot, cx, cy, fov, sceneScale);
+        // Glowing particle head
+        const radius = (conduit.isLiveRunning ? 4.2 : 3.3) * headProj.scale;
+        ctx.beginPath();
+        ctx.arc(headProj.x, headProj.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = baseColor;
+        ctx.fill();
 
         ctx.beginPath();
-        ctx.moveTo(pProj.x, pProj.y);
-        ctx.lineTo(mProj.x, mProj.y);
-        ctx.strokeStyle = activeTetherStroke;
-        ctx.lineWidth = 1.4;
-        ctx.setLineDash([3, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        const feederT = (cam.energyPhase * 1.3) % 1;
-        const fx = pProj.x + (mProj.x - pProj.x) * feederT;
-        const fy = pProj.y + (mProj.y - pProj.y) * feederT;
-        ctx.beginPath();
-        ctx.arc(fx, fy, 2.5 * mProj.scale, 0, Math.PI * 2);
-        ctx.fillStyle = providerStroke;
+        ctx.arc(headProj.x, headProj.y, radius * 0.48, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
         ctx.fill();
       }
+    });
 
-      // Draw Session Energy Conduits (Model -> Forge Core (0,0,0))
-      const forgeCenter3D: Vec3 = [0, 0, 0];
-      const forgeCenterProj = projectPoint(
-        forgeCenter3D,
-        cx,
-        cy,
-        fov,
-        sceneScale,
-      );
+    // Collect all 3D nodes (Providers, Models, and Central Forge Core) and depth-sort back-to-front
+    type RenderableNode =
+      | {
+          kind: "provider";
+          z: number;
+          proj: { x: number; y: number; scale: number };
+          node: ProviderNode3D;
+        }
+      | {
+          kind: "model";
+          z: number;
+          proj: { x: number; y: number; scale: number };
+          node: ModelNode3D;
+        }
+      | {
+          kind: "forge";
+          z: number;
+          proj: { x: number; y: number; scale: number };
+        };
 
-      activeConduits.forEach((conduit, cIdx) => {
-        const mNode = modelById.get(conduit.modelNodeId);
-        if (!mNode) return;
+    const renderQueue: RenderableNode[] = [
+      { kind: "forge", z: 0, proj: forgeCenterProj },
+    ];
 
-        const cp3D = conduitControlPoint(
-          mNode.pos,
-          conduit.siblingIndex,
-          conduit.siblingCount,
-          cIdx,
-        );
+    for (const pNode of curTopology.providers) {
+      const rot = transformPoint(pNode.pos, cam.yaw, cam.pitch);
+      const proj = projectPoint(rot, cx, cy, fov, sceneScale);
+      renderQueue.push({ kind: "provider", z: rot[2], proj, node: pNode });
+    }
 
-        const isSelected = selectedConduitId === conduit.id;
-        const baseColor = conduit.isSubagent
-          ? subagentConduitColor
-          : mainConduitColor;
+    for (const mNode of curTopology.models) {
+      const rot = transformPoint(mNode.pos, cam.yaw, cam.pitch);
+      const proj = projectPoint(rot, cx, cy, fov, sceneScale);
+      renderQueue.push({ kind: "model", z: rot[2], proj, node: mNode });
+    }
 
-        // Sample 3D curve points from Model -> Forge
-        const steps = 28;
+    // Depth sort: farthest (negative z) drawn first, closest (positive z) drawn last
+    renderQueue.sort((a, b) => a.z - b.z);
+
+    const newHitNodes: Array<{
+      x: number;
+      y: number;
+      r: number;
+      label: string;
+    }> = [];
+
+    for (const item of renderQueue) {
+      if (item.kind === "forge") {
+        const { x, y, scale } = item.proj;
+        const coreR = 30 * scale;
+        const pulseBoost =
+          curConduits.length > 0 ? 1 + Math.sin(cam.corePhase) * 0.06 : 1;
+
+        // Outer aura glow
+        const auraR = coreR * 2.5 * pulseBoost;
+        const aura = ctx.createRadialGradient(x, y, coreR * 0.2, x, y, auraR);
+        aura.addColorStop(0, forgeCoreGlow);
+        aura.addColorStop(1, "rgba(0,0,0,0)");
         ctx.beginPath();
-        for (let s = 0; s <= steps; s++) {
-          const t = s / steps;
-          const pt3D = quadraticBezier3D(mNode.pos, cp3D, forgeCenter3D, t);
-          const rot = transformPoint(pt3D, cam.yaw, cam.pitch);
-          const proj = projectPoint(rot, cx, cy, fov, sceneScale);
-          if (s === 0) ctx.moveTo(proj.x, proj.y);
-          else ctx.lineTo(proj.x, proj.y);
+        ctx.arc(x, y, auraR, 0, Math.PI * 2);
+        ctx.fillStyle = aura;
+        ctx.fill();
+
+        // Stationary 3D rings around Forge Core (aligned with camera, never spinning wildly)
+        const gimbalConfigs: ReadonlyArray<{
+          rx: number;
+          ry: number;
+          rz: number;
+          radius: number;
+          color: string;
+        }> = [
+          {
+            rx: 0.55 + cam.pitch * 0.4,
+            ry: cam.yaw,
+            rz: 0.4,
+            radius: 44,
+            color: forgeCoreMain,
+          },
+          {
+            rx: -0.6,
+            ry: -0.45 + cam.yaw * 0.5,
+            rz: 0.35,
+            radius: 54,
+            color: providerStroke,
+          },
+          {
+            rx: 0.9,
+            ry: 0.35 + cam.yaw * 0.3,
+            rz: -0.5,
+            radius: 64,
+            color: modelStroke,
+          },
+        ];
+
+        for (const g of gimbalConfigs) {
+          ctx.beginPath();
+          const segs = 36;
+          for (let i = 0; i <= segs; i++) {
+            const a = (i / segs) * Math.PI * 2;
+            let pt: Vec3 = [Math.cos(a) * g.radius, Math.sin(a) * g.radius, 0];
+            pt = rotateX(pt, g.rx);
+            pt = rotateY(pt, g.ry);
+            pt = rotateZ(pt, g.rz);
+            const gp = projectPoint(pt, cx, cy, fov, sceneScale);
+            if (i === 0) ctx.moveTo(gp.x, gp.y);
+            else ctx.lineTo(gp.x, gp.y);
+          }
+          ctx.strokeStyle = g.color;
+          ctx.globalAlpha = curConduits.length > 0 ? 0.58 : 0.3;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
         }
 
-        ctx.strokeStyle = baseColor;
-        ctx.globalAlpha = isSelected
-          ? 0.95
-          : conduit.isLiveRunning
-            ? 0.78
-            : 0.52;
-        ctx.lineWidth = isSelected ? 2.8 : conduit.isLiveRunning ? 2.1 : 1.5;
+        // 3D Octahedron wireframe inside the Forge Core (stationary in 3D space)
+        const octR = 24;
+        const octVertices: Vec3[] = [
+          [0, octR, 0],
+          [0, -octR, 0],
+          [octR, 0, 0],
+          [-octR, 0, 0],
+          [0, 0, octR],
+          [0, 0, -octR],
+        ];
+        const octEdges: ReadonlyArray<readonly [number, number]> = [
+          [0, 2],
+          [0, 3],
+          [0, 4],
+          [0, 5],
+          [1, 2],
+          [1, 3],
+          [1, 4],
+          [1, 5],
+          [2, 4],
+          [4, 3],
+          [3, 5],
+          [5, 2],
+        ];
+        const projectedVerts = octVertices.map((v) => {
+          const r1 = rotateY(v, cam.yaw + 0.4);
+          const r2 = rotateX(r1, cam.pitch + 0.25);
+          return projectPoint(r2, cx, cy, fov, sceneScale);
+        });
+
+        ctx.beginPath();
+        for (const [u, w] of octEdges) {
+          const pu = projectedVerts[u];
+          const pw = projectedVerts[w];
+          if (pu && pw) {
+            ctx.moveTo(pu.x, pu.y);
+            ctx.lineTo(pw.x, pw.y);
+          }
+        }
+        ctx.strokeStyle = forgeCoreMain;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
         ctx.globalAlpha = 1;
 
-        // Energy particles traveling from Model (t=0) -> Forge Core (t=1)
-        const particleCount = Math.min(
-          6,
-          2 +
-            Math.floor(activeConduits.length / 2) +
-            (conduit.isLiveRunning ? 1 : 0),
-        );
-        for (let p = 0; p < particleCount; p++) {
-          const rawT =
-            (cam.energyPhase + conduit.phaseOffset + p / particleCount) % 1;
-          const t = rawT < 0 ? rawT + 1 : rawT;
-          const head3D = quadraticBezier3D(mNode.pos, cp3D, forgeCenter3D, t);
-          const headRot = transformPoint(head3D, cam.yaw, cam.pitch);
-          const headProj = projectPoint(headRot, cx, cy, fov, sceneScale);
+        // Inner solid energy sphere
+        ctx.beginPath();
+        ctx.arc(x, y, coreR * 0.56 * pulseBoost, 0, Math.PI * 2);
+        ctx.fillStyle = forgeCoreMain;
+        ctx.fill();
 
-          // Comet tail
-          const tailT = Math.max(0, t - 0.065);
-          const tail3D = quadraticBezier3D(
-            mNode.pos,
-            cp3D,
-            forgeCenter3D,
-            tailT,
-          );
-          const tailRot = transformPoint(tail3D, cam.yaw, cam.pitch);
-          const tailProj = projectPoint(tailRot, cx, cy, fov, sceneScale);
+        // Label "FORGE"
+        ctx.font = `700 ${Math.round(13 * scale)}px ${fontSans}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = textPrimary;
+        ctx.fillText("FORGE", x, y + coreR + 14 * scale);
 
-          const grad = ctx.createLinearGradient(
-            tailProj.x,
-            tailProj.y,
-            headProj.x,
-            headProj.y,
-          );
-          grad.addColorStop(0, "rgba(0,0,0,0)");
-          grad.addColorStop(1, baseColor);
-          ctx.beginPath();
-          ctx.moveTo(tailProj.x, tailProj.y);
-          ctx.lineTo(headProj.x, headProj.y);
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 3.2 * headProj.scale;
-          ctx.stroke();
+        const rateSub =
+          curConduits.length > 0
+            ? `${curConduits.length} 通道 · ${curSpeed}x`
+            : "待机轨道";
+        ctx.font = `500 ${Math.round(10 * scale)}px ${fontMono}`;
+        ctx.fillStyle = textSecondary;
+        ctx.fillText(rateSub, x, y + coreR + 28 * scale);
 
-          // Glowing particle head
-          const radius = (conduit.isLiveRunning ? 4.2 : 3.3) * headProj.scale;
-          ctx.beginPath();
-          ctx.arc(headProj.x, headProj.y, radius, 0, Math.PI * 2);
-          ctx.fillStyle = baseColor;
-          ctx.fill();
+        newHitNodes.push({
+          x,
+          y,
+          r: coreR * 1.2,
+          label: `Forge 核心 · ${curConduits.length} 条会话能量线 (${curMainCount} 主会话 / ${curSubCount} 子代理) · 传输速率 ${curSpeed}x`,
+        });
+      } else if (item.kind === "provider") {
+        const { x, y, scale } = item.proj;
+        const pNode = item.node;
+        const r = (pNode.activeSessionCount > 0 ? 16 : 13) * scale;
 
-          ctx.beginPath();
-          ctx.arc(headProj.x, headProj.y, radius * 0.48, 0, Math.PI * 2);
-          ctx.fillStyle = "#ffffff";
-          ctx.fill();
+        // Hexagon hub for Provider
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+          const hx = x + Math.cos(a) * r;
+          const hy = y + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(hx, hy);
+          else ctx.lineTo(hx, hy);
         }
-      });
+        ctx.closePath();
+        ctx.fillStyle = providerFill;
+        ctx.fill();
+        ctx.lineWidth = pNode.activeSessionCount > 0 ? 2.2 : 1.4;
+        ctx.strokeStyle = providerStroke;
+        ctx.stroke();
 
-      // Collect all 3D nodes (Providers, Models, and Central Forge Core) and depth-sort back-to-front
-      type RenderableNode =
-        | {
-            kind: "provider";
-            z: number;
-            proj: { x: number; y: number; scale: number };
-            node: ProviderNode3D;
-          }
-        | {
-            kind: "model";
-            z: number;
-            proj: { x: number; y: number; scale: number };
-            node: ModelNode3D;
-          }
-        | {
-            kind: "forge";
-            z: number;
-            proj: { x: number; y: number; scale: number };
-          };
+        // Inner dot
+        ctx.beginPath();
+        ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
+        ctx.fillStyle = providerStroke;
+        ctx.fill();
 
-      const renderQueue: RenderableNode[] = [
-        { kind: "forge", z: 0, proj: forgeCenterProj },
-      ];
+        // Provider Label
+        ctx.font = `600 ${Math.max(10, Math.round(11 * scale))}px ${fontSans}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = textPrimary;
+        ctx.fillText(pNode.label, x, y + r + 5 * scale);
 
-      for (const pNode of topology.providers) {
-        const rot = transformPoint(pNode.pos, cam.yaw, cam.pitch);
-        const proj = projectPoint(rot, cx, cy, fov, sceneScale);
-        renderQueue.push({ kind: "provider", z: rot[2], proj, node: pNode });
-      }
+        newHitNodes.push({
+          x,
+          y,
+          r: r + 8,
+          label: `供应商：${pNode.label} · ${pNode.modelIds.length} 个模型 · ${pNode.activeSessionCount} 个活跃连接 · ${compactTokens(pNode.totalTokens)} tokens`,
+        });
+      } else {
+        const { x, y, scale } = item.proj;
+        const mNode = item.node;
+        const hasActive = mNode.activeSessionCount > 0;
+        const r = (hasActive ? 11 : 8.5) * scale;
 
-      for (const mNode of topology.models) {
-        const rot = transformPoint(mNode.pos, cam.yaw, cam.pitch);
-        const proj = projectPoint(rot, cx, cy, fov, sceneScale);
-        renderQueue.push({ kind: "model", z: rot[2], proj, node: mNode });
-      }
-
-      // Depth sort: farthest (negative z) drawn first, closest (positive z) drawn last
-      renderQueue.sort((a, b) => a.z - b.z);
-
-      const newHitNodes: Array<{
-        x: number;
-        y: number;
-        r: number;
-        label: string;
-      }> = [];
-
-      for (const item of renderQueue) {
-        if (item.kind === "forge") {
-          const { x, y, scale } = item.proj;
-          const coreR = 30 * scale;
-          const pulseBoost =
-            activeConduits.length > 0
-              ? 1 +
-                Math.sin(cam.corePhase * 2) *
-                  0.08 *
-                  Math.min(transferSpeed, 2.5)
-              : 1;
-
-          // Outer aura glow
-          const auraR = coreR * 2.5 * pulseBoost;
-          const aura = ctx.createRadialGradient(x, y, coreR * 0.2, x, y, auraR);
-          aura.addColorStop(0, forgeCoreGlow);
-          aura.addColorStop(1, "rgba(0,0,0,0)");
+        if (hasActive) {
           ctx.beginPath();
-          ctx.arc(x, y, auraR, 0, Math.PI * 2);
-          ctx.fillStyle = aura;
-          ctx.fill();
-
-          // 3D Gyroscope rings around Forge
-          const gimbalConfigs: ReadonlyArray<{
-            rx: number;
-            ry: number;
-            rz: number;
-            radius: number;
-            color: string;
-          }> = [
-            {
-              rx: cam.corePhase * 0.7,
-              ry: cam.yaw,
-              rz: 0.4,
-              radius: 44,
-              color: forgeCoreMain,
-            },
-            {
-              rx: -0.6,
-              ry: -cam.corePhase * 0.9,
-              rz: cam.corePhase * 0.5,
-              radius: 54,
-              color: providerStroke,
-            },
-            {
-              rx: 0.9,
-              ry: cam.corePhase * 0.6,
-              rz: -cam.corePhase * 0.8,
-              radius: 64,
-              color: modelStroke,
-            },
-          ];
-
-          for (const g of gimbalConfigs) {
-            ctx.beginPath();
-            const segs = 40;
-            for (let i = 0; i <= segs; i++) {
-              const a = (i / segs) * Math.PI * 2;
-              let pt: Vec3 = [
-                Math.cos(a) * g.radius,
-                Math.sin(a) * g.radius,
-                0,
-              ];
-              pt = rotateX(pt, g.rx);
-              pt = rotateY(pt, g.ry);
-              pt = rotateZ(pt, g.rz);
-              const gp = projectPoint(pt, cx, cy, fov, sceneScale);
-              if (i === 0) ctx.moveTo(gp.x, gp.y);
-              else ctx.lineTo(gp.x, gp.y);
-            }
-            ctx.strokeStyle = g.color;
-            ctx.globalAlpha = activeConduits.length > 0 ? 0.58 : 0.3;
-            ctx.lineWidth = 1.4;
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-          }
-
-          // 3D Octahedron wireframe inside the Forge Core
-          const octR = 24;
-          const octVertices: Vec3[] = [
-            [0, octR, 0],
-            [0, -octR, 0],
-            [octR, 0, 0],
-            [-octR, 0, 0],
-            [0, 0, octR],
-            [0, 0, -octR],
-          ];
-          const octEdges: ReadonlyArray<readonly [number, number]> = [
-            [0, 2],
-            [0, 3],
-            [0, 4],
-            [0, 5],
-            [1, 2],
-            [1, 3],
-            [1, 4],
-            [1, 5],
-            [2, 4],
-            [4, 3],
-            [3, 5],
-            [5, 2],
-          ];
-          const projectedVerts = octVertices.map((v) => {
-            const r1 = rotateY(v, cam.corePhase * 0.8 + cam.yaw);
-            const r2 = rotateX(r1, cam.pitch + cam.corePhase * 0.4);
-            return projectPoint(r2, cx, cy, fov, sceneScale);
-          });
-
-          ctx.beginPath();
-          for (const [u, w] of octEdges) {
-            const pu = projectedVerts[u];
-            const pw = projectedVerts[w];
-            if (pu && pw) {
-              ctx.moveTo(pu.x, pu.y);
-              ctx.lineTo(pw.x, pw.y);
-            }
-          }
-          ctx.strokeStyle = forgeCoreMain;
-          ctx.globalAlpha = 0.85;
-          ctx.lineWidth = 1.5;
+          ctx.arc(x, y, r * 1.65, 0, Math.PI * 2);
+          ctx.strokeStyle = mainConduitColor;
+          ctx.globalAlpha = 0.38;
+          ctx.lineWidth = 1.2;
           ctx.stroke();
           ctx.globalAlpha = 1;
+        }
 
-          // Inner solid energy sphere
-          ctx.beginPath();
-          ctx.arc(x, y, coreR * 0.56 * pulseBoost, 0, Math.PI * 2);
-          ctx.fillStyle = forgeCoreMain;
-          ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = modelFill;
+        ctx.fill();
+        ctx.lineWidth = hasActive ? 2 : 1.3;
+        ctx.strokeStyle = hasActive ? mainConduitColor : modelStroke;
+        ctx.stroke();
 
-          // Label "FORGE"
-          ctx.font = `700 ${Math.round(13 * scale)}px var(--font-sans, sans-serif)`;
+        // Session count badge on model node if active
+        if (hasActive) {
+          ctx.font = `700 ${Math.max(8, Math.round(9 * scale))}px ${fontMono}`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillStyle = textPrimary;
-          ctx.fillText("FORGE", x, y + coreR + 14 * scale);
+          ctx.fillText(String(mNode.activeSessionCount), x, y);
+        }
 
-          const rateSub =
-            activeConduits.length > 0
-              ? `${activeConduits.length} 通道 · ${transferSpeed}x`
-              : "待机轨道";
-          ctx.font = `500 ${Math.round(10 * scale)}px var(--font-mono, monospace)`;
-          ctx.fillStyle = textSecondary;
-          ctx.fillText(rateSub, x, y + coreR + 28 * scale);
-
-          newHitNodes.push({
-            x,
-            y,
-            r: coreR * 1.2,
-            label: `Forge 核心 · ${activeConduits.length} 条会话能量线 (${activeMainCount} 主会话 / ${activeSubagentCount} 子代理) · 传输速率 ${transferSpeed}x`,
-          });
-        } else if (item.kind === "provider") {
-          const { x, y, scale } = item.proj;
-          const pNode = item.node;
-          const r = (pNode.activeSessionCount > 0 ? 16 : 13) * scale;
-
-          // Hexagon hub for Provider
-          ctx.beginPath();
-          for (let i = 0; i < 6; i++) {
-            const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-            const hx = x + Math.cos(a) * r;
-            const hy = y + Math.sin(a) * r;
-            if (i === 0) ctx.moveTo(hx, hy);
-            else ctx.lineTo(hx, hy);
-          }
-          ctx.closePath();
-          ctx.fillStyle = providerFill;
-          ctx.fill();
-          ctx.lineWidth = pNode.activeSessionCount > 0 ? 2.2 : 1.4;
-          ctx.strokeStyle = providerStroke;
-          ctx.stroke();
-
-          // Inner dot
-          ctx.beginPath();
-          ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
-          ctx.fillStyle = providerStroke;
-          ctx.fill();
-
-          // Provider Label
-          ctx.font = `600 ${Math.max(10, Math.round(11 * scale))}px var(--font-sans, sans-serif)`;
+        // Model short name: always render for energized models, primary provider models, or when total models <= 12
+        const showModelLabel =
+          hasActive ||
+          curTopology.models.length <= 12 ||
+          lookups.primaryModelIds.has(mNode.id);
+        if (showModelLabel) {
+          ctx.font = `500 ${Math.max(9, Math.round(10.5 * scale))}px ${fontMono}`;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillStyle = textPrimary;
-          ctx.fillText(pNode.label, x, y + r + 5 * scale);
-
-          newHitNodes.push({
-            x,
-            y,
-            r: r + 8,
-            label: `供应商：${pNode.label} · ${pNode.modelIds.length} 个模型 · ${pNode.activeSessionCount} 个活跃连接 · ${compactTokens(pNode.totalTokens)} tokens`,
-          });
-        } else {
-          const { x, y, scale } = item.proj;
-          const mNode = item.node;
-          const hasActive = mNode.activeSessionCount > 0;
-          const r = (hasActive ? 11 : 8.5) * scale;
-
-          if (hasActive) {
-            ctx.beginPath();
-            ctx.arc(x, y, r * 1.65, 0, Math.PI * 2);
-            ctx.strokeStyle = mainConduitColor;
-            ctx.globalAlpha = 0.38;
-            ctx.lineWidth = 1.2;
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-          }
-
-          ctx.beginPath();
-          ctx.arc(x, y, r, 0, Math.PI * 2);
-          ctx.fillStyle = modelFill;
-          ctx.fill();
-          ctx.lineWidth = hasActive ? 2 : 1.3;
-          ctx.strokeStyle = hasActive ? mainConduitColor : modelStroke;
-          ctx.stroke();
-
-          // Session count badge on model node if active
-          if (hasActive) {
-            ctx.font = `700 ${Math.max(8, Math.round(9 * scale))}px var(--font-mono, monospace)`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillStyle = textPrimary;
-            ctx.fillText(String(mNode.activeSessionCount), x, y);
-          }
-
-          // Model short name: always render for energized models, primary provider models, or when total models <= 12
-          const showModelLabel =
-            hasActive ||
-            topology.models.length <= 12 ||
-            primaryModelIds.has(mNode.id);
-          if (showModelLabel) {
-            ctx.font = `500 ${Math.max(9, Math.round(10.5 * scale))}px var(--font-mono, monospace)`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "top";
-            ctx.fillStyle = hasActive ? textPrimary : textSecondary;
-            ctx.fillText(mNode.label, x, y + r + 4 * scale);
-          }
-
-          newHitNodes.push({
-            x,
-            y,
-            r: r + 8,
-            label: `模型：${mNode.modelId} (${mNode.providerLabel}) · ${mNode.activeSessionCount} 条能量连接 · ${compactTokens(mNode.totalTokens)} tokens`,
-          });
+          ctx.fillStyle = hasActive ? textPrimary : textSecondary;
+          ctx.fillText(mNode.label, x, y + r + 4 * scale);
         }
+
+        newHitNodes.push({
+          x,
+          y,
+          r: r + 8,
+          label: `模型：${mNode.modelId} (${mNode.providerLabel}) · ${mNode.activeSessionCount} 条能量连接 · ${compactTokens(mNode.totalTokens)} tokens`,
+        });
       }
-
-      hitNodesRef.current = newHitNodes;
-      ctx.restore();
-
-      if (!reducedMotion) {
-        animationFrameId = window.requestAnimationFrame(renderFrame);
-      }
-    };
-
-    // Draw initial frame synchronously so tests & screenshots immediately have content
-    renderFrame(performance.now());
-    if (!reducedMotion) {
-      animationFrameId = window.requestAnimationFrame(renderFrame);
     }
 
-    return () => {
-      if (animationFrameId) window.cancelAnimationFrame(animationFrameId);
+    hitNodesRef.current = newHitNodes;
+    ctx.restore();
+  }, []);
+
+  const resetCamera = useCallback(() => {
+    cameraRef.current.yaw = 0.35;
+    cameraRef.current.pitch = 0.38;
+    drawScene(performance.now(), false);
+  }, [drawScene]);
+
+  // Track canvas container size without calling getBoundingClientRect() on every frame
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    canvasSizeRef.current = { width: rect.width, height: rect.height };
+
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          canvasSizeRef.current = {
+            width: entry.contentRect.width,
+            height: entry.contentRect.height,
+          };
+        }
+        drawScene(performance.now(), false);
+      });
+      ro.observe(canvas);
+      return () => ro.disconnect();
+    }
+    return undefined;
+  }, [drawScene]);
+
+  // Redraw static frame immediately whenever topology or selection changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally redraws when topology or selection updates
+  useEffect(() => {
+    drawScene(performance.now(), false);
+  }, [topology, selectedConduitId, drawScene]);
+
+  // Single guarded RAF loop ONLY when there are active conduits transmitting energy
+  const hasActiveConduits = activeConduits.length > 0;
+  useEffect(() => {
+    if (!hasActiveConduits) return;
+
+    const reducedMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) return;
+
+    let cancelled = false;
+    let animationFrameId = 0;
+    cameraRef.current.lastFrameTime = performance.now();
+
+    const tick = (now: number) => {
+      if (cancelled) return;
+      drawScene(now, true);
+      if (!cancelled) {
+        animationFrameId = window.requestAnimationFrame(tick);
+      }
     };
-  }, [
-    topology,
-    activeConduits,
-    activeMainCount,
-    activeSubagentCount,
-    transferSpeed,
-    autoRotate,
-    selectedConduitId,
-  ]);
+
+    animationFrameId = window.requestAnimationFrame(tick);
+
+    return () => {
+      cancelled = true;
+      if (animationFrameId) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [hasActiveConduits, drawScene]);
 
   return (
     <div
@@ -1469,16 +1531,6 @@ export function UsageOverview({
 
           <div className="usage-section-header-right">
             <div className="usage-3d-camera-actions">
-              <button
-                type="button"
-                className="usage-dashboard-btn"
-                onClick={() => setAutoRotate((v) => !v)}
-                aria-pressed={autoRotate}
-                title={autoRotate ? "暂停 3D 自动旋转" : "开启 3D 自动旋转"}
-              >
-                {autoRotate ? <Pause size={13} /> : <Play size={13} />}
-                <span>{autoRotate ? "旋转中" : "已暂停"}</span>
-              </button>
               <button
                 type="button"
                 className="usage-dashboard-btn"
@@ -1574,13 +1626,19 @@ export function UsageOverview({
                   );
                   cameraRef.current.lastX = e.clientX;
                   cameraRef.current.lastY = e.clientY;
+                  if (!hasActiveConduits) {
+                    drawScene(performance.now(), false);
+                  }
                   return;
                 }
 
                 const hit = hitNodesRef.current.find(
                   (n) => Math.hypot(localX - n.x, localY - n.y) <= n.r,
                 );
-                setHoveredNodeLabel(hit ? hit.label : null);
+                const nextLabel = hit ? hit.label : null;
+                setHoveredNodeLabel((prev) =>
+                  prev === nextLabel ? prev : nextLabel,
+                );
               }}
               onPointerUp={(e) => {
                 cameraRef.current.isDragging = false;
