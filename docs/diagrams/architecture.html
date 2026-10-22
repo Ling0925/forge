@@ -287,7 +287,7 @@
   <div class="layer" style="border-color:var(--accent)">
     <div class="tag">L3 · Agent loop<b>src/core/runtime.ts · createAgentRuntime(deps).run(input, onEvent, approve, signal, control)</b></div>
     <div class="boxes">
-      <div class="box hi"><span class="t">有界循环</span><span class="d">maxTurns 计完成次数<br>maxToolCalls 计尝试（含被拒）</span></div>
+      <div class="box hi"><span class="t">长程循环</span><span class="d">记录轮次与工具尝试（含被拒）<br>无累计工具、子代理数量或总时长预算</span></div>
       <div class="box"><span class="t">会话锁</span><span class="d">跨进程 flock，持有到最后一次 checkpoint</span></div>
       <div class="box"><span class="t">预算与压缩</span><span class="d">标定估计 → 语义摘要 → 整轮硬裁剪</span></div>
       <div class="box"><span class="t">事件流</span><span class="d">20 类判别联合；恰好一个 run_finished</span></div>
@@ -392,12 +392,12 @@
     <div class="step"><div class="dot">1</div><div class="body"><b>取会话锁 → 载入快照</b><p><code>store.acquire()</code> 用 Linux <code>flock -n -E 75</code>；Zod 校验后进入内存；若配置 <code>runMemory</code> 先做冷恢复（闲置 ≥1h / &gt;32 000 token）。</p></div></div>
     <div class="step"><div class="dot">2</div><div class="body"><b>孤儿状态收敛</b><p>持久化的 <code>running</code> / <code>awaiting_approval</code> 一律改判 <code>interrupted</code> 并落盘；剥离 <code>pendingTool</code>，未闭合调用由 <code>closeCalls()</code> 写入“上次执行被中断，先检查效果再重试”。</p></div></div>
     <div class="step"><div class="dot">3</div><div class="body"><b>权限夹紧</b><p><code>plan</code> 模式 → 强制 <code>readonly</code>；否则取 <code>input.permission ?? settings.defaultPermission</code>，再与 <code>session.permissionCeiling</code> 取<b>较低者</b>。运行中经 <code>control.getPermission()</code> 重算（runtime.ts:464）。</p></div></div>
-    <div class="step"><div class="dot">4</div><div class="body"><b>组装系统指令</b><p><code>buildSystemInstructions()</code> = 核心指令 + <b># Project context</b>（AGENTS.md + skills 元数据）+ <b># Current run</b>（workspace / mode / effective permission / maxToolCalls）。纯函数、字节稳定，不改写持久历史。</p></div></div>
+    <div class="step"><div class="dot">4</div><div class="body"><b>组装系统指令</b><p><code>buildSystemInstructions()</code> = 核心指令 + <b># Project context</b>（AGENTS.md + skills 元数据）+ <b># Current run</b>（workspace / mode / effective permission / 无累计预算）。纯函数、字节稳定，不改写持久历史。</p></div></div>
     <div class="step"><div class="dot">5</div><div class="body"><b>提交用户轮 + 自动标题</b><p>追加 user message（可含 images）；<code>claimAutoTitle</code> 抢占式异步起名，仅当标题未被用户改动才应用，并以 <code>title_changed</code> 通知。</p></div></div>
     <div class="step"><div class="dot">6</div><div class="body"><b>发布 <code>run_started</code> → 解析上下文窗口</b><p>模型以<b>会话持久值</b>为权威，<code>input.model</code> 覆盖只在拿锁后写入；缺失窗口用 2s 超时向 provider 元数据试探，失败不阻塞请求。</p></div></div>
 
     <div class="loopband">
-      <div class="cap">循环体 · 每个 agent turn 重入（turn ≤ maxTurns，call ≤ maxToolCalls）</div>
+      <div class="cap">循环体 · 每个 agent turn 重入，直到完成、手动取消或实际错误</div>
       <div class="step"><div class="dot">7</div><div class="body"><b>drainSteering → 预算判定</b><p>先吸收插话。用<b>标定后</b>尺寸（本地字符估计 × 本会话自学的 1.25–2.0 缩放）对比 budget，而不是裸估计。</p></div></div>
       <div class="step"><div class="dot">8</div><div class="body"><b>语义压缩 / 整轮硬裁剪</b><p>超线 → 找合法 <code>summaryBoundary</code> → <code>summarizeWorkingState()</code> 由 provider 生成 ≤8192 结构化 working state（goal / constraints / decisions / completed / nextSteps / verification / uncertainties + <code>mN</code> 引用），<b>不改持久 transcript</b>，发 <code>context_compacted</code>。兜底 <code>compactContext()</code> 只删完整已闭合轮；放不下则 <code>budget</code> 失败，而不是截断工具 JSON。</p></div></div>
       <div class="step"><div class="dot">9</div><div class="body"><b>provider.complete（流式）</b><p><code>context_usage</code>(projected) → 传输。瞬时失败按 <code>RETRY_DELAYS_MS [500,1000,2000,4000,8000]</code> 重试<b>同一请求</b>（不耗 turn、不重跑已完成工具），发 <code>provider_retry</code>；取消经 <code>withCancellation</code> race，绝不重放不确定副作用。</p></div></div>

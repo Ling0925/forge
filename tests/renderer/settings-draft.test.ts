@@ -34,9 +34,19 @@ it("supports optional token caps, exact model windows and clearing rows", () => 
   draft.modelContextWindows.push({ model: "alias", tokens: "1000" });
   expect(() => buildSettingsUpdate(draft, original, "", false)).toThrow("重复");
 });
+it("keeps legacy tool-call budgets out of the form while request timeouts stay editable", () => {
+  const legacy = { ...base, maxToolCalls: 250, maxRootToolCalls: 900, rootTimeoutMs: 600000 };
+  const form = createSettingsDraft(legacy) as unknown as Record<string, unknown>;
+  expect(form).not.toHaveProperty("maxToolCalls");
+  expect(form).not.toHaveProperty("maxRootToolCalls");
+  expect(form).not.toHaveProperty("rootTimeoutMs");
+  expect(buildSettingsUpdate({ ...createSettingsDraft(legacy), requestTimeoutMs: "30000" }, legacy, "", false)).toEqual({
+    settings: { requestTimeoutMs: 30000 },
+  });
+});
 it("validates numeric blanks, origin boundaries and LSP arguments", () => {
   let draft = createSettingsDraft(base);
-  draft.maxToolCalls = "";
+  draft.requestTimeoutMs = "";
   expect(() => buildSettingsUpdate(draft, base, "", false)).toThrow("整数");
   draft = createSettingsDraft(base);
   draft.browserAllowedOrigins = "https://example.test/path";

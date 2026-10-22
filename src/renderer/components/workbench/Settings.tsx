@@ -37,7 +37,7 @@ import "../../styles/settings-models.css";
 const sections = [
   { id: "connection", title: "模型连接", description: "连接你的模型服务，选择协议与默认模型。", keywords: "API 端点 密钥 model reasoning 思考强度", icon: Plugs },
   { id: "appearance", title: "外观", description: "让工作台适应你的使用习惯与色彩偏好。", keywords: "主题 深色 浅色 系统 theme", icon: Palette },
-  { id: "execution", title: "执行与权限", description: "为新的运行设置权限边界与资源上限。", keywords: "只读 工作区 无限制 工具调用 超时", icon: ShieldCheck },
+  { id: "execution", title: "执行与权限", description: "为新的运行设置权限边界与请求超时。", keywords: "只读 工作区 无限制 工具调用 子代理 不限 超时", icon: ShieldCheck },
   { id: "context", title: "上下文与记忆", description: "控制输入预算与模型窗口，平衡连续性和成本。", keywords: "token 压缩 compact 字符预算 模型窗口", icon: Cpu },
   { id: "browser", title: "浏览器", description: "明确授权浏览器工具可以访问的网络来源与内核。", keywords: "origin Chromium 可执行路径 网络", icon: Globe },
   { id: "language", title: "语言服务", description: "配置本机 LSP 服务器，为代码提供智能诊断与语义能力。", keywords: "LSP 命令 参数 扩展名", icon: Code },
@@ -360,8 +360,9 @@ export function Settings() {
                 <section className="settings-section" aria-label="执行配置">
                   <div className="settings-card">
                     <div className="settings-card-header">
-                      <h3>权限与运行上限</h3>
+                      <h3>权限与请求超时</h3>
                       <p>更改默认权限不会提升当前运行的权限。命令不在 OS 沙箱内执行。</p>
+                      <p>工具调用次数、子代理累计次数与任务总时长均不限；子代理最多同时活跃 4 个，可随时手动取消运行。</p>
                     </div>
                     <div className="settings-card-body">
                       {select(
@@ -375,10 +376,7 @@ export function Settings() {
                           <span>无限制模式允许直接执行命令，可能访问工作区以外的文件和网络。仅在信任任务时使用。</span>
                         </div>
                       )}
-                      <div className="settings-columns">
-                        {text("maxToolCalls", "工具调用预算", "每次运行 1–10000 次。", "number")}
-                      </div>
-                      {text("requestTimeoutMs", "请求空闲超时（毫秒）", "1000–600000；持续接收数据时不会按总时长中断。", "number")}
+                      {text("requestTimeoutMs", "请求空闲超时（毫秒）", "1000–600000；只中断单次请求的空闲，不限制任务总时长。", "number")}
                     </div>
                   </div>
                 </section>

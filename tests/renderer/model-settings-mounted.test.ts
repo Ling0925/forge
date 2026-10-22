@@ -135,13 +135,15 @@ it("model search requires selection and settings retain drafts and save once", a
     await page.getByRole("button", { name: "打开设置" }).click();
     await page.getByRole("button", { name: "执行与权限", exact: true }).click();
     expect(await page.getByLabel("最大轮次", { exact: true }).count()).toBe(0);
-    await page.getByLabel("工具调用预算", { exact: true }).fill("13");
+    expect(await page.getByLabel("工具调用预算", { exact: true }).count()).toBe(0);
+    expect(await page.getByText(/工具调用次数、子代理累计次数与任务总时长均不限/).count()).toBe(1);
+    await page.getByLabel("请求空闲超时（毫秒）", { exact: true }).fill("13000");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "打开设置" }).click();
-    expect(await page.getByLabel("工具调用预算", { exact: true }).inputValue()).toBe("13");
+    expect(await page.getByLabel("请求空闲超时（毫秒）", { exact: true }).inputValue()).toBe("13000");
     await page.getByRole("button", { name: "放弃未保存修改" }).click();
-    expect(await page.getByLabel("工具调用预算", { exact: true }).inputValue()).toBe("100");
-    await page.getByLabel("工具调用预算", { exact: true }).fill("12");
+    expect(await page.getByLabel("请求空闲超时（毫秒）", { exact: true }).inputValue()).toBe("60000");
+    await page.getByLabel("请求空闲超时（毫秒）", { exact: true }).fill("12000");
     await page.getByRole("button", { name: "保存设置", exact: true }).click();
     await page.keyboard.press("Escape");
     expect(await page.locator(".settings-page").count()).toBe(1);
@@ -149,7 +151,7 @@ it("model search requires selection and settings retain drafts and save once", a
     expect(await page.locator("#saves").innerText()).toBe("1");
     await page.getByRole("button", { name: "返回工作台" }).click();
     await page.getByRole("button", { name: "打开设置" }).click();
-    expect(await page.getByLabel("工具调用预算", { exact: true }).inputValue()).toBe("12");
+    expect(await page.getByLabel("请求空闲超时（毫秒）", { exact: true }).inputValue()).toBe("12000");
     await page.getByRole("button", { name: "模型连接", exact: true }).click();
     await page.getByRole("button", { name: "添加来源" }).click();
     expect(await page.getByLabel("来源名称", { exact: true }).count()).toBe(1);

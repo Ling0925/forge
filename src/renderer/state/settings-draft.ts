@@ -8,7 +8,6 @@ export type SettingsDraft = {
   reasoningEffort: string;
   theme: string;
   defaultPermission: string;
-  maxToolCalls: string;
   requestTimeoutMs: string;
   contextBudgetTokens: string;
   contextBudgetChars: string;
@@ -23,7 +22,6 @@ export function createSettingsDraft(s: PublicSettings): SettingsDraft {
     reasoningEffort: s.reasoningEffort ?? "default",
     theme: s.theme,
     defaultPermission: s.defaultPermission,
-    maxToolCalls: String(s.maxToolCalls),
     requestTimeoutMs: String(s.requestTimeoutMs),
     contextBudgetTokens: s.contextBudgetTokens == null ? "" : String(s.contextBudgetTokens),
     contextBudgetChars: String(s.contextBudgetChars),
@@ -59,7 +57,6 @@ export function buildSettingsUpdate(
   for (const name of Object.keys(draft) as (keyof SettingsDraft)[]) {
     if (JSON.stringify(draft[name]) === JSON.stringify(baseline[name])) continue;
     switch (name) {
-      case "maxToolCalls":
       case "requestTimeoutMs":
       case "contextBudgetChars":
         settings[name] = integer(draft[name], name);

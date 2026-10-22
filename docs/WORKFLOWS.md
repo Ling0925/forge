@@ -196,9 +196,9 @@ provider 顺序与精确 ID，不推断能力/价格/配额；`nextOffset` 在�
 - `list_models(query?, offset?, limit?)` — 只读发现 provider 目录中的精确模型 ID（见 5.1）。
 - `create_plan(name, explanation, steps)` — 创建独立计划，返回生成的 ID。
 - `update_plan(explanation, steps, planId?)` — 更新已有计划。
-- `spawn_agent(task, ownership?, model?, writePaths?, maxToolCalls?)` — 启动**独立子会话**，独立上下文/session/模型与工具注册表，共享工作区。`maxToolCalls` 只能降低子任务工具预算，不能超过父运行的单任务上限。
+- `spawn_agent(task, ownership?, model?, writePaths?)` — 启动**独立子会话**，独立上下文/session/模型与工具注册表，共享工作区。该工具**没有子任务工具预算参数**：`maxToolCalls` 已从输入 schema 移除，传入会被 strict 校验拒绝。
 - `list_agents(offset?, limit?, currentRun?)` — 分页列出父会话的当前/历史子会话，返回 `{agents,total,offset,nextOffset,truncated}`；默认每页 20，最多 50。`currentRun/active/controllable` 区分本轮执行与持久化记录；历史 `running` 可能过时，不会自动恢复或接管。ownership/路径列表也有显式截断标记。
-- `wait_agents(ids?, mode?, timeout_ms?)` — `all`/`any` 等待，默认本轮所有子任务、30 秒；`0` 立即轮询，最长 120 秒。返回已结束摘要及仍活跃状态；超时**不取消**子任务。显式历史 ID 可返回保存的结果，但不等待不属于本轮的执行。一个子任务的异常不吞掉其他结果。
+- `wait_agents(ids?, mode?, timeout_ms?)` — `all`/`any` 等待；`timeout_ms` 默认 600000（10 分钟）、最大 1800000（30 分钟），`0` 立即轮询，超时**不取消**子任务。不传 `ids` 时返回**下一页最多 32 个尚未交付的本轮子任务**，重复不传 `ids` 即取后续页；显式 `ids` 每次最多 32 个，仅限制单次报告大小，不是累计上限。返回已结束摘要及仍活跃状态；显式历史 ID 可返回保存的结果，但不等待不属于本轮的执行。一个子任务的异常不吞掉其他结果。
 - `get_agent_result(id, offset?, limit?)` — 按 UTF-16 字符偏移读取直接子会话最新的非空 assistant 报告，默认 4096、最多 8192；返回 `totalChars/truncated/nextOffset`、错误与已报告用量。支持历史结果，不读取无关会话，不恢复执行，也不是完整工具日志导出。
 - `send_agent_message(id, message)` — 向本轮活跃子任务追加指令，单条最多 16384 字符、队列最多 8 条；在下一模型边界消费，不打断当前工具，不提高权限、不重启终态任务。`queued` 仅确认入队，取消/失败仍可能使其未消费；队列未消费部分不保证跨进程恢复。
 - `cancel_agent(id)` — 取消并 join 本轮拥有的子任务（包括清理）；不影响兄弟任务，不能取消历史记录。
@@ -206,16 +206,16 @@ provider 顺序与精确 ID，不推断能力/价格/配额；`nextOffset` 在�
 
 关键语义（诚实边界）：
 
-- **深度为 1**：有 `parentSessionId` 的会话不能再 `spawn_agent`；活跃并发上限 **4**，任务清理结束后释放名额，另设每轮累计 **32** 个的资源上限（`src/core/agent-operations.ts`）。
+- **深度为 1、并发 4**：有 `parentSessionId` 的会话不能再 `spawn_agent`；活跃并发上限固定 **4**，任务清理结束后释放名额。**不再执行工具调用次数、根任务共享次数、子代理累计数量或任务总时长上限**；`maxTurns`/`maxToolCalls`/`maxRootToolCalls`/`rootTimeoutMs` 设置字段仍保留原类型与值，`forge config set --max-turns/--max-tools/--max-root-tools/--root-timeout-ms` 也仍可写入（会提示 deprecated/ignored），但运行时完全忽略，无需迁移配置。权限与审批、手动取消、单次请求的空闲超时（`requestTimeoutMs`）仍然生效。
 - **范围协调而非隔离**：可声明最多 32 个规范化的工作区相对 `writePaths`（文件或目录，无 glob、绝对路径、`..`）。与活跃子任务存在同路径/祖孙路径交集时拒绝新分配；相似前缀不算冲突，任务结束后释放范围。不声明的任务、父代理写入、符号链接别名与原生命令不受此协调检查保护；没有新增 OS 沙箱或 worktree。
-- **结果按 ID 交付**：`wait_agents`/`cancel_agent` 返回终态后不重复自动汇总；未交付子结果在父收尾时汇总。部分读取 `get_agent_result` 不代表已完整交付。摘要默认最多 4096 字符，多任务时动态缩短以保留全部 ID 和有效 JSON，显式标记截断；可按 ID 补读。
+- **结果按 ID 交付**：`wait_agents`/`cancel_agent` 返回终态后不重复自动汇总；未交付子结果在父收尾时**逐页（每页最多 32 个）**汇总，累计子代理不设上限。部分读取 `get_agent_result` 不代表已完整交付。摘要默认最多 4096 字符，多任务时动态缩短以保留全部 ID 和有效 JSON，显式标记截断；可按 ID 补读。
 - **用量**：`run_finished.usage` 保留本任务统计，新增 `childUsage/totalUsage` 汇总本轮子任务与父子总计。只累计 provider 实际报告的请求用量，不估价、不包含未报告的消耗或额外摘要/标题请求；`usageComplete/childUsageComplete` 表示各模型主循环请求是否都有报告。子代理结果也带用量与完整性标记。
 - **权限继承上限**：子会话 `permissionCeiling = 父运行权限`，子运行权限取更严格者；**权限永不超出继承上限**。`plan` 模式下的只读同样被继承。
 - **真实子模型**：`spawn_agent` 的 `model?` 未给时，子会话使用父会话的模型；给出时使用指定模型。**不要在此处臆造模型 ID**——用 `list_models`/`forge models` 列出的真实值。
 - 子在父 finish 时被 join；外部只发出**父作用域信封**的 `agent_update`（`{childSessionId,status,model,summary}`），子会话自己的 transcript 持久化在自己事件里；**不转发原始子事件**。
 - 子审批信封使用**根** `sessionId` + 原始子 `toolCallId` + 请求 UUID；host 按待定审批 UUID 校验并显示子来源，绝不要求父 `tool_started` 配对。并发子审批被队列串行化。
 
-**未处理的子失败仍然传播**：join 后，任一未明确 resolve 的子结果被拒绝或终态不是 `completed`，父运行请求的 `completed` 仍改写为 `failed`。主代理检查影响、独立补完并验证，或确认可放弃某辅助任务后，可用 `resolve_agent` 写明依据，让父任务正常完成；子任务原来的失败/取消状态保留。只调用 wait/read 不会自动豁免失败。构建或资源清理异常也作为失败报告，不自动重试或换模型。父自身失败、预算耗尽或用户取消不会被 resolve 覆盖。
+**未处理的子失败仍然传播**：join 后，任一未明确 resolve 的子结果被拒绝或终态不是 `completed`，父运行请求的 `completed` 仍改写为 `failed`。主代理检查影响、独立补完并验证，或确认可放弃某辅助任务后，可用 `resolve_agent` 写明依据，让父任务正常完成；子任务原来的失败/取消状态保留。只调用 wait/read 不会自动豁免失败。构建或资源清理异常也作为失败报告，不自动重试或换模型。父自身失败或用户取消不会被 resolve 覆盖。
 
 CLI 默认工具卡只显示状态/计数/页范围/排队状态，不展开报告正文、任务指令或处理原因；`/tools N` 可显式查看有界详情。已处理失败显示 handled，不再作为未处理失败告警；工具本身的 `isError` 仍优先。历史进度里的失败记录不抹除，也不代表整体父任务必然失败。上述接口是模型原生工具，不是新增 slash 命令。
 
