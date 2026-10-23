@@ -1,3 +1,18 @@
+import {
+  Broadcast,
+  Code,
+  Cpu,
+  Database,
+  Folder,
+  Globe,
+  LockKey,
+  MagnifyingGlass,
+  Plugs,
+  Plus,
+  PuzzlePiece,
+  TerminalWindow,
+  Trash,
+} from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type McpRecordDto, mcpRegisterDtoSchema } from "../../../shared/ipc";
 import { OperationScope } from "../../state/operation-scope";
@@ -7,6 +22,7 @@ import { Input } from "../primitives/Input";
 import { Select, type SelectOption } from "../primitives/Select";
 import { Textarea } from "../primitives/Textarea";
 import { Dialog } from "./Dialog";
+import "./mcp-panel.css";
 
 type McpTransportType = "stdio" | "http" | "sse";
 
@@ -15,6 +31,42 @@ const TRANSPORT_OPTIONS: readonly SelectOption[] = [
   { value: "http", label: "Streamable HTTP" },
   { value: "sse", label: "Legacy SSE" },
 ];
+
+function resolveMcpCardVisuals(server: McpRecordDto, isRemote: boolean) {
+  const haystack =
+    `${server.id} ${server.label} ${server.command} ${server.url ?? ""}`.toLowerCase();
+
+  let Icon = isRemote
+    ? server.transport === "sse"
+      ? Broadcast
+      : Globe
+    : TerminalWindow;
+
+  if (/(search|fetch|brave|exa|tavily|query|find)/.test(haystack)) {
+    Icon = MagnifyingGlass;
+  } else if (/(db|sql|postgres|sqlite|mysql|redis|mongo|data)/.test(haystack)) {
+    Icon = Database;
+  } else if (/(file|fs|folder|doc|note|path|storage)/.test(haystack)) {
+    Icon = Folder;
+  } else if (/(git|github|gitlab|code|lsp|repo|dev)/.test(haystack)) {
+    Icon = Code;
+  } else if (/(memory|brain|context|ai|agent)/.test(haystack)) {
+    Icon = Cpu;
+  } else if (!isRemote && !server.command) {
+    Icon = PuzzlePiece;
+  }
+
+  let description: string;
+  if (isRemote) {
+    const mode = server.transport === "sse" ? "SSE 事件流" : "Streamable HTTP";
+    description = `远程 ${mode} 工具扩展服务，注册不自动连接；测试连接会执行 MCP 握手。`;
+  } else {
+    const runner = server.command ? `（${server.command}）` : "";
+    description = `本地进程工具服务${runner}，注册不启动进程；连接测试会启动已启用的服务器。命令不是 OS 沙箱。`;
+  }
+
+  return { Icon, description };
+}
 
 export function McpPanel() {
   const [servers, setServers] = useState<readonly McpRecordDto[]>([]);
@@ -86,90 +138,178 @@ export function McpPanel() {
           {error}
         </p>
       )}
-      <section className="wb-stack">
-        <h3>MCP 服务器</h3>
-        <Button size="sm" disabled={busy} onClick={() => setRegistering(true)}>
-          注册服务器
-        </Button>
-        {servers.map((server) => {
-          const isRemote =
-            server.transport === "http" ||
-            server.transport === "sse" ||
-            Boolean(server.url);
-          const transportLabel =
-            server.transport === "http"
-              ? "HTTP"
-              : server.transport === "sse"
-                ? "SSE"
-                : "stdio";
-          return (
-            <article key={server.id} className="agent-card wb-stack">
-              <strong>
-                {server.label} · {transportLabel} · {server.enabled ? "已启用" : "已禁用"}
-              </strong>
-              <code className="wb-wrap-anywhere">
-                {isRemote
-                  ? (server.url ?? "")
-                  : JSON.stringify([server.command, ...server.args])}
-              </code>
-              {server.hasPrivateHeaders && (
-                <p className="wb-muted">
-                  已配置私密认证凭据{server.headerCount !== undefined ? `（共 ${server.headerCount} 项）` : ""}
-                </p>
-              )}
-              <p className="wb-muted">
-                {isRemote
-                  ? "注册不连接；测试连接会进行 MCP 握手。"
-                  : "注册不启动进程；连接测试会启动已启用的服务器，不代表活动代理连接状态。命令不是 OS 沙箱。"}
-              </p>
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  void action(async (valid) => {
-                    await window.forge.setMcpEnabled(server.id, !server.enabled);
-                    const servers = await window.forge.listMcpServers();
-                    if (!valid()) return;
-                    setServers(servers);
-                  })
-                }
+      <section className="mcp-panel wb-stack">
+        <div className="mcp-panel-header">
+          <div className="mcp-panel-title-group">
+            <h3>MCP 服务器</h3>
+            <span className="mcp-panel-count">{servers.length}</span>
+          </div>
+        </div>
+        <div className="mcp-card-grid">
+          {servers.map((server) => {
+            const isRemote =
+              server.transport === "http" ||
+              server.transport === "sse" ||
+              Boolean(server.url);
+            const transportLabel =
+              server.transport === "http"
+                ? "HTTP"
+                : server.transport === "sse"
+                  ? "SSE"
+                  : "stdio";
+            const { Icon, description } = resolveMcpCardVisuals(
+              server,
+              isRemote,
+            );
+            return (
+              <article
+                key={server.id}
+                className={`mcp-card agent-card ${server.enabled ? "is-enabled" : "is-disabled"}`}
               >
-                {server.enabled ? "禁用" : "启用"}
-              </Button>
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  void action(async (valid) => {
-                    const value = await window.forge.getMcpHealth(server.id);
-                    if (!valid()) return;
-                    setHealth((previous) => ({
-                      ...previous,
-                      [server.id]: `${value.connected ? "连接测试成功" : value.enabled ? "未连接" : "已禁用"}${value.negotiatedProtocolVersion ? ` · ${value.negotiatedProtocolVersion}` : ""}${value.lastError ? ` · ${value.lastError}` : ""}`,
-                    }));
-                  })
-                }
+                <div className="mcp-card-top">
+                  <div className="mcp-card-icon" aria-hidden="true">
+                    <Icon size={20} weight="duotone" />
+                  </div>
+                  <div className="mcp-card-heading">
+                    <strong className="mcp-card-title">
+                      <span className="mcp-card-name">{server.label}</span>
+                      <span className="mcp-card-sep"> · </span>
+                      <span className="mcp-card-badge mcp-card-badge-transport">
+                        {transportLabel}
+                      </span>
+                      <span className="mcp-card-sep"> · </span>
+                      <span
+                        className={`mcp-card-badge mcp-card-badge-status ${
+                          server.enabled ? "is-enabled" : "is-disabled"
+                        }`}
+                      >
+                        <span
+                          className="mcp-card-status-dot"
+                          aria-hidden="true"
+                        />
+                        {server.enabled ? "已启用" : "已禁用"}
+                      </span>
+                    </strong>
+                    <span className="mcp-card-id">{server.id}</span>
+                  </div>
+                </div>
+
+                <p className="mcp-card-desc wb-muted">{description}</p>
+
+                <div className="mcp-card-endpoint">
+                  <code className="wb-wrap-anywhere">
+                    {isRemote
+                      ? (server.url ?? "")
+                      : JSON.stringify([server.command, ...server.args])}
+                  </code>
+                  {server.hasPrivateHeaders && (
+                    <p className="mcp-card-cred wb-muted">
+                      <LockKey size={13} aria-hidden="true" />
+                      <span>
+                        已配置私密认证凭据
+                        {server.headerCount !== undefined
+                          ? `（共 ${server.headerCount} 项）`
+                          : ""}
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                {health[server.id] && (
+                  <p className="mcp-card-health">{health[server.id]}</p>
+                )}
+
+                <div className="mcp-card-actions">
+                  <Button
+                    size="sm"
+                    variant={server.enabled ? "secondary" : "primary"}
+                    disabled={busy}
+                    onClick={() =>
+                      void action(async (valid) => {
+                        await window.forge.setMcpEnabled(
+                          server.id,
+                          !server.enabled,
+                        );
+                        const servers = await window.forge.listMcpServers();
+                        if (!valid()) return;
+                        setServers(servers);
+                      })
+                    }
+                  >
+                    {server.enabled ? "禁用" : "启用"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<Plugs size={13} />}
+                    disabled={busy}
+                    onClick={() =>
+                      void action(async (valid) => {
+                        const value = await window.forge.getMcpHealth(
+                          server.id,
+                        );
+                        if (!valid()) return;
+                        setHealth((previous) => ({
+                          ...previous,
+                          [server.id]: `${value.connected ? "连接测试成功" : value.enabled ? "未连接" : "已禁用"}${value.negotiatedProtocolVersion ? ` · ${value.negotiatedProtocolVersion}` : ""}${value.lastError ? ` · ${value.lastError}` : ""}`,
+                        }));
+                      })
+                    }
+                  >
+                    {isRemote ? "测试连接" : "测试连接（启动已启用服务器）"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mcp-btn-remove"
+                    icon={<Trash size={13} />}
+                    disabled={busy}
+                    onClick={() =>
+                      void action(async (valid) => {
+                        await window.forge.removeMcpServer(server.id);
+                        const servers = await window.forge.listMcpServers();
+                        if (!valid()) return;
+                        setServers(servers);
+                      })
+                    }
+                  >
+                    移除注册
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+
+          <button
+            type="button"
+            className="mcp-card mcp-add-card"
+            disabled={busy}
+            onClick={() => setRegistering(true)}
+          >
+            <div className="mcp-card-top">
+              <div
+                className="mcp-card-icon mcp-add-card-icon"
+                aria-hidden="true"
               >
-                {isRemote ? "测试连接" : "测试连接（启动已启用服务器）"}
-              </Button>
-              {health[server.id] && <p>{health[server.id]}</p>}
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  void action(async (valid) => {
-                    await window.forge.removeMcpServer(server.id);
-                    const servers = await window.forge.listMcpServers();
-                    if (!valid()) return;
-                    setServers(servers);
-                  })
-                }
-              >
-                移除注册
-              </Button>
-            </article>
-          );
-        })}
+                <Plus size={20} weight="bold" />
+              </div>
+              <div className="mcp-card-heading">
+                <strong className="mcp-card-title">
+                  <span className="mcp-card-name">添加 MCP</span>
+                </strong>
+                <span className="mcp-card-id">stdio / HTTP / SSE</span>
+              </div>
+            </div>
+            <p className="mcp-card-desc wb-muted">
+              接入本地 stdio 进程或远程 HTTP / SSE
+              工具服务，扩展外部工具与数据访问能力。
+            </p>
+            <span className="mcp-add-card-cta">
+              <PuzzlePiece size={14} weight="duotone" aria-hidden="true" />
+              <span>注册服务器</span>
+            </span>
+          </button>
+        </div>
       </section>
       <Dialog
         open={registering}
@@ -211,7 +351,9 @@ export function McpPanel() {
                     label: trimmedLabel,
                     transport,
                     url: trimmedUrl,
-                    ...(trimmedAuth ? { headers: { Authorization: trimmedAuth } } : {}),
+                    ...(trimmedAuth
+                      ? { headers: { Authorization: trimmedAuth } }
+                      : {}),
                     enabled: false,
                   };
 

@@ -111,19 +111,65 @@ describe("McpPanel mounted browser integration", () => {
       // 1. Initial list verification:
       // Local stdio server displays its command array JSON
       await page.getByText("Local Stdio Tool · stdio · 已启用").waitFor();
-      expect(await page.getByText('["python3","-m","server"]').isVisible()).toBe(true);
+      expect(
+        await page.getByText('["python3","-m","server"]').isVisible(),
+      ).toBe(true);
 
       // Existing remote server displays remote URL and header tag, NOT empty command JSON
       await page.getByText("Cloud Search · HTTP · 已禁用").waitFor();
-      expect(await page.getByText("https://cloud.mcp.example/search").isVisible()).toBe(true);
-      expect(await page.getByText("已配置私密认证凭据（共 1 项）").isVisible()).toBe(true);
+      expect(
+        await page.getByText("https://cloud.mcp.example/search").isVisible(),
+      ).toBe(true);
+      expect(
+        await page.getByText("已配置私密认证凭据（共 1 项）").isVisible(),
+      ).toBe(true);
 
-      // 2. Open register dialog
+      // Card layout verification: grid container, server cards with icon/name/description, and Add MCP card
+      const cardLayout = await page.evaluate(() => {
+        const grid = document.querySelector(".mcp-card-grid");
+        const serverCards = Array.from(
+          document.querySelectorAll(".mcp-card.agent-card"),
+        );
+        const addCard = document.querySelector(".mcp-card.mcp-add-card");
+        return {
+          gridDisplay: grid ? window.getComputedStyle(grid).display : null,
+          serverCardCount: serverCards.length,
+          allServerCardsHaveIconNameDesc: serverCards.every(
+            (card) =>
+              Boolean(card.querySelector(".mcp-card-icon svg")) &&
+              Boolean(
+                card.querySelector(".mcp-card-name")?.textContent?.trim(),
+              ) &&
+              Boolean(
+                card.querySelector(".mcp-card-desc")?.textContent?.trim(),
+              ),
+          ),
+          addCardHasIcon: Boolean(
+            addCard?.querySelector(".mcp-add-card-icon svg"),
+          ),
+          addCardName:
+            addCard?.querySelector(".mcp-card-name")?.textContent?.trim() ??
+            null,
+          addCardDesc:
+            addCard?.querySelector(".mcp-card-desc")?.textContent?.trim() ??
+            null,
+        };
+      });
+      expect(cardLayout.gridDisplay).toBe("grid");
+      expect(cardLayout.serverCardCount).toBe(2);
+      expect(cardLayout.allServerCardsHaveIconNameDesc).toBe(true);
+      expect(cardLayout.addCardHasIcon).toBe(true);
+      expect(cardLayout.addCardName).toBe("添加 MCP");
+      expect(Boolean(cardLayout.addCardDesc)).toBe(true);
+
+      // 2. Open register dialog via the Add MCP card
       await page.getByRole("button", { name: "注册服务器" }).click();
       await page.getByRole("heading", { name: "注册 MCP 服务器" }).waitFor();
 
       // Default transport is stdio: command and args inputs are present, URL input is NOT
-      expect(await page.locator("#mcp-server-transport").inputValue()).toBe("stdio");
+      expect(await page.locator("#mcp-server-transport").inputValue()).toBe(
+        "stdio",
+      );
       expect(await page.locator("#mcp-server-command").isVisible()).toBe(true);
       expect(await page.locator("#mcp-server-args").isVisible()).toBe(true);
       expect(await page.locator("#mcp-server-url").count()).toBe(0);
@@ -138,7 +184,9 @@ describe("McpPanel mounted browser integration", () => {
       // Fill out remote server form with private Authorization token
       await page.locator("#mcp-server-id").fill("weather-api");
       await page.locator("#mcp-server-name").fill("Weather Service");
-      await page.locator("#mcp-server-url").fill("https://weather.example.com/mcp");
+      await page
+        .locator("#mcp-server-url")
+        .fill("https://weather.example.com/mcp");
       const secretToken = "Bearer ultra-secret-jwt-token-999";
       await page.locator("#mcp-server-auth").fill(secretToken);
 
@@ -147,10 +195,14 @@ describe("McpPanel mounted browser integration", () => {
 
       // Wait for dialog to close and new server to appear in list
       await page.getByText("Weather Service · HTTP · 已禁用").waitFor();
-      expect(await page.getByText("https://weather.example.com/mcp").isVisible()).toBe(true);
+      expect(
+        await page.getByText("https://weather.example.com/mcp").isVisible(),
+      ).toBe(true);
 
       // Verify the DTO sent to bridge.registerMcpServer
-      const registered = await page.evaluate(() => Reflect.get(window, "registered"));
+      const registered = await page.evaluate(() =>
+        Reflect.get(window, "registered"),
+      );
       expect(registered).toHaveLength(1);
       expect(registered[0]).toEqual({
         id: "weather-api",
@@ -187,9 +239,13 @@ describe("McpPanel mounted browser integration", () => {
       await page.getByRole("button", { name: "注册（默认禁用）" }).click();
 
       await page.getByText("Custom Stdio · stdio · 已禁用").waitFor();
-      expect(await page.getByText('["deno","run","main.ts"]').isVisible()).toBe(true);
+      expect(await page.getByText('["deno","run","main.ts"]').isVisible()).toBe(
+        true,
+      );
 
-      const registeredStdio = await page.evaluate(() => Reflect.get(window, "registered"));
+      const registeredStdio = await page.evaluate(() =>
+        Reflect.get(window, "registered"),
+      );
       expect(registeredStdio).toHaveLength(2);
       expect(registeredStdio[1]).toEqual({
         id: "custom-stdio",
@@ -201,6 +257,30 @@ describe("McpPanel mounted browser integration", () => {
       expect("transport" in registeredStdio[1]).toBe(false);
       expect("url" in registeredStdio[1]).toBe(false);
       expect("headers" in registeredStdio[1]).toBe(false);
+
+      // 5. Responsive card grid geometry check across desktop (1280px) and mobile (390px)
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        const geom = await page.evaluate(() => {
+          const doc = document.documentElement;
+          const cards = Array.from(document.querySelectorAll(".mcp-card"));
+          const tops = new Set(
+            cards.map((c) => Math.round(c.getBoundingClientRect().top)),
+          );
+          return {
+            overflow: doc.scrollWidth > doc.clientWidth,
+            cardCount: cards.length,
+            rowCount: tops.size,
+          };
+        });
+        expect(geom.overflow).toBe(false);
+        expect(geom.cardCount).toBe(5); // 4 servers + 1 Add MCP card
+        if (width === 1280) {
+          expect(geom.rowCount).toBeLessThan(geom.cardCount);
+        } else {
+          expect(geom.rowCount).toBe(geom.cardCount);
+        }
+      }
     } finally {
       await browser.close();
     }
