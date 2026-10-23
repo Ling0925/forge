@@ -112,13 +112,14 @@ Core 提供 `@forge/core` 包，CLI/Web 通过声明的 `file:../forge-core` 本
 ## 本机 Web / Core 独立进程
 
 - Core：`repos/forge-core/dist/web/serve.js`，默认 API-only；会话、运行任务、审批、事件补发记录都留在此进程。
-- Web：`repos/forge-web-ui/scripts/serve.mjs --core-url http://127.0.0.1:5175`，只服务 UI 和代理 HTTP/WebSocket，不创建运行时。
+- 本机开发 Web：`repos/forge-web-ui/scripts/dev.mjs --core-url http://127.0.0.1:5175`，Vite HMR + HTTP/WebSocket 代理，不创建运行时。生产静态部署仍可用 `scripts/serve.mjs`。
 - 常驻服务使用两个独立 systemd 用户服务：`forge-core.service` 与 `forge-web.service`。
-  更新 UI 后只执行 `systemctl --user restart forge-web.service`；不要重启 Core，也不要配置联动停止。
+  **修改 `repos/forge-web-ui/src/renderer` 自动热更新，不用编译或重启。** 原库根目录的 `src/renderer` 不属于此入口。
+  修改开发启动脚本后只执行 `systemctl --user restart forge-web.service`；Vite 会重新加载页面，但 Core 对话继续。不要重启 Core，也不要配置联动停止。
 - Core 重启/主机重启仍会终止内存中的执行，不等于支持任意运行时热迁移。
 - 发送附件单文件为 50 MiB；每会话合计仍为 64 MiB、128 个文件，图片输入和文本编辑限制不变。
 
-构建顺序：Core `pnpm build` → Web `pnpm install --no-frozen-lockfile` → Web `pnpm build`。
+首次准备依赖或 Core 变更时：Core `pnpm build` → Web `pnpm install --no-frozen-lockfile`；静态生产入口额外执行 Web `pnpm build`。Vite 日常前端开发不需要重复此流程。
 本机 CLI 仍用兼容源码，本轮附件限制也同步到主仓，并按原短路径编译 CLI。
 
 从本机旧 `forge-web-dev-lan.service` 迁移时，先在旧服务仍运行时检查：

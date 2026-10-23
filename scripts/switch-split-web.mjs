@@ -88,7 +88,7 @@ async function main() {
   }
   await Promise.all([
     access(join(root, "repos/forge-core/dist/web/serve.js")),
-    access(join(root, "repos/forge-web-ui/dist/renderer/index.html")),
+    access(join(root, "repos/forge-web-ui/scripts/dev.mjs")),
   ]);
   await waitForIdle(readOld, { wait: values.wait });
   // Detect a port collision before taking down the only running service.
@@ -113,7 +113,7 @@ async function main() {
     }
   };
   const core = await ready(coreOrigin);
-  await command("systemd-run", ["--user", "--unit=forge-web.service", "--description=Forge Web UI gateway (Core independent)", `--working-directory=${root}`, "--property=Restart=on-failure", "--property=RestartSec=3", process.execPath, join(root, "repos/forge-web-ui/scripts/serve.mjs"), "--host", values.host, "--port", values.port, "--core-url", coreOrigin]);
+  await command("systemd-run", ["--user", "--unit=forge-web.service", "--description=Forge Web UI Vite HMR (Core independent)", `--working-directory=${root}`, "--property=Restart=on-failure", "--property=RestartSec=3", process.execPath, join(root, "repos/forge-web-ui/scripts/dev.mjs"), "--host", values.host, "--port", values.port, "--core-url", coreOrigin]);
   const web = await ready(origin);
   if (web.state.hostId !== core.state.hostId) throw new Error("Gateway did not connect to the expected Core.");
   const corePid = await property("forge-core.service", "MainPID");
