@@ -7,3 +7,6 @@
 [submodule "forge-web-ui"]
 	path = repos/forge-web-ui
 	url = https://github.com/Ling0925/forge-web-ui.git
+[submodule "forge-android"]
+	path = android
+	url = https://github.com/Ling0925/forge-android.git

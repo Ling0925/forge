@@ -1,5 +1,13 @@
 # 本仓库的代理工作约定
 
+## 源码归属：主仓只装配，不恢复旧副本
+
+- Core、CLI、Web UI 的唯一源码分别位于 `repos/forge-core`、`repos/forge-cli`、`repos/forge-web-ui`；Android 位于 `android`，四者都是独立 Git 子模块。
+- 功能修改和测试在所属子模块完成并提交；主仓只维护子模块指针、装配脚本和导航文档。不要重新创建根目录 `src/` 或把子模块源码复制回来。
+- 旧单体源码保存在 `codex/archive-monolith-20261023` 分支（基线 `a568d4568ebe73057e8ef002c29117179b05bbef`）。本机旧工作副本和未提交的 renderer 修改保存在已忽略的 `.archive/legacy-20261023/`，只供恢复，不是开发目录。
+- 不自动更新子模块到远端最新版本，不夹带其他任务的子模块指针或未提交修改。主仓和子仓分别审阅、分别提交。
+- Android 的 `android/` 路径保持不变，避免打断现有 Gradle、模拟器和 fixture 工具。
+
 ## 子代理模型：固定使用 DeepSeek V4.1 Flash
 
 用户明确要求：**子代理使用 DeepSeek V4.1 Flash**，当前配置目录中的精确模型 ID 为 `cn:deepseek-v4.1-flash`。
@@ -13,13 +21,14 @@
 
 用户明确要求本机开发采用短路径：**改代码 → 编译 CLI → 重开 `forge` 使用新版**，不要默认走完整发布、验收、打包和安装流程。
 
-- 当前本机的 `~/.local/bin/forge` 已直接运行 `/home/ling/services/desktop-harness/dist/cli.mjs`，不再从旧的 release 目录加载 CLI。
+- 当前本机的 `~/.local/bin/forge` 运行 `/home/ling/services/desktop-harness/dist/cli.mjs`；该文件由主仓构建脚本生成，仅转发到 `repos/forge-cli/dist/cli.mjs`，不再编译根目录旧源码。
 - 修改 CLI 或它依赖的共享核心后，在仓库根目录执行：
 
   ```sh
   node scripts/build-core.mjs
   ```
 
+- 该命令先构建 Core，将 CLI 的本地 `@forge/core` 依赖链接到该子模块，再构建 CLI。首次安装依赖用 `pnpm run setup`；不会修改子仓 manifest 或锁文件。
 - 编译成功后，下次启动 `forge` 就加载新产物；当前运行中的进程不会热更新。无需再执行安装脚本。
 - 仅修改文档时不需要重新编译。
 - 本机 CLI 更新不要默认执行桌面构建、Electron 打包、release 校验或 `scripts/install-local.mjs`，也不要修改桌面启动入口和旧发布包。

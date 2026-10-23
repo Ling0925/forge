@@ -1,26 +1,14 @@
-import { chmod, copyFile, mkdir } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { linkCore, root, run } from "./modules.mjs";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
-process.chdir(root);
-// Do not remove desktop or renderer outputs produced by another build.
-await mkdir("dist", { recursive: true });
-await build({
-  bundle: true,
-  platform: "node",
-  target: "node22",
-  external: ["electron", "playwright", "playwright-core", "ink", "react"],
-  sourcemap: false,
-  legalComments: "eof",
-  logLevel: "info",
-  entryPoints: ["src/cli/index.ts"],
-  outfile: "dist/cli-main.mjs",
-  format: "esm",
-  banner: {
-    js: 'import { createRequire as forgeCreateRequire } from "node:module"; const require = forgeCreateRequire(import.meta.url);',
-  },
-});
-// Do not bundle this entry: it must select production before any React imports.
-await copyFile("src/cli/bootstrap.mjs", "dist/cli.mjs");
-await chmod("dist/cli.mjs", 0o755);
+run("core", process.execPath, ["scripts/build.mjs"]);
+await linkCore("cli");
+run("cli", process.execPath, ["scripts/build-core.mjs"]);
+
+// Preserve the installed launcher path without copying another implementation.
+await mkdir(join(root, "dist"), { recursive: true });
+const temporary = join(root, `dist/cli-${process.pid}.tmp`);
+await writeFile(temporary, '#!/usr/bin/env node\nawait import("../repos/forge-cli/dist/cli.mjs");\n', { mode: 0o755 });
+await rename(temporary, join(root, "dist/cli.mjs"));
+console.log("Forge CLI ready: dist/cli.mjs -> repos/forge-cli/dist/cli.mjs");

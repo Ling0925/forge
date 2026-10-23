@@ -1,9 +1,2 @@
-allowBuilds:
-  '@biomejs/biome': true
-  electron-winstaller: false
-  esbuild: true
-minimumReleaseAgeExclude:
-  - oxlint-plugin-react-doctor@0.9.18
-  - react-doctor@0.9.18
-patchedDependencies:
-  ink@6.6.0: patches/ink@6.6.0.patch
+packages: []
+verifyDepsBeforeRun: false

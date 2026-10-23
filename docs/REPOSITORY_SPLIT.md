@@ -1,173 +1,98 @@
-# 主仓 + Core / CLI / Web UI 子模块
+# 四个模块，一个装配主仓
 
-## 当前仓库组织
+Forge 主仓只记录模块版本、提供开发入口和归档导航。应用实现不再保留在根目录。
 
-原 `desktop-harness` 工作区对应的 `Ling0925/forge` 作为主仓（Git superproject），
-通过 `.gitmodules` 和 Git gitlink 固定三个独立仓库的版本：
+| 模块 | 唯一源码位置 | 独立仓库 |
+| --- | --- | --- |
+| Core | `repos/forge-core` | [forge-core](https://github.com/Ling0925/forge-core) |
+| CLI / TUI | `repos/forge-cli` | [forge-cli](https://github.com/Ling0925/forge-cli) |
+| Web UI | `repos/forge-web-ui` | [forge-web-ui](https://github.com/Ling0925/forge-web-ui) |
+| Android 原生 / WebView | `android` | [forge-android](https://github.com/Ling0925/forge-android) |
 
-| 仓库 | 主仓内路径 | GitHub 仓库 | 职责 |
-| --- | --- | --- | --- |
-| Core | `repos/forge-core` | `Ling0925/forge-core` | 运行时、Provider、存储、工具、上下文、MCP、共享契约、host 与 HTTP/WebSocket API |
-| CLI | `repos/forge-cli` | `Ling0925/forge-cli` | 命令行入口、TUI、终端渲染、CLI 测试与 Ink patch |
-| Web UI | `repos/forge-web-ui` | `Ling0925/forge-web-ui` | React renderer、Web 构建、开发/启动装配及界面测试 |
+Android 保留原路径，Gradle、SDK 配置、构建产物、模拟器及离线 fixture 不需搬家。
+它与另外三个模块一样由 gitlink 引用，源码和历史属于自己的仓库。
 
-主仓和三个子仓均为公开仓库，子模块使用 HTTPS 地址。读取不需要私有仓库权限，
-推送仍需要对应仓库的写权限；公开可见性不改变现有许可文件。
-
-主仓记录的是**每个子仓的一个确定提交**，不是自动跟随 `master` 最新版本，也不把
-子仓源码重新复制进主仓。各子仓仍有自己的历史、分支、远端、依赖与构建入口，可
-独立克隆、开发和发布；这里使用 submodule，不是 subtree 或 worktree。
-
-现有检出已采用标准子模块布局：子仓工作目录里的 `.git` 是指向主仓
-`.git/modules/` 中对应 Git 目录的文件。不要只搬走某个子目录并假定它仍是完整
-独立检出；需要另一份独立工作区时，直接克隆对应子仓。
-
-`.gitignore` 只允许这三个 `repos/` 路径进入主仓索引，其余本地 checkout 仍忽略。
-主仓跟踪三个 `160000` 模式的 gitlink，不跟踪子仓源码、依赖目录或构建产物。
-
-## 克隆与同步
-
-首次克隆（主仓远端需已包含子模块关联提交）：
+## 初始化和日常修改
 
 ```sh
 git clone --recurse-submodules https://github.com/Ling0925/forge.git
 cd forge
-git submodule status --recursive
+pnpm run setup
+node scripts/build-core.mjs
 ```
 
-已有主仓检出，在取得包含 `.gitmodules` 和子模块指针的主仓提交后执行：
+已有检出先保存各仓改动，再用 `git submodule update --init --recursive` 取得主仓
+固定的版本。不要在有其他任务改动时执行更新，不用 `--remote` 代替固定版本同步。
+
+子模块初始化后可能处于 detached HEAD；修改前在目标子仓建分支，提交其源码与测试。
+回到主仓只暂存本次需要更新的 gitlink。默认只本地提交；要推送主仓时，先确认它引用
+的子仓提交已经可从远端取得，再用 `git push --recurse-submodules=check`。
+
+四个子仓各自管理依赖、测试与构建。主仓不安装 Electron、React 或 Provider SDK，
+也不再提供单体的 typecheck/lint/test/package。旧跨客户端测试完整留在归档中；
+主仓的 `pnpm test` 只验证装配入口，不代表子模块全量测试。
+
+## 本机 CLI 仍是编译后重开
 
 ```sh
-git submodule sync --recursive
-git submodule update --init --recursive
+node scripts/build-core.mjs
+forge
 ```
 
-普通 `git clone` 不会自动下载子仓内容，上述初始化命令可以补齐。
-以后更新前先检查主仓及子仓工作区，保留或提交自己的改动；不要用强制更新覆盖它们。
-在适合快进的干净工作区中，可依次执行：
+构建顺序是 Core → CLI，输出的 `dist/cli.mjs` 仅导入
+`repos/forge-cli/dist/cli.mjs`，保留 CLI 的 production bootstrap、参数和调用工作目录。
+本机 `~/.local/bin/forge` 无需改写。运行中的 CLI 不会热更新。
+
+CLI 的 `@forge/core` 是外部包；主仓装配将其 `node_modules/@forge/core` 链接到
+`repos/forge-core`，避免 pnpm `file:` 副本仍使用旧实现。模块 manifest/锁文件不改动。
+`pnpm run setup` 为三个 Node 模块安装各自锁定依赖并设置本地链接；之后日常 CLI 构建
+不需要重新安装。独立克隆子仓时仍按各自 README 使用 `file:../forge-core`。
+
+`pnpm build:web` 只构建 Web UI，需要 Core 已构建；该命令也刷新 Web 的本地 Core
+链接。正在运行 Vite 时不要同时切换它的依赖链接，准备更新时只重启 Web。
+CLI 构建不改变 Web 的依赖链接，也不重启 Core 或 Web 服务。
+
+## Web 和 Core 分开启动
 
 ```sh
-git pull --ff-only
-git submodule sync --recursive
-git submodule update --init --recursive
+# 终端 A：Core 持有任务；FORGE_HOME 指定数据目录。
+pnpm serve:core -- --host 127.0.0.1 --port 5175 --workspace /absolute/project --multi-workspace
+# 终端 B：Web 开发热更新，不创建第二个 Core。
+pnpm dev:web -- --host 127.0.0.1 --port 5173 --core-url http://127.0.0.1:5175
+# 静态 Web 则先 pnpm build:web，再替换终端 B：
+pnpm serve:web -- --host 127.0.0.1 --port 5173 --core-url http://127.0.0.1:5175
 ```
 
-`update --init --recursive` 检出主仓固定的版本；不要为了日常同步改成
-`update --remote`，后者会选择远端分支版本，可能使主仓固定的版本组合发生变化。
+旧的 `dev:web --workspace` 单体语义已退出；工作区和运行状态现在由独立 Core 管理，
+Web 的 `--core-url` 必填。旧参数会报错，不会偷偷回退到旧实现。
+本机现有 `forge-core.service` / `forge-web.service` 直接运行子模块入口，不受本次
+根目录归档影响。React/CSS 在 Web 子仓热更新；重启 Web 不终止 Core 任务。
+Core 更新后只有显式重启才加载新产物，重启前须结束其活动任务。
 
-## 在子仓开发与更新主仓指针
+## 旧代码和未提交修改在哪里
 
-新初始化的子模块通常处于 detached HEAD，这是固定版本检出的正常状态。
-在子仓里开始开发前，从当前版本创建自己的分支，例如：
+- 归档分支：`codex/archive-monolith-20261023`。
+- 不变的归档基线：`a568d4568ebe73057e8ef002c29117179b05bbef`。
+- 本机原工作副本：`.archive/legacy-20261023/worktree/`，已被 Git 忽略，不作为开发源码。
+- 两处原有未提交 Web 修改保存在上述 `worktree/src/renderer/` 中；另有
+  `.archive/legacy-20261023/local-renderer.patch`。它们没有混入归档提交或 Web 子仓。
+
+根目录旧 `src`、应用测试、设计文档、示例、品牌原稿、参考 checkout、旧构建/发布
+脚本和依赖配置均已移入本机归档。Electron 壳没有独立迁移，源码在归档分支，现有
+桌面发布包与启动器保留；当前主仓不再构建 Electron。Android 则仍在第四个子模块
+继续维护，不属于停用的旧代码。
+
+查看旧文件用 `git show codex/archive-monolith-20261023:src/...`。需要完整恢复旧
+单体源码时导出到另一个目录，不要把第二套实现恢复到当前开发根目录：
 
 ```sh
-git -C repos/forge-core switch -c feat/example-change
+mkdir -p /tmp/forge-legacy
+git archive codex/archive-monolith-20261023 | tar -x -C /tmp/forge-legacy
 ```
 
-1. 在涉及的子仓修改、聚焦验证并提交，只暂存该子仓自己的文件。
-2. 将子仓提交推送到它的远端分支，确保其他人能获取主仓将要引用的提交。
-3. 返回主仓，审阅版本差异，只更新本次涉及的子模块指针。例如 Core 更新时：
+归档分支与本机 `.archive` 本次不推送。归档基线仍是当前分支祖先，因此正常取得
+完整主仓历史后可直接按上述提交 ID 查询或导出。历史归档不包含本机未提交补丁。
+真实配置、会话、附件、缓存、现有 release 和桌面产物不属于本次清理范围。
 
-```sh
-git diff --submodule=log -- repos/forge-core
-git add -- repos/forge-core
-git diff --cached --submodule=log
-git commit -m "chore: update forge-core submodule"
-```
-
-4. 明确需要推送主仓时，再执行 `git push --recurse-submodules=check`。
-   这个检查用于发现子模块提交未推送的情况，不代替先推送子仓的步骤。
-
-主仓的普通 `git commit` 不会把子仓里的未提交文件一起提交；反过来，子仓提交也
-不会自动更新主仓里的指针。不要通过复制源码或强制推送来绕过这个分工。
-
-## 包边界与构建
-
-Core 提供 `@forge/core` 包，CLI/Web 通过声明的 `file:../forge-core` 本地包依赖
-使用它，不复制核心和共享契约，不通过 `../../desktop-harness/src` 访问原库。
-子模块保持同级目录，所以原有本地包依赖无需改变。
-`@forge/core/shared/*` 是浏览器可用契约，其余 Node 实现不应进入浏览器包。
-后续配置 registry 或 tarball 依赖时无需重新合并仓库。
-
-先在 Core 安装并构建，再分别安装/构建 CLI 与 Web UI。精确入口和聚焦检查见
-各仓的 `README.md`。Core 修改后重新构建，并重新安装消费者的本地文件包依赖。
-主仓原有构建命令仍针对兼容源码，不会因加入子模块而自动构建三个子仓。
-
-## 保留项与非目标
-
-- 原库完整历史与旧 `src/` 暂时保留，供现有本机 CLI/桌面入口继续工作；主仓不是
-  已经删去所有旧实现的纯装配仓，也不自动把旧源码修改同步到子仓。
-- 原有 `src/renderer/components/workbench/ModelPicker.tsx` 与
-  `src/renderer/styles/settings-models.css` 的未提交修改只留在原库，未混入子仓提交。
-  后续需要时应人工审阅后迁入 Web UI 仓，不在子模块接入时覆盖它们。
-- Electron 桌面壳与现有 Android WebView 工程仍留在主仓；它们不被冒充为 Web UI。
-- 原库中的跨客户端集成测试保留。各子仓只承担自身职责的测试，拆分后迁移或
-  尚未迁移的覆盖应以各仓文档和实际测试结果为准。
-- 最初拆仓没有改变进程所有权；随后生产 Web 已改为显式连接独立 Core，见下节。
-  CLI、桌面和旧开发入口仍可能各自创建核心。统一 daemon、Rust 内核、原生 Android
-  是独立后续步骤；共享数据目录不代表共享运行时。
-- 本机 `forge` 仍运行 `desktop-harness/dist/cli.mjs`，新 CLI 需要显式运行
-  `repos/forge-cli` 的构建产物。本次没有安装、修改桌面入口或正式打包。
-
-## 本机 Web / Core 独立进程
-
-- Core：`repos/forge-core/dist/web/serve.js`，默认 API-only；会话、运行任务、审批、事件补发记录都留在此进程。
-- 本机开发 Web：`repos/forge-web-ui/scripts/dev.mjs --core-url http://127.0.0.1:5175`，Vite HMR + HTTP/WebSocket 代理，不创建运行时。生产静态部署仍可用 `scripts/serve.mjs`。
-- 常驻服务使用两个独立 systemd 用户服务：`forge-core.service` 与 `forge-web.service`。
-  **修改 `repos/forge-web-ui/src/renderer` 自动热更新，不用编译或重启。** 原库根目录的 `src/renderer` 不属于此入口。
-  修改开发启动脚本后只执行 `systemctl --user restart forge-web.service`；Vite 会重新加载页面，但 Core 对话继续。不要重启 Core，也不要配置联动停止。
-- Core 重启/主机重启仍会终止内存中的执行，不等于支持任意运行时热迁移。
-- 发送附件单文件为 50 MiB；每会话合计仍为 64 MiB、128 个文件，图片输入和文本编辑限制不变。
-
-首次准备依赖或 Core 变更时：Core `pnpm build` → Web `pnpm install --no-frozen-lockfile`；静态生产入口额外执行 Web `pnpm build`。Vite 日常前端开发不需要重复此流程。
-本机 CLI 仍用兼容源码，本轮附件限制也同步到主仓，并按原短路径编译 CLI。
-
-从本机旧 `forge-web-dev-lan.service` 迁移时，先在旧服务仍运行时检查：
-
-```sh
-node scripts/switch-split-web.mjs --host 192.168.8.108
-# 确认访问地址、工作区、原 FORGE_HOME 正确，停止发起新任务后执行：
-node scripts/switch-split-web.mjs --host 192.168.8.108 --apply --wait
-```
-
-默认保持 Web `192.168.8.108:5174`，Core 仅监听 `127.0.0.1:5175`，保留多工作区行为。
-脚本无 `--apply` 时只查看 host 元数据；执行模式等待旧 Core 连续空闲 10 秒（最多 30 分钟），
-拒绝替换未知入口、已有新服务或变化中的 host；不取消任务、不读取真实配置/密钥文件。
-旧版没有原子 drain 接口，因此首次迁移的维护窗口请勿新发任务。原进程的运行态不能迁移，
-若正在由 Web 对话执行升级，应把脚本放到独立 systemd 用户任务中，等当前回合结束后切换。
-脚本切换后会实际重启一次 Web 并确认 Core PID/hostId 不变；失败保留现场，不自动重放迁移。
-服务沿用原来的 transient 用户服务方式（不改桌面或 CLI 入口，不额外启用开机自启）。
-状态与日志：`systemctl --user status forge-core forge-web`、`journalctl --user -u forge-web`。
-
-## 拆分历史与已有验证记录
-
-最初的路径提取基线为 `e089acbcf1c3fe10a71a9ce0fce5f9309305db3b`。
-使用 `git-filter-repo 2.47.0` 在三个新建的非硬链接 clone 中按相关路径过滤历史，
-保留作者和相关路径的提交记录；过滤后提交 ID 会变化，原仓历史没有重写。
-三个仓库先以独立本地仓库建立，随后分别推送到 GitHub，再由主仓以子模块关联。
-不要把过滤后的子仓历史直接推回主仓分支。
-
-以下是**最初拆分时**的提交与验证，不是子模块接入后重新跑过的全量验收：
-
-| 仓库 | 拆分提交 | 已验证 |
-| --- | --- | --- |
-| Core | `6d907f2` | 独立构建；14 个聚焦 Vitest 文件共 92 项通过；4 项构建包检查通过（浏览器契约、离线回合持久化、无 UI 的 API 启动等） |
-| CLI | `4fe4d6e` | 独立构建、类型/包边界检查；64 项聚焦测试与 2 项真实产物烟测通过，production bootstrap 保持独立 |
-| Web UI | `3c06a8c` | 独立构建；103 项聚焦单元/渲染/浏览器测试通过；真实生产入口的 Chromium 导航、CSP、RPC 与可选 socket 检查通过 |
-
-- CLI 扩展测试为 791 通过、4 未通过：3 项需要外部 xterm Unicode11 QA 附件；
-  1 项为 `ink-view` 的 24×8 dock 顺序断言，已在未拆分的原库同一用例上复现。
-  拆分时没有改变旧窄屏布局或把失败静默跳过。
-- Web UI 全量 typecheck/lint 尚未通过；CLI lint 也仍有诊断。没有逐条修复
-  或完成全部错误的基线归因，不把构建或聚焦测试通过表述为“全量验收通过”。
-- 启动/浏览器检查使用临时状态，不使用真实密钥，不调用真实 Provider；检查后
-  服务和浏览器已关闭。没有做桌面/Android 构建或正式发布打包。
-
-## 后续工作顺序
-
-1. 在三个子仓中继续开发，由主仓固定并维护经过验证的版本组合。
-2. 单独设计语言无关协议、daemon 单实例所有权与完整 CLI 客户端接入。
-3. 在 Core 仓进行 Rust/Linux/Android 原型与行为对照迁移，不重写 UI 仓。
-
-主仓只提交必要的装配配置、文档和子模块指针；子仓分别提交自身源码与构建调整。
-真实配置、运行状态、依赖目录与构建产物均不应进入任何仓库提交。
+本次迁移没有接收开始前 `repos/forge-core` 的额外提交或工作区修改；主仓保留原
+Core 指针。未提交源码可能参与本机编译，但不意味着它们已随归档分支交付。
