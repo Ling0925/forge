@@ -7,7 +7,7 @@ Generated with the built-in ImageGen tool on 2026-10-23.
 - Palette: warm terracotta and charcoal with copper-orange highlights, based on `../../src/renderer/styles/workspace-theme.css`.
 - The standalone silhouette replaces the previous rounded-tile lettermark concept. Versions 1 and 2 remain unchanged.
 - Visual check: rendered the actual PNG in Chromium at 512, 64, and 32 px on Forge light `#faf9f6` and dark `#171716` backgrounds. The anvil and F remain distinguishable; the heat and spark details become subtle at 32 px. No visible dirty patch was observed in those renders.
-- This is a standalone raster design asset. Application icons and interface references have not been replaced.
+- Web usage: the standalone Web UI uses this design for its favicon, home greeting, and sidebar brand; the root and Web READMEs display the same mark. Desktop and Android launcher icons are unchanged.
 
 ## Generation prompt
 

@@ -1,8 +1,10 @@
 <div align="center">
 
-# ⚒️ Forge
+<img src="assets/brand/forge-icon-v3.png" width="128" height="128" alt="Forge 锻造图标" />
 
-**面向 Linux 的本地桌面应用与 Node 22 CLI · 原创共享代理运行时**
+# Forge
+
+**本地编码与任务代理 · Web 工作台、Linux 桌面与 Node 22 CLI**
 
 [![Node Version](https://img.shields.io/badge/Node-%3E%3D22.23.1%20%3C23-339933?style=flat-square&logo=node.js&logoColor=white)](package.json)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20x64-FCC624?style=flat-square&logo=linux&logoColor=black)](docs/DELIVERY.md)
