@@ -5,6 +5,7 @@ import { createWebHost } from "../src/web/server";
 import { chmod, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Socket } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness } from "../src/core/harness";
 import { createWorkerController } from "../src/desktop/controller";
@@ -12,7 +13,12 @@ import { runCliWithIO, type CliIO } from "../src/cli/cli";
 import { toolPresentation } from "../src/cli/render/tool-presentation";
 import type { ModelProvider, ToolContext } from "../src/shared/contracts";
 import { createTransportBridge } from "../src/shared/bridge";
-import { collectPublishedFiles, PUBLISHED_FILE_MAX_BYTES } from "../src/shared/published-files";
+import {
+  collectPublishedFiles, publishedFileSchema, PUBLISHED_FILE_MAX_BASE64_BYTES,
+  PUBLISHED_FILE_MAX_BYTES, PUBLISHED_FILE_MAX_MIB,
+  PUBLISHED_SESSION_MAX_BYTES, PUBLISHED_SESSION_MAX_FILES,
+} from "../src/shared/published-files";
+import { MAX_RESPONSE_BYTES, sendFrame } from "../src/host/frames";
 import { parseSessionId, type Message, type ToolResult } from "../src/shared/schemas";
 import { openPublishedFileStore } from "../src/store/published-files";
 import { createPublishedFileTool } from "../src/tools/published-files";
@@ -39,6 +45,45 @@ async function fixture() {
 }
 
 describe("published file tool and immutable storage", () => {
+  it("advertises and transports the 50 MiB per-file ceiling without changing the session quota", async () => {
+    const f = await fixture();
+    expect(PUBLISHED_FILE_MAX_BYTES).toBe(50 * 1024 * 1024);
+    expect(PUBLISHED_FILE_MAX_BASE64_BYTES).toBe(Math.ceil(PUBLISHED_FILE_MAX_BYTES / 3) * 4);
+    expect(PUBLISHED_SESSION_MAX_BYTES).toBe(64 * 1024 * 1024);
+    expect(PUBLISHED_SESSION_MAX_FILES).toBe(128);
+    expect(MAX_RESPONSE_BYTES).toBeGreaterThan(PUBLISHED_FILE_MAX_BASE64_BYTES + 1024 * 1024);
+    expect(f.tool.definitions[0]?.function.description).toContain(
+      `Maximum ${PUBLISHED_FILE_MAX_MIB} MiB/file, 128 files/64 MiB per session.`,
+    );
+  });
+
+  it("frames a maximum-size attachment response for local host RPC", () => {
+    const chunks: string[] = [];
+    let destroyed = false;
+    const socket = {
+      destroyed: false,
+      writableLength: 0,
+      write: (chunk: string) => { chunks.push(chunk); return true; },
+      destroy: () => { destroyed = true; },
+    } as unknown as Socket;
+    const attachment = {
+      id: randomUUID(), name: "data.zip", mimeType: "application/zip",
+      size: PUBLISHED_FILE_MAX_BYTES, sha256: "a".repeat(64),
+      createdAt: new Date().toISOString(), previewKind: "none",
+    };
+    expect(sendFrame(socket, {
+      kind: "response",
+      response: {
+        id: randomUUID(), method: "getPublishedFile", ok: true,
+        result: { file: attachment, base64: "A".repeat(PUBLISHED_FILE_MAX_BASE64_BYTES) },
+      },
+    })).toBe(true);
+    expect(destroyed).toBe(false);
+    const bytes = Buffer.byteLength(chunks[0] ?? "");
+    expect(bytes).toBeGreaterThan(64 * 1024 * 1024);
+    expect(bytes).toBeLessThanOrEqual(MAX_RESPONSE_BYTES);
+  });
+
   it("publishes metadata only and retains exact bytes after original mutation/deletion and reopen", async () => {
     const f = await fixture();
     await writeFile(join(f.workspace, "report.md"), "# Original\n");
@@ -100,22 +145,43 @@ describe("published file tool and immutable storage", () => {
     expect((await f.publish({ path: "report.txt" }, { workspace: f.root })).isError).toBe(true);
     await expect(f.publish({ path: "report.txt" }, { signal: AbortSignal.abort() })).rejects.toMatchObject({ code: "cancelled" });
     await writeFile(join(f.workspace, "huge.zip"), Buffer.alloc(PUBLISHED_FILE_MAX_BYTES + 1));
-    expect((await f.publish({ path: "huge.zip" })).isError).toBe(true);
+    const oversize = await f.publish({ path: "huge.zip" });
+    expect(oversize.isError).toBe(true);
+    expect(oversize.content).toContain(`File exceeds the ${PUBLISHED_FILE_MAX_MIB} MiB ceiling.`);
   });
 
-  it("enforces a durable session quota and detects tampered stored bytes", async () => {
+  it("accepts a 50 MiB file, rejects larger sizes at every layer, and keeps the 64 MiB session total", async () => {
     const f = await fixture();
     const details = { name: "data.zip", mimeType: "application/zip", previewKind: "none" as const };
-    const data = Buffer.alloc(PUBLISHED_FILE_MAX_BYTES);
-    let id = "";
-    for (let i = 0; i < 8; i++) id = (await f.store.put(f.context.sessionId, data, details, f.context.signal)).id;
-    await expect((await openPublishedFileStore(f.state)).put(f.context.sessionId, Buffer.from("x"), details, f.context.signal)).rejects.toMatchObject({ code: "tool" });
-    const path = join(f.state, "published-files", `${id}.json`);
+    const metadata = {
+      id: randomUUID(), name: "data.zip", mimeType: "application/zip",
+      size: PUBLISHED_FILE_MAX_BYTES, sha256: "a".repeat(64),
+      createdAt: new Date().toISOString(), previewKind: "none" as const,
+    };
+    expect(publishedFileSchema.safeParse(metadata).success).toBe(true);
+    expect(publishedFileSchema.safeParse({ ...metadata, size: PUBLISHED_FILE_MAX_BYTES + 1 }).success).toBe(false);
+    await expect(f.store.put(f.context.sessionId, Buffer.alloc(PUBLISHED_FILE_MAX_BYTES + 1), details, f.context.signal))
+      .rejects.toMatchObject({ code: "tool" });
+    const file = await f.store.put(f.context.sessionId, Buffer.alloc(PUBLISHED_FILE_MAX_BYTES), details, f.context.signal);
+    const response = await f.store.get(file.id);
+    expect(response.file).toEqual(file);
+    expect(response.base64.length).toBe(PUBLISHED_FILE_MAX_BASE64_BYTES);
+    const remaining = PUBLISHED_SESSION_MAX_BYTES - PUBLISHED_FILE_MAX_BYTES;
+    expect((await f.store.put(f.context.sessionId, Buffer.alloc(remaining), details, f.context.signal)).size).toBe(remaining);
+    await expect(f.store.put(f.context.sessionId, Buffer.from("x"), details, f.context.signal))
+      .rejects.toMatchObject({ code: "tool" });
+  });
+
+  it("detects tampered stored bytes", async () => {
+    const f = await fixture();
+    const details = { name: "data.zip", mimeType: "application/zip", previewKind: "none" as const };
+    const file = await f.store.put(f.context.sessionId, Buffer.from("original"), details, f.context.signal);
+    const path = join(f.state, "published-files", `${file.id}.json`);
     const record = JSON.parse(await readFile(path, "utf8"));
     await writeFile(path, JSON.stringify({ ...record, base64: "dGFtcGVyZWQ=" }), { mode: 0o600 });
-    await expect(f.store.get(id)).rejects.toMatchObject({ code: "storage" });
+    await expect(f.store.get(file.id)).rejects.toMatchObject({ code: "storage" });
     await chmod(path, 0o644);
-    await expect(f.store.get(id)).rejects.toMatchObject({ code: "storage" });
+    await expect(f.store.get(file.id)).rejects.toMatchObject({ code: "storage" });
   });
 });
 
@@ -161,7 +227,7 @@ it("wires real runtime publication, authenticated RPC, forks, reopen and CLI sav
   const authorization = await openDeviceAuthorization({ directory: stateDir });
   cleanups.push(() => authorization.close());
   const device = await authorization.exchange((await authorization.createPairing("isolated attachment fixture")).token);
-  const web = await createWebHost({ authorization, service, workspace, host: "127.0.0.1", port: 5173 });
+  const web = await createWebHost({ authorization, service, workspace, host: "127.0.0.1", port: 5173, trustedLan: false });
   web.server.on("request", (req, res) => { void web.handle(req, res, () => res.end()); });
   await new Promise<void>(done => web.server.listen(0, "127.0.0.1", done));
   const address = web.server.address() as { port: number };
