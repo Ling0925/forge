@@ -305,7 +305,7 @@
       <div class="box sage"><span class="t">MCP 工具 · 2</span><span class="d">mcp_list_tools / mcp_call_tool<br>stdio only</span></div>
       <div class="box sage"><span class="t">Browser 6 / LSP 1</span><span class="d">条件注册；Playwright 首次使用才启动</span></div>
       <div class="box sage"><span class="t">project_context / load_skill</span><span class="d">src/context + tools/skills.ts<br>只读、不授予权限</span></div>
-      <div class="box sage"><span class="t">publish_file</span><span class="d">不可变会话附件 ≤8 MiB</span></div>
+      <div class="box sage"><span class="t">publish_file</span><span class="d">不可变会话附件 ≤50 MiB</span></div>
       <div class="box hi"><span class="t">Native · 11（循环内执行）</span><span class="d">src/core/agents.ts + history.ts<br>不进 registry，由 runtime 直接处理</span></div>
     </div>
   </div>
@@ -437,7 +437,7 @@
       <tr><td><code>mcp_list_tools</code> / <code>mcp_call_tool</code></td><td class="no">两者拒绝</td><td class="ask">每次审批并显示注册 command argv（绝不显示 env）</td><td class="ok">仅限已注册且 enabled 的服务器</td><td>stdio only；<code>setEnabled(false)</code> / <code>remove</code> 主动撤销本进程活动连接与子进程组</td></tr>
       <tr><td>browser 6 工具</td><td class="no">拒绝</td><td class="ask">仅白名单 origin</td><td class="ask">同左</td><td><code>browserAllowedOrigins</code> 为空则注册表根本不装载；懒启动 Chromium，headless</td></tr>
       <tr><td><code>lsp</code></td><td class="no">拒绝</td><td class="ok">配置了才注册</td><td class="ok">同左</td><td>仅当 <code>settings.lspServers</code> 非空才建注册表</td></tr>
-      <tr><td><code>publish_file</code></td><td class="ask">凭据/敏感内容拒发</td><td class="ok">≤8 MiB / 文件</td><td class="ok">同左</td><td>快照不可变；仅工作区相对路径，拒 symlink / hardlink</td></tr>
+      <tr><td><code>publish_file</code></td><td class="ask">凭据/敏感内容拒发</td><td class="ok">≤50 MiB / 文件</td><td class="ok">同左</td><td>快照不可变；仅工作区相对路径，拒 symlink / hardlink</td></tr>
       <tr><td><code>spawn_agent</code></td><td class="ok">允许</td><td class="ok">允许</td><td class="ok">允许</td><td><b>plan 继承 readonly</b>；子 ceiling = 父 ceiling；深度 1、活动 ≤4、总量 ≤32</td></tr>
     </tbody>
   </table>

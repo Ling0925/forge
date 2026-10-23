@@ -103,10 +103,40 @@ Core 提供 `@forge/core` 包，CLI/Web 通过声明的 `file:../forge-core` 本
 - Electron 桌面壳与现有 Android WebView 工程仍留在主仓；它们不被冒充为 Web UI。
 - 原库中的跨客户端集成测试保留。各子仓只承担自身职责的测试，拆分后迁移或
   尚未迁移的覆盖应以各仓文档和实际测试结果为准。
-- 本次没有改变会话格式、Provider 行为或默认进程所有权。单独启动 CLI 与 Web
-  仍可能各自创建核心。统一 daemon、Rust 内核、原生 Android 是后续独立步骤。
+- 最初拆仓没有改变进程所有权；随后生产 Web 已改为显式连接独立 Core，见下节。
+  CLI、桌面和旧开发入口仍可能各自创建核心。统一 daemon、Rust 内核、原生 Android
+  是独立后续步骤；共享数据目录不代表共享运行时。
 - 本机 `forge` 仍运行 `desktop-harness/dist/cli.mjs`，新 CLI 需要显式运行
   `repos/forge-cli` 的构建产物。本次没有安装、修改桌面入口或正式打包。
+
+## 本机 Web / Core 独立进程
+
+- Core：`repos/forge-core/dist/web/serve.js`，默认 API-only；会话、运行任务、审批、事件补发记录都留在此进程。
+- Web：`repos/forge-web-ui/scripts/serve.mjs --core-url http://127.0.0.1:5175`，只服务 UI 和代理 HTTP/WebSocket，不创建运行时。
+- 常驻服务使用两个独立 systemd 用户服务：`forge-core.service` 与 `forge-web.service`。
+  更新 UI 后只执行 `systemctl --user restart forge-web.service`；不要重启 Core，也不要配置联动停止。
+- Core 重启/主机重启仍会终止内存中的执行，不等于支持任意运行时热迁移。
+- 发送附件单文件为 50 MiB；每会话合计仍为 64 MiB、128 个文件，图片输入和文本编辑限制不变。
+
+构建顺序：Core `pnpm build` → Web `pnpm install --no-frozen-lockfile` → Web `pnpm build`。
+本机 CLI 仍用兼容源码，本轮附件限制也同步到主仓，并按原短路径编译 CLI。
+
+从本机旧 `forge-web-dev-lan.service` 迁移时，先在旧服务仍运行时检查：
+
+```sh
+node scripts/switch-split-web.mjs --host 192.168.8.108
+# 确认访问地址、工作区、原 FORGE_HOME 正确，停止发起新任务后执行：
+node scripts/switch-split-web.mjs --host 192.168.8.108 --apply --wait
+```
+
+默认保持 Web `192.168.8.108:5174`，Core 仅监听 `127.0.0.1:5175`，保留多工作区行为。
+脚本无 `--apply` 时只查看 host 元数据；执行模式等待旧 Core 连续空闲 10 秒（最多 30 分钟），
+拒绝替换未知入口、已有新服务或变化中的 host；不取消任务、不读取真实配置/密钥文件。
+旧版没有原子 drain 接口，因此首次迁移的维护窗口请勿新发任务。原进程的运行态不能迁移，
+若正在由 Web 对话执行升级，应把脚本放到独立 systemd 用户任务中，等当前回合结束后切换。
+脚本切换后会实际重启一次 Web 并确认 Core PID/hostId 不变；失败保留现场，不自动重放迁移。
+服务沿用原来的 transient 用户服务方式（不改桌面或 CLI 入口，不额外启用开机自启）。
+状态与日志：`systemctl --user status forge-core forge-web`、`journalctl --user -u forge-web`。
 
 ## 拆分历史与已有验证记录
 

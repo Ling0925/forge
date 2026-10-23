@@ -72,7 +72,7 @@ new user action, not proof the old one did nothing. Durable input acceptance may
 be explicitly retried with its stable input ID as documented in INPUT_QUEUE.md.
 
 Bounds: 32 connections, 128 in-flight requests per connection, 16 MiB request
-frames, 64 MiB response/send buffers, 2,048 retained events or 4 MiB, and a 5-second
+frames, approximately 84 MiB response/send buffers (a 50 MiB attachment expanded to base64 plus JSON/queue headroom), 2,048 retained events or 4 MiB, and a 5-second
 handshake deadline. The client also bounds its pre-subscription event backlog.
 Normal requests time out after 120 seconds without replay. If the event cursor
 falls outside retention, `reset: true` supplies active recovery state; obtain

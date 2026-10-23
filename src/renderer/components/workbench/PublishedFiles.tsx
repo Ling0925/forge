@@ -34,8 +34,12 @@ function PublishedFileCard({ sessionId, file }: { readonly sessionId: SessionId;
         const response = publishedFileResponseSchema.parse(await window.forge.getPublishedFile(sessionId, file.id));
         if (response.file.id !== file.id || response.file.sha256 !== file.sha256 || response.file.size !== file.size)
           throw new Error("附件与会话记录不匹配。");
-        const bytes = Uint8Array.from(atob(response.base64), char => char.charCodeAt(0));
-        if (bytes.length !== file.size) throw new Error("附件内容不完整。");
+        const binary = atob(response.base64);
+        if (binary.length !== file.size) throw new Error("附件内容不完整。");
+        // Avoid materializing tens of millions of string-iterator elements for
+        // 50 MiB attachments; allocate the final byte buffer directly.
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
         return bytes;
       })().catch(cause => { pending.current = undefined; throw cause; });
     }
