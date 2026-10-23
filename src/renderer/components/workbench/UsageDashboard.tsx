@@ -2,13 +2,24 @@ import {
   ArrowLeft,
   ArrowsClockwise,
   Calendar,
+  CaretDown,
   ChartBar,
+  Check,
   Cpu,
   Database,
+  Folder,
+  GlobeHemisphereWest,
   Lightning,
   X,
 } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   UsageFilter,
   UsageRequest,
@@ -26,6 +37,25 @@ const usageTabs = [
   { id: "usage-summary", label: "用量统计" },
   { id: "usage-requests", label: "请求记录" },
 ];
+
+const TIME_FILTER_OPTIONS: readonly {
+  readonly key: string;
+  readonly label: string;
+  readonly title: string;
+  readonly days: number | undefined;
+}[] = [
+  { key: "1", label: "24小时", title: "最近 24 小时", days: 1 },
+  { key: "3", label: "3天", title: "最近 3 天", days: 3 },
+  { key: "7", label: "7天", title: "最近 7 天", days: 7 },
+  { key: "30", label: "30天", title: "最近 30 天", days: 30 },
+  { key: "all", label: "ALL", title: "全部时间", days: undefined },
+];
+
+const workspaceShortName = (ws: string) =>
+  ws
+    .replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .pop() || ws;
 
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
 
@@ -150,7 +180,8 @@ function computeModelPerformance(
   return result;
 }
 
-const aggregateCostExplanation = "历史 Token 汇总按当前公开基础单价估算；缺少逐请求明细，未还原上下文阶梯价，不代表实际账单";
+const aggregateCostExplanation =
+  "历史 Token 汇总按当前公开基础单价估算；缺少逐请求明细，未还原上下文阶梯价，不代表实际账单";
 
 export function UsageDashboard() {
   const { state, openUsageDashboard, selectSession } = useWorkbench();
@@ -168,6 +199,11 @@ export function UsageDashboard() {
   const [workspaceFilter, setWorkspaceFilter] = useState<string | undefined>(
     undefined,
   );
+  const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
+  const wsDropdownRef = useRef<HTMLDivElement>(null);
+  const wsTriggerRef = useRef<HTMLButtonElement>(null);
+  const wsMenuRef = useRef<HTMLDivElement>(null);
+  const wsMenuId = useId();
 
   // Extract unique workspaces from existing session summaries
   const availableWorkspaces = useMemo(() => {
@@ -178,29 +214,51 @@ export function UsageDashboard() {
     return Array.from(set);
   }, [state.sessions]);
 
-  const fetchStats = useCallback(async (refreshPrices = false) => {
-    if (!window.forge?.getUsageStats) return;
-    const version = ++requestVersion.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const filter: UsageFilter = {
-        days: daysFilter,
-        workspace: workspaceFilter,
-        ...(refreshPrices ? { refreshPrices: true } : {}),
-      };
-      const res = await window.forge.getUsageStats(filter);
-      if (version === requestVersion.current) setData(res);
-    } catch (err) {
-      if (version === requestVersion.current) {
-        setError(
-          err instanceof Error ? err.message : "获取用量统计数据失败，请重试。",
-        );
+  useEffect(() => {
+    if (!wsDropdownOpen) return;
+    wsMenuRef.current
+      ?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+      ?.focus();
+    const dismiss = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !wsDropdownRef.current?.contains(event.target)
+      ) {
+        setWsDropdownOpen(false);
       }
-    } finally {
-      if (version === requestVersion.current) setLoading(false);
-    }
-  }, [daysFilter, workspaceFilter]);
+    };
+    window.addEventListener("pointerdown", dismiss);
+    return () => window.removeEventListener("pointerdown", dismiss);
+  }, [wsDropdownOpen]);
+
+  const fetchStats = useCallback(
+    async (refreshPrices = false) => {
+      if (!window.forge?.getUsageStats) return;
+      const version = ++requestVersion.current;
+      setLoading(true);
+      setError(null);
+      try {
+        const filter: UsageFilter = {
+          days: daysFilter,
+          workspace: workspaceFilter,
+          ...(refreshPrices ? { refreshPrices: true } : {}),
+        };
+        const res = await window.forge.getUsageStats(filter);
+        if (version === requestVersion.current) setData(res);
+      } catch (err) {
+        if (version === requestVersion.current) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "获取用量统计数据失败，请重试。",
+          );
+        }
+      } finally {
+        if (version === requestVersion.current) setLoading(false);
+      }
+    },
+    [daysFilter, workspaceFilter],
+  );
 
   // Fetch when dashboard is opened or filters change
   useEffect(() => {
@@ -218,21 +276,34 @@ export function UsageDashboard() {
     if (!state.isUsageDashboardOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (wsDropdownOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setWsDropdownOpen(false);
+          wsTriggerRef.current?.focus();
+          return;
+        }
         openUsageDashboard(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [state.isUsageDashboardOpen, openUsageDashboard]);
+  }, [state.isUsageDashboardOpen, openUsageDashboard, wsDropdownOpen]);
 
   const requests = data?.requests ?? [];
   const costSummary = useMemo(() => {
     const models = data?.models ?? [];
-    const priced = models.filter(model => model.estimatedCostUsd !== undefined);
+    const priced = models.filter(
+      (model) => model.estimatedCostUsd !== undefined,
+    );
     return {
-      totalCostUsd: priced.length ? priced.reduce((sum, model) => sum + (model.estimatedCostUsd ?? 0), 0) : undefined,
-      hasAggregateEstimate: models.some(model => model.aggregateEstimatedCostUsd !== undefined),
-      incomplete: models.some(model => model.costIncomplete),
+      totalCostUsd: priced.length
+        ? priced.reduce((sum, model) => sum + (model.estimatedCostUsd ?? 0), 0)
+        : undefined,
+      hasAggregateEstimate: models.some(
+        (model) => model.aggregateEstimatedCostUsd !== undefined,
+      ),
+      incomplete: models.some((model) => model.costIncomplete),
     };
   }, [data]);
 
@@ -439,7 +510,10 @@ export function UsageDashboard() {
     data?.daily && data.daily.length > 0
       ? Math.max(
           ...data.daily.map(
-            (d) => d.estimatedCostUsd ?? requestAnalytics.dailyRequestMap.get(d.date)?.costUsd ?? 0,
+            (d) =>
+              d.estimatedCostUsd ??
+              requestAnalytics.dailyRequestMap.get(d.date)?.costUsd ??
+              0,
           ),
           0.0001,
         )
@@ -506,41 +580,195 @@ export function UsageDashboard() {
 
           <div className="usage-dashboard-controls">
             <div className="usage-dashboard-filters">
-              {/* Days Filter */}
-              <select
-                className="usage-filter-select"
+              {/* Time Capsule Filter: 24小时 / 3天 / 7天 / 30天 / ALL */}
+              <div
+                className="usage-time-capsule"
+                // biome-ignore lint/a11y/useSemanticElements: capsule filter segmented group
+                role="group"
                 aria-label="时间周期筛选"
-                value={daysFilter ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setDaysFilter(val ? Number.parseInt(val, 10) : undefined);
+              >
+                {TIME_FILTER_OPTIONS.map((opt) => {
+                  const active = daysFilter === opt.days;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      className={`usage-time-pill ${active ? "is-active" : ""}`}
+                      aria-pressed={active}
+                      title={opt.title}
+                      onClick={() => setDaysFilter(opt.days)}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Workspace Filter Dropdown */}
+              <div
+                ref={wsDropdownRef}
+                className={`usage-ws-dropdown ${wsDropdownOpen ? "is-open" : ""} ${workspaceFilter ? "has-filter" : ""}`}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) {
+                    setWsDropdownOpen(false);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && wsDropdownOpen) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setWsDropdownOpen(false);
+                    wsTriggerRef.current?.focus();
+                    return;
+                  }
+                  if (
+                    !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+                  )
+                    return;
+                  event.preventDefault();
+                  if (!wsDropdownOpen) {
+                    setWsDropdownOpen(true);
+                    return;
+                  }
+                  const items = Array.from(
+                    wsMenuRef.current?.querySelectorAll<HTMLButtonElement>(
+                      ".usage-ws-option",
+                    ) ?? [],
+                  );
+                  if (items.length === 0) return;
+                  const idx = items.findIndex(
+                    (el) => el === document.activeElement,
+                  );
+                  const next =
+                    event.key === "Home"
+                      ? 0
+                      : event.key === "End"
+                        ? items.length - 1
+                        : (idx +
+                            (event.key === "ArrowDown" ? 1 : -1) +
+                            items.length) %
+                          items.length;
+                  items[next]?.focus();
                 }}
               >
-                <option value="">全部时间</option>
-                <option value="1">今天 (24小时内)</option>
-                <option value="7">最近 7 天</option>
-                <option value="30">最近 30 天</option>
-              </select>
+                <button
+                  ref={wsTriggerRef}
+                  type="button"
+                  className="usage-ws-trigger"
+                  aria-label="工作区筛选"
+                  aria-haspopup="listbox"
+                  aria-expanded={wsDropdownOpen}
+                  aria-controls={wsMenuId}
+                  title={
+                    workspaceFilter
+                      ? `当前工作区：${workspaceFilter}`
+                      : "按工作区筛选（当前：全部工作区）"
+                  }
+                  onClick={() => setWsDropdownOpen((prev) => !prev)}
+                >
+                  <span className="usage-ws-trigger-icon" aria-hidden="true">
+                    {workspaceFilter ? (
+                      <Folder size={14} weight="duotone" />
+                    ) : (
+                      <GlobeHemisphereWest size={14} weight="duotone" />
+                    )}
+                  </span>
+                  <span className="usage-ws-trigger-label">
+                    {workspaceFilter
+                      ? workspaceShortName(workspaceFilter)
+                      : "全部工作区"}
+                  </span>
+                  <CaretDown
+                    size={11}
+                    weight="bold"
+                    aria-hidden="true"
+                    className={`usage-ws-trigger-caret ${wsDropdownOpen ? "is-open" : ""}`}
+                  />
+                </button>
 
-              {/* Workspace Filter */}
-              <select
-                className="usage-filter-select"
-                aria-label="工作区筛选"
-                value={workspaceFilter ?? ""}
-                onChange={(e) =>
-                  setWorkspaceFilter(e.target.value || undefined)
-                }
-              >
-                <option value="">全部工作区</option>
-                {availableWorkspaces.map((ws) => (
-                  <option key={ws} value={ws}>
-                    {ws
-                      .replace(/[\\/]+$/, "")
-                      .split(/[\\/]/)
-                      .pop() || ws}
-                  </option>
-                ))}
-              </select>
+                {wsDropdownOpen && (
+                  <div
+                    ref={wsMenuRef}
+                    id={wsMenuId}
+                    className="usage-ws-menu"
+                    tabIndex={-1}
+                    // biome-ignore lint/a11y/useSemanticElements: custom styled workspace listbox
+                    role="listbox"
+                    aria-label="工作区筛选选项"
+                  >
+                    <button
+                      type="button"
+                      // biome-ignore lint/a11y/useSemanticElements: custom styled workspace option
+                      role="option"
+                      aria-selected={!workspaceFilter}
+                      tabIndex={-1}
+                      className={`usage-ws-option ${!workspaceFilter ? "is-selected" : ""}`}
+                      onClick={() => {
+                        setWorkspaceFilter(undefined);
+                        setWsDropdownOpen(false);
+                        wsTriggerRef.current?.focus();
+                      }}
+                    >
+                      <span className="usage-ws-option-icon" aria-hidden="true">
+                        <GlobeHemisphereWest size={14} weight="duotone" />
+                      </span>
+                      <span className="usage-ws-option-body">
+                        <span className="usage-ws-option-name">全部工作区</span>
+                        <span className="usage-ws-option-path">
+                          汇总 {availableWorkspaces.length} 个工作区
+                        </span>
+                      </span>
+                      <span
+                        className="usage-ws-option-check"
+                        aria-hidden="true"
+                      >
+                        {!workspaceFilter && <Check size={13} weight="bold" />}
+                      </span>
+                    </button>
+
+                    {availableWorkspaces.map((ws) => {
+                      const selected = workspaceFilter === ws;
+                      const short = workspaceShortName(ws);
+                      return (
+                        <button
+                          key={ws}
+                          type="button"
+                          // biome-ignore lint/a11y/useSemanticElements: custom styled workspace option
+                          role="option"
+                          aria-selected={selected}
+                          tabIndex={-1}
+                          data-workspace={ws}
+                          className={`usage-ws-option ${selected ? "is-selected" : ""}`}
+                          onClick={() => {
+                            setWorkspaceFilter(ws);
+                            setWsDropdownOpen(false);
+                            wsTriggerRef.current?.focus();
+                          }}
+                        >
+                          <span
+                            className="usage-ws-option-icon"
+                            aria-hidden="true"
+                          >
+                            <Folder size={14} weight="duotone" />
+                          </span>
+                          <span className="usage-ws-option-body">
+                            <span className="usage-ws-option-name">
+                              {short}
+                            </span>
+                            <span className="usage-ws-option-path">{ws}</span>
+                          </span>
+                          <span
+                            className="usage-ws-option-check"
+                            aria-hidden="true"
+                          >
+                            {selected && <Check size={13} weight="bold" />}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="usage-dashboard-actions">
@@ -548,11 +776,15 @@ export function UsageDashboard() {
                 <span
                   className="usage-pricing-status"
                   role="status"
-                  title={data.pricing.state === "unavailable"
-                    ? "公开价格目录加载失败；点击刷新立即重试，不代表所有模型都没有定价"
-                    : `价格更新失败，继续使用 ${data.pricing.fetchedAt ?? "此前"} 获取的缓存；点击刷新重试`}
+                  title={
+                    data.pricing.state === "unavailable"
+                      ? "公开价格目录加载失败；点击刷新立即重试，不代表所有模型都没有定价"
+                      : `价格更新失败，继续使用 ${data.pricing.fetchedAt ?? "此前"} 获取的缓存；点击刷新重试`
+                  }
                 >
-                  {data.pricing.state === "unavailable" ? "价格加载失败" : "使用缓存价格"}
+                  {data.pricing.state === "unavailable"
+                    ? "价格加载失败"
+                    : "使用缓存价格"}
                 </span>
               )}
               {/* Refresh */}
@@ -677,7 +909,8 @@ export function UsageDashboard() {
                       </div>
 
                       <div className="usage-section-header-right">
-                        {(requests.length > 0 || costSummary.totalCostUsd !== undefined) && (
+                        {(requests.length > 0 ||
+                          costSummary.totalCostUsd !== undefined) && (
                           <div className="usage-mode-switch">
                             <button
                               type="button"
@@ -759,7 +992,11 @@ export function UsageDashboard() {
                             const dayReq = requestAnalytics.dailyRequestMap.get(
                               d.date,
                             );
-                            const dayCost = d.estimatedCostUsd ?? (dayReq?.pricedCount ? dayReq.costUsd : undefined);
+                            const dayCost =
+                              d.estimatedCostUsd ??
+                              (dayReq?.pricedCount
+                                ? dayReq.costUsd
+                                : undefined);
                             const dayReqCount = dayReq?.count ?? d.runCount;
 
                             if (dailyChartMode === "cost") {
@@ -771,7 +1008,9 @@ export function UsageDashboard() {
                                 `${d.date}：预估 ${formatCostUsd(dayCost)}${d.costIncomplete ? "（部分）" : ""}\n` +
                                 `• 运行数：${d.runCount} 次；请求明细：${dayReq?.count ?? 0} 次\n` +
                                 `• 总计 Tokens：${compactTokens(d.totalTokens)}` +
-                                (d.aggregateEstimatedCostUsd !== undefined ? `\n• ${aggregateCostExplanation}` : "");
+                                (d.aggregateEstimatedCostUsd !== undefined
+                                  ? `\n• ${aggregateCostExplanation}`
+                                  : "");
                               return (
                                 <div key={d.date} className="usage-bar-col">
                                   <span className="usage-bar-top-val">
@@ -1050,16 +1289,22 @@ export function UsageDashboard() {
                             mUncached + mCached + mComp,
                             1,
                           );
-                          const aggregateCostLabel = m.aggregateEstimatedCostUsd === undefined
-                            ? ""
-                            : ((m.pricedRequestCount ?? 0) > 0 ? "（含历史估算）" : "（汇总估算）");
+                          const aggregateCostLabel =
+                            m.aggregateEstimatedCostUsd === undefined
+                              ? ""
+                              : (m.pricedRequestCount ?? 0) > 0
+                                ? "（含历史估算）"
+                                : "（汇总估算）";
                           const pricedCostTitle = [
                             "按当前公开价格估算（USD）",
-                            (m.requestCount ?? 0) > 0 && `已计价 ${m.pricedRequestCount ?? 0} / ${m.requestCount} 次请求`,
+                            (m.requestCount ?? 0) > 0 &&
+                              `已计价 ${m.pricedRequestCount ?? 0} / ${m.requestCount} 次请求`,
                             m.aggregateEstimatedCostUsd !== undefined &&
                               `其中历史汇总 ${formatCostUsd(m.aggregateEstimatedCostUsd)}：${aggregateCostExplanation}`,
                             m.costIncomplete && "不含缺少价格或用量的记录",
-                          ].filter(Boolean).join("；");
+                          ]
+                            .filter(Boolean)
+                            .join("；");
 
                           return (
                             <div key={m.model} className="usage-model-item">
@@ -1118,14 +1363,18 @@ export function UsageDashboard() {
                                 <span>·</span>
                                 <span
                                   className="usage-model-cost-tag"
-                                  title={m.estimatedCostUsd === undefined
-                                    ? (data.pricing?.state === "unavailable"
-                                      ? "公开价格目录加载失败，点击刷新重试"
-                                      : "未匹配到公开价格或缺少用量，费用未知，不代表免费")
-                                    : pricedCostTitle}
+                                  title={
+                                    m.estimatedCostUsd === undefined
+                                      ? data.pricing?.state === "unavailable"
+                                        ? "公开价格目录加载失败，点击刷新重试"
+                                        : "未匹配到公开价格或缺少用量，费用未知，不代表免费"
+                                      : pricedCostTitle
+                                  }
                                 >
                                   {m.estimatedCostUsd === undefined
-                                    ? (data.pricing?.state === "unavailable" ? "价格未加载" : "费用未知")
+                                    ? data.pricing?.state === "unavailable"
+                                      ? "价格未加载"
+                                      : "费用未知"
                                     : `预估 ${formatCostUsd(m.estimatedCostUsd)}${aggregateCostLabel}${m.costIncomplete ? "（部分）" : ""}`}
                                 </span>
                               </div>
@@ -1208,7 +1457,9 @@ export function UsageDashboard() {
                                   {perf.totalCostUsd !== undefined && (
                                     <span className="usage-mono usage-cost-pill">
                                       {formatCostUsd(perf.totalCostUsd)}
-                                      {perf.pricedCount < perf.requestCount ? "（部分）" : ""}
+                                      {perf.pricedCount < perf.requestCount
+                                        ? "（部分）"
+                                        : ""}
                                     </span>
                                   )}
                                 </div>
