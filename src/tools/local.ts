@@ -1053,13 +1053,22 @@ export async function createLocalToolRegistry(
         if (error.code === "cancelled") throw error;
         return result({ code: error.code, error: redact(error.message) }, true);
       }
-      if (error instanceof WorkspacePathError)
+      if (error instanceof WorkspacePathError) {
+        const command = call.function.name === "run_command";
+        const createsFile = call.function.name === "write_file" || call.function.name === "append_file";
+        const hints: Record<WorkspacePathError["code"], string> = {
+          OUTSIDE_WORKSPACE: `${command ? "cwd" : "path"} must be workspace-relative. Absolute paths are not accepted, even inside the workspace, and ".." must not escape the workspace.${command ? ' Set cwd to "." or omit cwd to run at the workspace root.' : ""}`,
+          MISSING: `The requested path or a parent directory does not exist. Check the workspace-relative path.${createsFile ? " For new files, create missing parent directories with make_directory before writing." : " This operation requires an existing target."}`,
+          SYMLINK: "Symbolic links are not permitted. Use a workspace-relative path without symlink components.",
+          NOT_DIRECTORY: "A parent component is not a directory, or a file target is a directory. Use directories for parent components and a file path for file writes.",
+          PROTECTED_PATH: "This path is protected and cannot be accessed through workspace tools.",
+          INVALID_PATH: "The path is invalid or cannot be inspected. Check the path syntax and filesystem access; null bytes and Windows drive-relative paths are not accepted.",
+        };
         return result(
-          {
-            error: `Workspace path rejected: ${error.code}. Missing parents must be created with make_directory.`,
-          },
+          { error: `Workspace path rejected: ${error.code}. ${hints[error.code]}` },
           true,
         );
+      }
       return result(
         {
           error:

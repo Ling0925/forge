@@ -291,6 +291,105 @@ describe("original local tools", () => {
     expect(approvals).toBe(0);
   });
 
+  it("explains rejected command cwd values without suggesting directory creation", async () => {
+    const argv = [process.execPath, "-e", "process.stdout.write('ran')"];
+    for (const cwd of [root, join(root, "nested"), "../outside", "C:\\outside"]) {
+      const rejected = await execute("run_command", { argv, cwd, timeout_ms: 2000 });
+      expect(rejected.isError).toBe(true);
+      const error = output(rejected).error;
+      expect(error).toContain("OUTSIDE_WORKSPACE");
+      expect(error).toContain("cwd must be workspace-relative");
+      expect(error).toContain("Absolute paths are not accepted, even inside the workspace");
+      expect(error).toContain('".." must not escape the workspace');
+      expect(error).toContain('Set cwd to "." or omit cwd');
+      expect(error).not.toContain("make_directory");
+      expect(error).not.toContain(root);
+      expect(error).not.toContain(cwd);
+      expect(output(rejected)).not.toHaveProperty("exit_code");
+    }
+    expect(approvals).toBe(0);
+    for (const args of [{ argv, cwd: ".", timeout_ms: 2000 }, { argv, timeout_ms: 2000 }] as const) {
+      const accepted = await execute("run_command", args);
+      expect(accepted.isError).toBe(false);
+      expect(output(accepted)).toMatchObject({ stdout: "ran", exit_code: 0 });
+    }
+    expect(approvals).toBe(2);
+  });
+
+  it("explains rejected file paths without command-only or missing-directory advice", async () => {
+    await writeFile(join(root, "file"), "ok");
+    await symlink(root, join(root, "link"), process.platform === "win32" ? "junction" : "dir");
+    for (const [path, code, hint] of [
+      [join(root, "file"), "OUTSIDE_WORKSPACE", "path must be workspace-relative"],
+      ["../outside", "OUTSIDE_WORKSPACE", '".." must not escape the workspace'],
+      ["link/file", "SYMLINK", "Symbolic links are not permitted"],
+      ["file/child", "NOT_DIRECTORY", "A parent component is not a directory"],
+      ["C:relative", "INVALID_PATH", "Windows drive-relative paths are not accepted"],
+      ["bad\u0000path", "INVALID_PATH", "null bytes"],
+    ] as const) {
+      const rejected = await execute("read_file", { path });
+      expect(rejected.isError).toBe(true);
+      const error = output(rejected).error;
+      expect(error).toContain(`Workspace path rejected: ${code}.`);
+      expect(error).toContain(hint);
+      expect(error).not.toContain("make_directory");
+      expect(error).not.toContain("cwd");
+      expect(error).not.toContain(root);
+    }
+    const directoryTarget = await execute("write_file", { path: ".", content: "no" });
+    expect(directoryTarget.isError).toBe(true);
+    expect(output(directoryTarget).error).toContain("a file target is a directory");
+    expect(output(directoryTarget).error).not.toContain("make_directory");
+  });
+
+  it("reports protected paths without suggesting creation or exposing their names", async () => {
+    const protectedRoot = join(root, "protected-data");
+    await mkdir(protectedRoot);
+    await tools.dispose();
+    tools = await createLocalToolRegistry(root, { protectedRoots: [protectedRoot] });
+    const rejected = await execute("read_file", { path: "protected-data/file" });
+    expect(rejected.isError).toBe(true);
+    const error = output(rejected).error;
+    expect(error).toContain("PROTECTED_PATH");
+    expect(error).toContain("This path is protected");
+    expect(error).not.toContain("make_directory");
+    expect(error).not.toContain("protected-data");
+    expect(error).not.toContain(root);
+  });
+
+  it("reports missing existing targets without telling callers to create directories", async () => {
+    for (const [name, args] of [
+      ["read_file", { path: "absent/file" }],
+      ["edit_file", { path: "absent/file", old_text: "old", new_text: "new" }],
+      ["list_files", { path: "absent" }],
+      ["search_files", { path: "absent", query: "text" }],
+      ["run_command", { cwd: "absent", argv: [process.execPath, "-e", "process.exit(0)"], timeout_ms: 2000 }],
+    ] as const) {
+      const rejected = await execute(name, args);
+      expect(rejected.isError).toBe(true);
+      const error = output(rejected).error;
+      expect(error).toContain("MISSING");
+      expect(error).toContain("does not exist");
+      expect(error).toContain("requires an existing target");
+      expect(error).not.toContain("make_directory");
+      expect(error).not.toContain(root);
+    }
+    expect(approvals).toBe(0);
+  });
+
+  it.each(["write_file", "append_file"])("suggests make_directory for missing parents when using %s", async name => {
+    const args = { path: "absent/file", content: "ok", ...(name === "append_file" ? { expected_bytes: 0 } : {}) };
+    const rejected = await execute(name, args);
+    expect(rejected.isError).toBe(true);
+    const error = output(rejected).error;
+    expect(error).toContain("MISSING");
+    expect(error).toContain("create missing parent directories with make_directory");
+    expect(error).not.toContain(root);
+    expect((await execute("make_directory", { path: "absent" })).isError).toBe(false);
+    expect((await execute(name, args)).isError).toBe(false);
+    expect(await readFile(join(root, "absent/file"), "utf8")).toBe("ok");
+  });
+
   it("blocks sensitive filenames, binary/oversize text, and private content previews", async () => {
     await mkdir(join(root, ".config"));
     for (const path of [
