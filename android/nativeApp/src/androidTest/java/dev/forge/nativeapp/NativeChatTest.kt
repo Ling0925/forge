@@ -81,6 +81,7 @@ class NativeChatTest {
 
         // Local disconnect retains drafts and disables send; reconnect reads server state.
         ui.onNodeWithTag("settings").performClick()
+        ui.onNodeWithTag("settings-category-connection").performScrollTo().performClick()
         ui.onNodeWithText("断开连接（不停止远端任务）").performScrollTo().performClick()
         await { it.connection == ConnectionPhase.Disconnected }
         ui.onNodeWithTag("send").assertIsNotEnabled()
@@ -116,7 +117,7 @@ class NativeChatTest {
     private fun connect() {
         ui.onNodeWithTag("settings").performClick()
         ui.onNodeWithTag("connection-url").performTextReplacement("http://127.0.0.1:18765/")
-        ui.onNodeWithTag("connect").performClick()
+        ui.onNodeWithTag("connect").performScrollTo().assertIsDisplayed().performClick()
         await { it.connection == ConnectionPhase.Connected }
     }
     private fun send(text: String) {

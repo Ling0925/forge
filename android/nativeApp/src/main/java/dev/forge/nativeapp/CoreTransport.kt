@@ -48,7 +48,12 @@ class CoreEndpoint private constructor(val url: HttpUrl) {
 }
 
 class CoreException(val status: Int, message: String) : IOException(message)
-data class Handshake(val workspace: String, val recovery: List<JSONObject>, val cursor: Long)
+data class Handshake(
+    val workspace: String,
+    val restrictWorkspace: Boolean,
+    val recovery: List<JSONObject>,
+    val cursor: Long,
+)
 data class EventBatch(val cursor: Long, val events: List<JSONObject>)
 
 class CoreTransport(
@@ -90,7 +95,12 @@ class CoreTransport(
     suspend fun handshake(): Handshake {
         val result = post("connect", JSONObject())
         clientId = UUID.fromString(result.getString("clientId")).toString()
-        return Handshake(result.getString("workspace"), result.getJSONArray("recovery").objects(), result.getLong("cursor"))
+        return Handshake(
+            result.getString("workspace"),
+            WorkbenchProtocol.handshakeRestriction(result),
+            result.getJSONArray("recovery").objects(),
+            result.getLong("cursor"),
+        )
     }
 
     suspend fun resumable(cursor: Long): Boolean =

@@ -9,18 +9,23 @@
 
 手机只负责交互、临时消息投影与连接。模型接入、会话持久化、工作区、工具执行、审批权限、运行生命周期继续由远端 Core 持有。关闭 App、切后台、断开连接都不发送取消；只有点“停止”才发 `cancelRun`。停止 Core 服务本身的行为由 Core 决定。
 
-## 首版功能
+## 原版工作台迁移（0.2）
 
-- 聊天主界面、会话抽屉与标题搜索、新建对话、按回合加载更早消息。
-- WebSocket 流式助手回复；思考与正文分离、工具结果折叠。
-- 文本选择/复制，常见 Markdown（标题、列表、粗体、行内代码、围栏代码）和代码块复制。
-- 多行输入、系统深浅主题、键盘/系统栏 insets、回到最新消息；向上阅读时不强制拉回。
-- 草稿按 **服务器地址 + 会话 ID** 隔离，存入应用私有 SharedPreferences；旋转保留 ViewModel。
-- 模型选择读取 Core 的实际 `listModels`，留空使用服务器/会话默认值；不虚构可用模型。
-- 默认 `readonly` + `plan`；显式选择 `workspace` + `build`，显示工具审批的描述、命令和“允许这一次/拒绝”。不提供 unrestricted 开关，不自动批准。
-- 停止生成、前后台恢复、连接失效后重新握手、读取远端活动运行/待审批状态。
-- Bearer 设备凭据，或一次性配对码换取凭据；全部仅保留在本次进程内。
-- HTTP/WS 发送、创建、取消和审批均不自动重试。结果不确定时保留草稿并锁住后续写操作，要求用户先刷新检查、再明确解锁。
+界面不再沿用首版的简化聊天布局。视觉与页面结构直接对照 `src/renderer/components/workbench/`、`styles/workspace-theme.css` 和 `styles/sidebar-compact.css`：原版最终生效的是暖白 / 石墨黑 / 赤陶强调色，而不是 `tokens.css` 的早期绿色基础色。保持 Kotlin + Compose，不嵌入 React 或 WebView。
+
+- **工作台**：`f.` 欢迎标识、原版欢迎文案、最近四项任务、紧凑标题栏；手机侧抽屉与详情切换，宽屏 264dp 常驻侧栏和可收起的详情面板。
+- **会话导航**：按工作区分组、搜索任务/工作区、归档筛选、状态标记、重命名、归档/恢复与分叉。
+- **输入舱**：一体化无内框文本区；独立 Build/Plan 和权限选择；来源/路由/模型选择，全局思考强度；发送、停止、显式排队与插话，队列取消/暂停/恢复。`unrestricted` 需要用户明确选择并确认；不自动升级权限或审批。
+- **图片**：通过 Android 系统选择器选图，最多四张、单张 2 MiB；原生缩略图/历史图片显示、纯图片发送；附件仅保留内存并按服务器/会话隔离，不写入偏好设置。
+- **对话流**：WebSocket 增量、历史分页、思考折叠、安静工具行、Markdown 子集/表格/代码复制、安全 HTTP(S) 链接；向上阅读时不强制拉回。
+- **执行详情**：全局审批入口、计划与进度、子会话、文件目录/预览、真实变更/检查点差异与确认恢复、会话诊断和项目指令/技能资源。
+- **分类设置**：模型来源基本增删改/启用及独立目录，推理、外观、执行、上下文、浏览器、LSP、MCP stdio 注册/启停/移除、服务器连接。远端设置只提交明确改动的字段；本地主题不修改远端主题。
+- **用量页**：真实 Core 返回的 tokens、模型/日期/会话统计；缺失价格明确显示未知，不把未知当成免费。
+- **连接安全**：设备凭据或一次性配对；凭据仅进程内保存。关闭页面、断线或切后台不取消远端运行。
+- **不自动重放**：发送、创建、设置、来源、队列、检查点、审批等副作用不自动重试。结果不确定时保留输入并锁住写操作，用户刷新检查后才能显式解锁。各分区读请求按连接/会话/请求版本丢弃过期响应。
+- **草稿**：文本按服务器地址 + 会话 ID 存入应用私有 SharedPreferences，旋转保留 ViewModel；图片不是离线持久化附件。
+
+这次迁移包含页面和对应 Core 操作，但不是桌面全部高级功能的逐项等价实现。字体使用 Android 原生 sans/mono/serif，未打包桌面 Geist；桌面 OAuth、复杂路由编辑等剩余项见文末。
 
 ## 接入现有 forge-core
 
@@ -73,6 +78,12 @@ Core 默认 trusted LAN 入口可不填凭据。只有部署为设备鉴权 host
 | 历史分页 | `getSessionPage` + sessionId；`page.before` 上一回合，`page.from` 刷新已加载窗口 |
 | 新建/发送 | `createSession` + input.workspace；`startRun` + input.sessionId/prompt/mode/permission/model? |
 | 停止/审批 | `cancelRun` + runId；`answerApproval` + runId/approvalId/approved |
+| 会话操作 | `renameSession`、`archiveSession`、`forkSession`、`compactSession` |
+| 设置/来源 | `getSettings`；`updateSettings {input:{settings:patch}}` / `{input:{source:operation}}` |
+| 排队/插话 | `enqueueInput`、`listInputs`、`cancelInput`、`pauseInputs`、`resumeInputs`、`steerRun` |
+| 文件/检查点 | `listWorkspaceEntries`、`readWorkspaceFile`、`listCheckpoints`、`getCheckpointDiff`、`restoreCheckpoint` |
+| 详情/用量 | `getProjectContext`、`getDiagnostics`、`getUsageStats` |
+| MCP | `listMcpServers`、`registerMcpServer`、`setMcpEnabled`、`removeMcpServer` |
 
 只有 WebSocket 首批事件就绪且状态同步成功后才允许发送。HTTP 请求关闭 OkHttp 自动连接重试，RPC 校验 id/method；错误不会自动生成新的请求 ID 重放副作用。
 
@@ -81,14 +92,24 @@ Core 默认 trusted LAN 入口可不填凭据。只有部署为设备鉴权 host
 ```text
 nativeApp/src/main/java/dev/forge/nativeapp/
 ├── MainActivity.kt       # 生命周期、edge-to-edge、Compose 入口
-├── ChatModels.kt         # 明确的 UI 状态与动作契约
+├── ChatModels.kt         # 会话、消息与工作台状态
+├── WorkbenchModels.kt    # 分区快照、图片与工作台动作契约
+├── WorkbenchProtocol.kt  # 纯 JVM RPC 参数与数据投影
 ├── CoreTransport.kt      # HTTP RPC、鉴权、WS 批次与 ACK、安全地址解析
-├── ChatViewModel.kt      # 状态、重连、分页、草稿、运行和审批协调
+├── ChatViewModel.kt      # 状态、重连、分页、草稿、工作台动作和审批
 ├── Transcript.kt         # 绝对消息位置 + generationId 合并快照/流，防重复
 └── ui/
-    ├── ForgeTheme.kt     # Forge 中性色/翡翠绿、系统深浅主题
-    ├── ForgeScreen.kt    # 原生聊天、连接、会话与审批界面
-    └── MessageContent.kt # 不执行 HTML 的文本 Markdown 子集
+    ├── ForgeTheme.kt     # 原版暖白/石墨/赤陶色、排版与线形图标
+    ├── ForgeScreen.kt    # 自适应主壳、欢迎、导航和错误状态
+    ├── ForgeSidebar.kt   # 分组会话与操作
+    ├── ForgeComposer.kt  # 输入舱、图片、队列
+    ├── ForgeModelPicker.kt # 模型/来源/路由/全局思考强度
+    ├── ForgeConversation.kt # 消息、思考、工具与审批
+    ├── ForgeInspector.kt # 计划、文件/检查点、会话与项目资源
+    ├── ForgeSettings.kt  # 分类设置、模型来源和连接
+    ├── ForgeUsage.kt     # 用量
+    ├── PanelComponents.kt # 面板公共组件
+    └── MessageContent.kt # 不执行 HTML 的 Markdown 子集
 ```
 
 最多缓存 12 个会话投影；实时事件通道有界，积压时断开并按游标重同步，不静默丢事件。HTTP 响应上限 16 MiB；极大单回合超限会提示失败，不声称支持无限上下文。服务端依然是消息真相来源，手机没有离线可发送队列。
@@ -114,7 +135,7 @@ adb reverse tcp:18765 tcp:18765
 
 设备测试使用真实 Android Activity/Compose、HTTP/WebSocket 和 Core controller，但 provider/tool 是隔离 fake。它不读取真实 Forge 配置、不使用真实模型额度，不等于公网或真实模型端到端验收。测试截图保存在模拟器 `/sdcard/Download/native-*.png`，可用 adb pull 取出。
 
-### 本次验证记录（2026-10-22）
+### 首版验证记录（2026-10-22）
 
 - `:nativeApp:assembleDebug` 成功生成 APK。
 - `:nativeApp:testDebugUnitTest`：15 项通过（7 项连接/安全/不重放，8 项消息合并/分页/重试/会话切换）。
@@ -123,12 +144,37 @@ adb reverse tcp:18765 tcp:18765
 - 旧模块 `:app:checkServerUrl`：26 passed, 0 failed。
 - 环境：JDK 21、SDK Platform 35；离线 fixture 复用当前 Core 的真实 HTTP/WS/controller，不调用真实 provider。
 
+### 工作台迁移验证记录（2026-10-23）
+
+- DeepSeek V4.1 Flash（`cn:deepseek-v4.1-flash`）完成分工实现；主代理负责集成、审查和实际测试。
+- `:nativeApp:assembleDebug`：成功，versionName `0.2.0` / versionCode `2`。
+- `:nativeApp:testDebugUnitTest`：**25 项通过**（连接/安全 7、消息合并 8、工作台协议/图片/有界事实投影 10）。
+- Android 11 / API 30，1080×2280、440dpi 手机配置：**5 项通过**，包含原聊天完整回归、工作台导航/主题/文件/模型/用量，以及 3 项真实 Core 状态操作集成。
+- 同一模拟器覆盖 1600×1000、160dpi 宽屏配置：**4 项通过**，包括常驻侧栏/详情/设置、模型弹窗宽度约束、目录刷新不清选择、图片实际解码渲染和会话附件隔离。测试后恢复设备分辨率/密度。
+- `:nativeApp:lintDebug`：**0 errors, 0 warnings**；仍有 4 条 primitive state 装箱优化的 informational 建议。
+- `node tests/native-workbench-smoke.mjs`：通过，覆盖真实 Core HTTP/WS/controller、来源 CRUD、文件、checkpoint/MCP fixture 操作和真实 durable queue 的暂停/取消/显式恢复/不重放。
+- 联调修复了连接按钮嵌套横向滚动造成的点击裁剪、模型刷新误清选择、宽屏弹窗越界约束、分区事实丢失与来源目录 loading/error 键不一致。
+- 截图来自实际设备测试：`/sdcard/Download/forge-workbench-*.png`；本轮拉取到 `nativeApp/build/ui-review/phone/` 和 `wide/`（构建目录不入 Git）。
+- 用量/回复/MCP/checkpoint 样例均来自隔离 fake，不代表真实模型、真实 MCP 进程或生产检查点恢复验证；没有连接真实供应商、没有读取真实 Forge 私密配置。
+
+复现宽屏测试（执行后务必恢复）：
+
+```sh
+adb shell wm size 1600x1000
+adb shell wm density 160
+./gradlew :nativeApp:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=dev.forge.nativeapp.WorkbenchUiTest,dev.forge.nativeapp.WorkbenchIntegrationTest
+adb shell wm size reset
+adb shell wm density reset
+```
+
 ## 尚未覆盖的产品范围
 
-- 图片/文件上传、下载、语音、推送通知、后台常驻、离线历史库与离线发信队列。
-- 目前只显示历史消息的图片数量，不加载图片内容。
-- 完整 CommonMark、复杂表格/公式、代码语法高亮、可点击网页链接、HTML 预览。
+- 通用文件上传/下载、已发布文件保存、导出会话、语音、推送、后台常驻、离线历史库与离线发信队列（输入队列由在线 Core 持有，不是手机离线发信）。
+- 完整 CommonMark、公式、代码语法高亮、HTML 预览；原生 Markdown 为有界安全子集。
 - 多服务器档案管理、凭据持久化/Keystore、扫码配对、代理交互式登录。
-- 修改 Core 模型供应商配置、MCP 管理、工作区文件浏览/差异/检查点等桌面完整功能。
+- 模型账号 OAuth/设备码登录、多凭据路由/额度、导入预览/连通测试、复杂路由组编辑和模型选择模式编辑；路由组可选择但不能在本机编辑。
+- MCP 远程 HTTP/SSE 注册、health 测试及私密环境变量/请求头管理；本机新增入口仅 stdio。
+- 与桌面精确一致的全部键盘快捷键、完整读屏/200% 缩放/不同厂商设备矩阵。
 - 不作为已签名正式分发包；当前交付为源码及 debug APK，不配置 release 密钥。
 - 真实设备、不同厂商键盘、公网代理、设备鉴权撤销与真实模型端到端需要另行联调。

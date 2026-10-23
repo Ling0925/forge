@@ -11,6 +11,10 @@ data class SessionSummary(
     val model: String,
     val status: String,
     val updatedAt: String,
+    val workspace: String = "",
+    val createdAt: String = "",
+    val archived: Boolean = false,
+    val parentSessionId: String = "",
 )
 
 data class ChatMessage(
@@ -22,6 +26,7 @@ data class ChatMessage(
     val isStreaming: Boolean = false,
     val imageCount: Int = 0,
     val generationId: String = "",
+    val images: List<ChatImage> = emptyList(),
 )
 
 data class Approval(
@@ -48,6 +53,16 @@ data class ChatUiState(
     val models: List<String> = emptyList(),
     val selectedModel: String = "",
     val permission: String = "readonly",
+    val mode: String = "plan",
+    val themeMode: String = "system",
+    val selectedWorkspace: String = "",
+    val restrictWorkspace: Boolean = true,
+    val providerSourceId: String = "",
+    val routeGroupId: String = "",
+    val draftImages: List<ChatImage> = emptyList(),
+    val allRuns: List<ActiveRun> = emptyList(),
+    val allApprovals: List<Approval> = emptyList(),
+    val workbench: WorkbenchData = WorkbenchData(),
     val run: ActiveRun? = null,
     val approvals: List<Approval> = emptyList(),
     val loading: Boolean = false,
@@ -60,7 +75,7 @@ data class ChatUiState(
     val uncertain: Boolean = false,
 )
 
-interface ChatActions {
+interface ChatActions : WorkbenchActions {
     fun connect(url: String, credential: String, pair: Boolean)
     fun disconnect()
     fun reconnect()
@@ -86,6 +101,7 @@ internal fun JSONObject.string(name: String): String = if (isNull(name)) "" else
 internal fun parseSession(json: JSONObject) = SessionSummary(
     json.getString("id"), json.getString("title"), json.getString("model"),
     json.getString("status"), json.getString("updatedAt"),
+    json.string("workspace"), json.string("createdAt"), json.optBoolean("archived"), json.string("parentSessionId"),
 )
 
 internal fun parseApproval(json: JSONObject, runId: String) = Approval(

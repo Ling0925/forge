@@ -41,11 +41,15 @@ internal class Transcript {
             val toolNames = message.optJSONArray("tool_calls")?.objects()?.joinToString(" · ") {
                 it.getJSONObject("function").getString("name")
             }.orEmpty()
+            val wireImages = message.optJSONArray("images")
             durable[start + index] = ChatMessage(
                 key = "m${start + index}", role = role, text = message.string("content"),
                 reasoning = message.string("reasoning"),
                 toolName = if (role == "tool") names[message.string("tool_call_id")] ?: "工具结果" else toolNames,
-                imageCount = message.optJSONArray("images")?.length() ?: 0,
+                // Keep the wire count even when an attachment is malformed; only
+                // renderable images are retained for the UI.
+                imageCount = wireImages?.length() ?: 0,
+                images = WorkbenchProtocol.parseImageAttachments(wireImages),
                 generationId = message.string("generationId"),
             )
         }
@@ -94,7 +98,8 @@ internal class Transcript {
             val text = if ((stored?.text?.length ?: 0) > value.text.length) stored!!.text else value.text
             val reasoning = if ((stored?.reasoning?.length ?: 0) > value.reasoning.length) stored!!.reasoning else value.reasoning
             result[value.index] = ChatMessage("m${value.index}", "assistant", text, reasoning,
-                toolName = stored?.toolName.orEmpty(), isStreaming = !value.finished, generationId = value.id)
+                toolName = stored?.toolName.orEmpty(), isStreaming = !value.finished, generationId = value.id,
+                imageCount = stored?.imageCount ?: 0, images = stored?.images.orEmpty())
         }
         return result.values.filter { it.role != "system" && (it.text.isNotBlank() || it.reasoning.isNotBlank() || it.toolName.isNotBlank() || it.imageCount > 0) }
     }
