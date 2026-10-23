@@ -23,6 +23,12 @@ export interface DiffViewerProps {
    * is not readable (for example a deleted file).
    */
   readonly previewHtml?: boolean;
+  /**
+   * Drop the built-in card chrome (path header, frame, background) so the rows
+   * render directly inside a card the caller already owns, such as the
+   * inspector file list. Avoids a card nested inside a card.
+   */
+  readonly embedded?: boolean;
 }
 
 interface DiffLineItem {
@@ -131,6 +137,7 @@ export function DiffViewer({
   previewLines = DIFF_PREVIEW_LINES,
   className = "",
   previewHtml = change?.kind !== "deleted",
+  embedded = false,
 }: DiffViewerProps) {
   const model: DiffModel = change?.patch
     ? rowsFromPatch(change.patch)
@@ -144,29 +151,31 @@ export function DiffViewer({
 
   return (
     <section
-      className={`diff-viewer ${className}`.trim()}
+      className={`diff-viewer${embedded ? " diff-viewer-embedded" : ""} ${className}`.trim()}
       aria-label={`差异查看：${path}`}
     >
-      <div className="diff-header">
-        <div className="diff-path" title={path}>
-          <FileCode size={16} weight="regular" aria-hidden="true" />
-          <span>{path}</span>
+      {!embedded && (
+        <div className="diff-header">
+          <div className="diff-path" title={path}>
+            <FileCode size={16} weight="regular" aria-hidden="true" />
+            <span>{path}</span>
+          </div>
+          <div className="diff-header-meta">
+            {isHtmlPath(path) && previewHtml && (
+              <HtmlPreview
+                path={path}
+                label="预览 HTML"
+                className="diff-preview-action"
+              />
+            )}
+            {isSuggested ? (
+              <span className="diff-badge-suggested">建议差异</span>
+            ) : (
+              <span className="diff-badge-applied">已应用差异</span>
+            )}
+          </div>
         </div>
-        <div className="diff-header-meta">
-          {isHtmlPath(path) && previewHtml && (
-            <HtmlPreview
-              path={path}
-              label="预览 HTML"
-              className="diff-preview-action"
-            />
-          )}
-          {isSuggested ? (
-            <span className="diff-badge-suggested">建议差异</span>
-          ) : (
-            <span className="diff-badge-applied">已应用差异</span>
-          )}
-        </div>
-      </div>
+      )}
       <div className={`diff-scroll${expanded ? " is-expanded" : ""}`}>
         <div className="diff-lines">
           {lines.length === 0 && (

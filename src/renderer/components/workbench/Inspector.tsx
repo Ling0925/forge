@@ -497,6 +497,7 @@ export function Inspector({
                                     <DiffViewer
                                       change={change}
                                       isSuggested={false}
+                                      embedded
                                     />
                                   </div>
                                 </details>

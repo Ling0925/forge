@@ -159,6 +159,15 @@
   max-width: 100%;
 }
 
+/* Rows rendered inside a card the caller already owns (for example the
+   inspector file list): no frame and no header, so one change is one card
+   instead of a card nested inside a card. */
+.diff-viewer-embedded {
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+
 .diff-header {
   display: flex;
   align-items: flex-start;

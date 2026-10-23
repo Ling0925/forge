@@ -1168,7 +1168,9 @@
 .wb-inspector .inspector-diff-container {
   padding: 0;
   border-top: 1px solid var(--border-subtle);
-  background: var(--surface-body);
+  /* The embedded diff rows draw their own tint; the card itself supplies the
+     surface, so a change reads as one card instead of a card in a card. */
+  background: transparent;
 }
 
 .wb-inspector .inspector-empty-card {
