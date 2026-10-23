@@ -110,16 +110,25 @@ fun ForgeConversation(
     if (state.messages.isEmpty() && state.approvals.isEmpty() && state.run == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(
-                Modifier.padding(24.dp),
+                Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                Text("这个会话还没有消息", color = palette.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text("f.", style = ForgeWordmarkStyle, color = palette.accent, fontSize = 20.sp)
+                Text(
+                    "这个会话还没有消息",
+                    color = palette.textPrimary,
+                    fontSize = 17.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.2).sp,
+                )
                 Text(
                     "在下方写下第一条任务；发送前不会执行任何操作。",
                     color = palette.textSecondary,
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
         }
@@ -133,10 +142,10 @@ fun ForgeConversation(
             contentPadding = PaddingValues(
                 start = if (compact) 16.dp else 32.dp,
                 end = if (compact) 16.dp else 32.dp,
-                top = if (compact) 12.dp else 20.dp,
-                bottom = 16.dp,
+                top = if (compact) 16.dp else 22.dp,
+                bottom = 20.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 20.dp else 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
         ) {
             if (state.hasEarlier) {
                 item(key = "earlier") {
@@ -179,7 +188,7 @@ fun ForgeConversation(
                 contentColor = palette.textSecondary,
                 border = BorderStroke(1.dp, palette.borderSubtle),
                 shadowElevation = 3.dp,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(14.dp).size(44.dp)
+                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(40.dp)
                     .testTag("scroll-latest"),
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -187,7 +196,7 @@ fun ForgeConversation(
                         Icons.Default.KeyboardArrowDown,
                         contentDescription = "回到最新消息",
                         tint = palette.textSecondary,
-                        modifier = Modifier.size(19.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -203,6 +212,7 @@ private fun MessageRow(message: ChatMessage, compact: Boolean) {
     var toolOpen by remember(message.key) { mutableStateOf(false) }
 
     Column(Modifier.fillMaxWidth()) {
+        if (user) Spacer(Modifier.height(12.dp))
         if (message.reasoning.isNotBlank()) {
             ReasoningBlock(
                 message = message,
@@ -220,12 +230,12 @@ private fun MessageRow(message: ChatMessage, compact: Boolean) {
             Spacer(Modifier.height(8.dp))
         } else if (user) {
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(ForgeDimens.radiusLg),
                 color = palette.soft,
                 contentColor = palette.textPrimary,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     AuthorRow(
                         label = "你",
                         accent = palette.accent,
@@ -280,17 +290,18 @@ private fun AuthorRow(
 ) {
     val palette = LocalForgePalette.current
     Row(
-        Modifier.fillMaxWidth().heightIn(min = if (compact) 44.dp else 26.dp),
+        Modifier.fillMaxWidth().heightIn(min = 26.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(6.dp).clip(CircleShape).background(accent))
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(7.dp))
         Text(
             label,
             color = palette.textMuted,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
             fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.1.sp,
         )
         if (streaming) {
             Spacer(Modifier.width(7.dp))
@@ -314,24 +325,19 @@ private fun CopyMessageButton(text: String) {
             copied = false
         }
     }
-    TextButton(
+    ForgeTextAction(
+        label = if (copied) "已复制" else "复制",
         onClick = {
             clipboard.setText(AnnotatedString(text))
             copied = true
         },
-        contentPadding = PaddingValues(horizontal = 6.dp),
-        modifier = Modifier.heightIn(min = 44.dp),
-    ) {
-        if (copied) {
-            Icon(Icons.Default.Check, null, tint = palette.success, modifier = Modifier.size(13.dp))
-            Spacer(Modifier.width(4.dp))
-        }
-        Text(
-            if (copied) "已复制" else "复制",
-            fontSize = 10.sp,
-            color = if (copied) palette.success else palette.textMuted,
-        )
-    }
+        tint = if (copied) palette.success else palette.textMuted,
+        leading = if (copied) {
+            { Icon(Icons.Default.Check, null, tint = palette.success, modifier = Modifier.size(12.dp)) }
+        } else {
+            null
+        },
+    )
 }
 
 @Composable
@@ -340,15 +346,15 @@ private fun ReasoningBlock(message: ChatMessage, open: Boolean, onToggle: () -> 
     val summary = message.reasoning.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty()
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 44.dp)
-                .clip(RoundedCornerShape(6.dp))
+            Modifier.fillMaxWidth().heightIn(min = 32.dp)
+                .clip(RoundedCornerShape(ForgeDimens.radiusSm))
                 .clickable(onClick = onToggle)
-                .padding(horizontal = 4.dp, vertical = 5.dp),
+                .padding(horizontal = 5.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 if (message.isStreaming) "思考中" else "思考过程",
-                color = palette.textSecondary,
+                color = if (message.isStreaming) palette.accent else palette.textSecondary,
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.Medium,
@@ -376,11 +382,11 @@ private fun ReasoningBlock(message: ChatMessage, open: Boolean, onToggle: () -> 
         }
         if (open) {
             Surface(
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(ForgeDimens.radiusMd),
                 color = palette.soft,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Box(Modifier.padding(12.dp)) {
+                Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     MessageContent(message.reasoning, markdown = true)
                 }
             }
@@ -391,39 +397,44 @@ private fun ReasoningBlock(message: ChatMessage, open: Boolean, onToggle: () -> 
 @Composable
 private fun ToolBlock(message: ChatMessage, open: Boolean, onToggle: () -> Unit) {
     val palette = LocalForgePalette.current
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = palette.soft.copy(alpha = 0.7f),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column {
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 44.dp)
-                    .clickable(onClick = onToggle)
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 32.dp)
+                .clip(RoundedCornerShape(ForgeDimens.radiusSm))
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(5.dp).clip(CircleShape).background(palette.borderHover))
+            Spacer(Modifier.width(7.dp))
+            Text(
+                message.toolName.ifBlank { "工具结果" },
+                color = palette.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                fontFamily = ForgeMonoFamily,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (open) "收起" else "结果",
+                color = palette.textMuted,
+                fontSize = 10.sp,
+            )
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                if (open) "收起工具结果" else "展开工具结果",
+                tint = palette.textMuted,
+                modifier = Modifier.size(15.dp).rotate(if (open) 180f else 0f),
+            )
+        }
+        if (open) {
+            Surface(
+                shape = RoundedCornerShape(ForgeDimens.radiusMd),
+                color = palette.soft,
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
             ) {
-                Icon(Icons.Default.Build, null, tint = palette.textMuted, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(7.dp))
-                Text(
-                    message.toolName.ifBlank { "工具结果" },
-                    color = palette.textSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 16.sp,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(if (open) "收起" else "结果", color = palette.textMuted, fontSize = 10.sp)
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    if (open) "收起工具结果" else "展开工具结果",
-                    tint = palette.textMuted,
-                    modifier = Modifier.size(15.dp).rotate(if (open) 180f else 0f),
-                )
-            }
-            if (open) {
                 ToolOutput(message.text)
             }
         }
@@ -450,14 +461,14 @@ private fun ToolOutput(text: String) {
                 fontSize = 10.sp,
             )
             if (text.isNotBlank()) {
-                TextButton(
+                ForgeTextAction(
+                    label = if (copied) "已复制" else "复制输出",
                     onClick = {
                         clipboard.setText(AnnotatedString(text))
                         copied = true
                     },
-                    contentPadding = PaddingValues(horizontal = 5.dp),
-                    modifier = Modifier.heightIn(min = 44.dp),
-                ) { Text(if (copied) "已复制" else "复制输出", fontSize = 10.sp) }
+                    tint = if (copied) palette.success else palette.textMuted,
+                )
             }
         }
         if (text.isNotBlank()) {
@@ -467,9 +478,9 @@ private fun ToolOutput(text: String) {
                     modifier = Modifier.horizontalScroll(rememberScrollState())
                         .padding(vertical = 4.dp),
                     color = palette.textPrimary,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    lineHeight = 19.sp,
+                    fontFamily = ForgeMonoFamily,
+                    fontSize = 11.5.sp,
+                    lineHeight = 18.sp,
                 )
             }
         }
@@ -489,7 +500,7 @@ private fun ToolCallHint(toolName: String) {
             "调用工具 · $toolName",
             color = palette.textMuted,
             fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMonoFamily,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -548,7 +559,7 @@ private fun ApprovalCard(
 ) {
     val palette = LocalForgePalette.current
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(ForgeDimens.radiusCard),
         color = palette.warningBackground,
         contentColor = palette.textPrimary,
         border = BorderStroke(1.dp, palette.warningBorder),
@@ -556,15 +567,15 @@ private fun ApprovalCard(
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(7.dp).clip(CircleShape).background(palette.warning))
+                Box(Modifier.size(6.dp).clip(CircleShape).background(palette.warning))
                 Spacer(Modifier.width(7.dp))
-                Text("需要你的确认", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("需要你的确认", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
                 Text(
                     approval.toolName,
                     color = palette.warning,
                     fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = ForgeMonoFamily,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -573,31 +584,37 @@ private fun ApprovalCard(
                 Text(
                     approval.description,
                     color = palette.textPrimary,
-                    fontSize = 14.sp,
-                    lineHeight = 22.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
                 )
             }
             if (approval.command.isNotBlank()) {
                 MessageContent("```\n${approval.command}\n```")
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ForgeTextAction(
+                    label = "拒绝",
                     onClick = { onAnswer(false) },
                     enabled = enabled,
-                    modifier = Modifier.heightIn(min = 44.dp).testTag("deny-approval"),
-                ) { Text("拒绝", color = palette.error, fontSize = 12.sp) }
-                Spacer(Modifier.width(6.dp))
-                Button(
+                    danger = true,
+                    modifier = Modifier.testTag("deny-approval"),
+                )
+                Surface(
                     onClick = { onAnswer(true) },
                     enabled = enabled,
-                    modifier = Modifier.heightIn(min = 44.dp).testTag("allow-approval"),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = palette.accent,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        disabledContainerColor = palette.borderControl,
-                        disabledContentColor = palette.textMuted,
-                    ),
-                ) { Text("允许这一次", fontSize = 12.sp) }
+                    shape = RoundedCornerShape(ForgeDimens.radiusMd),
+                    color = if (enabled) palette.accent else palette.borderControl,
+                    contentColor = if (enabled) Color.White else palette.textMuted,
+                    modifier = Modifier.heightIn(min = 34.dp).testTag("allow-approval"),
+                ) {
+                    Box(Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) {
+                        Text("允许这一次", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
             }
         }
     }

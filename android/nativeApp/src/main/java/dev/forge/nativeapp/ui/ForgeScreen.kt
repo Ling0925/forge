@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
@@ -313,7 +315,7 @@ private fun WideWorkbench(
             onOpenSettings = onOpenSettings,
             onOpenUsage = onOpenUsage,
             focusSearchRequest = sidebarFocusRequest,
-            modifier = Modifier.width(264.dp).fillMaxHeight(),
+            modifier = Modifier.width(ForgeDimens.railWidth).fillMaxHeight(),
         )
         VerticalDivider(color = palette.borderSubtle)
         Row(Modifier.weight(1f).fillMaxHeight()) {
@@ -378,7 +380,7 @@ private fun CompactWorkbench(
         drawerContent = {
             ModalDrawerSheet(
                 drawerState = drawerState,
-                modifier = Modifier.width(300.dp).fillMaxHeight(),
+                modifier = Modifier.width(280.dp).fillMaxHeight(),
                 drawerContainerColor = palette.sidebar,
                 drawerContentColor = palette.textPrimary,
                 drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
@@ -436,12 +438,12 @@ private fun WorkbenchHeader(
     onToggleInspector: () -> Unit,
 ) {
     val palette = LocalForgePalette.current
-    val buttonSize = if (compact) 48.dp else 32.dp
-    val height = if (compact) 48.dp else 44.dp
+    val buttonSize = if (compact) 40.dp else 32.dp
+    val height = if (compact) 52.dp else 44.dp
     val title = if (state.selectedId == null) "新会话" else state.title.ifBlank { "Forge 工作台" }
     Row(
         Modifier.fillMaxWidth().height(height).background(palette.canvas)
-            .padding(horizontal = if (compact) 4.dp else 20.dp),
+            .padding(horizontal = if (compact) 6.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showSidebarButton) {
@@ -481,6 +483,7 @@ private fun WorkbenchHeader(
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-0.1).sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -492,13 +495,13 @@ private fun WorkbenchHeader(
                 color = palette.warningBackground,
                 contentColor = palette.warning,
                 border = androidx.compose.foundation.BorderStroke(1.dp, palette.warningBorder),
-                modifier = Modifier.height(28.dp).padding(horizontal = 2.dp),
+                modifier = Modifier.height(26.dp).padding(horizontal = 2.dp),
             ) {
                 Row(
                     Modifier.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("待批准 $pendingCount", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Text("待批准 $pendingCount", fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
                 }
             }
             Spacer(Modifier.width(4.dp))
@@ -521,8 +524,8 @@ private fun WorkbenchHeader(
         }
         IconButton(
             onClick = onToggleInspector,
-            modifier = Modifier.size(buttonSize).clip(RoundedCornerShape(8.dp))
-                .background(if (inspectorExpanded) palette.selected else Color.Transparent)
+            modifier = Modifier.size(buttonSize).clip(RoundedCornerShape(ForgeDimens.radiusMd))
+                .background(if (inspectorExpanded) palette.accentSoft else Color.Transparent)
                 .semantics { contentDescription = expandedDescription }
                 .testTag("inspector-toggle"),
         ) {
@@ -534,15 +537,15 @@ private fun WorkbenchHeader(
                 )
                 if (compact && pendingCount > 0) {
                     Box(
-                        Modifier.align(Alignment.TopEnd).padding(top = 3.dp, end = 3.dp)
-                            .size(16.dp).clip(CircleShape).background(palette.warning),
+                        Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp)
+                            .size(15.dp).clip(CircleShape).background(palette.warning),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             if (pendingCount > 9) "9+" else pendingCount.toString(),
                             color = palette.warningBackground,
                             fontSize = 9.sp,
-                            lineHeight = 11.sp,
+                            lineHeight = 10.sp,
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -592,49 +595,30 @@ private fun WorkbenchMain(
             else -> Unit
         }
         if (state.error != null) {
-            Surface(color = palette.errorBackground, contentColor = palette.textPrimary) {
-                Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp)) {
-                    Text(
-                        state.error,
-                        color = palette.error,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = actions::refresh,
-                            modifier = Modifier.heightIn(min = 40.dp),
-                        ) { Text("刷新", fontSize = 11.sp) }
-                        TextButton(
-                            onClick = actions::dismissError,
-                            modifier = Modifier.heightIn(min = 40.dp),
-                        ) { Text("收起提示", fontSize = 11.sp) }
-                    }
-                }
-            }
+            ForgeNotice(
+                text = state.error,
+                tone = PanelTone.Danger,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                action = {
+                    ForgeTextAction("刷新", actions::refresh, danger = true)
+                    ForgeTextAction("收起", actions::dismissError)
+                },
+            )
         }
         if (state.uncertain) {
-            Surface(color = palette.warningBackground, contentColor = palette.textPrimary) {
-                Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp)) {
-                    Text(
-                        "上次操作结果未确认。先刷新历史与任务状态，避免重复发送。",
-                        color = palette.warning,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp,
+            ForgeNotice(
+                text = "上次操作结果未确认。先刷新历史与任务状态，避免重复发送。",
+                tone = PanelTone.Warning,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                action = {
+                    ForgeTextAction("刷新检查", actions::refresh)
+                    ForgeTextAction(
+                        "我已检查",
+                        { localConfirmUncertain = true },
+                        enabled = state.connection == ConnectionPhase.Connected && !state.sending && !state.busy,
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = actions::refresh,
-                            modifier = Modifier.heightIn(min = 40.dp),
-                        ) { Text("刷新检查", fontSize = 11.sp) }
-                        TextButton(
-                            onClick = { localConfirmUncertain = true },
-                            enabled = state.connection == ConnectionPhase.Connected && !state.sending && !state.busy,
-                            modifier = Modifier.heightIn(min = 40.dp),
-                        ) { Text("我已检查", fontSize = 11.sp) }
-                    }
-                }
-            }
+                },
+            )
         }
         if (isNew) {
             HomeSurface(
@@ -654,25 +638,28 @@ private fun WorkbenchMain(
     }
 
     if (localConfirmUncertain) {
-        AlertDialog(
+        ForgeDialog(
             onDismissRequest = { localConfirmUncertain = false },
-            title = { Text("确认已经检查服务器状态？") },
-            text = {
-                Text("解锁只恢复操作按钮，不会自动重发消息或再次提交审批。若草稿可能已送达，请先清空重复内容。")
-            },
-            confirmButton = {
-                TextButton(
+            title = "确认已经检查服务器状态？",
+            actions = {
+                ForgeTextAction("返回检查", { localConfirmUncertain = false })
+                ForgePrimaryButton(
+                    label = "确认，解锁操作",
                     onClick = {
                         actions.acknowledgeUncertain()
                         localConfirmUncertain = false
                     },
                     enabled = state.connection == ConnectionPhase.Connected && !state.sending && !state.busy,
-                ) { Text("确认，解锁操作") }
+                )
             },
-            dismissButton = {
-                TextButton(onClick = { localConfirmUncertain = false }) { Text("返回检查") }
-            },
-        )
+        ) {
+            Text(
+                "解锁只恢复操作按钮，不会自动重发消息或再次提交审批。若草稿可能已送达，请先清空重复内容。",
+                color = LocalForgePalette.current.textSecondary,
+                fontSize = 12.5.sp,
+                lineHeight = 19.sp,
+            )
+        }
     }
 }
 
@@ -693,76 +680,105 @@ private fun HomeSurface(
             .take(4)
     }
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        modifier.fillMaxSize()
             .navigationBarsPadding()
             .imePadding(),
     ) {
-        Column(
-            Modifier.fillMaxWidth().widthIn(max = 760.dp)
-                .align(Alignment.CenterHorizontally)
-                .padding(horizontal = if (compact) 16.dp else 32.dp),
+        // The welcome surface scrolls; the composer stays docked to the bottom
+        // like the Web workbench's continuing-task card instead of floating in
+        // the middle of a tall phone screen.  When the recent list is short the
+        // block is centered in the free height, so a tall phone does not show a
+        // 300dp dead zone above the composer.
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Spacer(Modifier.height(if (compact) 28.dp else 52.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("f.", style = ForgeWordmarkStyle, color = palette.accent)
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    "今天，想做点什么？",
-                    color = palette.textPrimary,
-                    fontSize = 22.sp,
-                    lineHeight = 31.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = (-0.2).sp,
-                )
-            }
-            Spacer(Modifier.height(7.dp))
-            Text(
-                "继续之前的工作，或开始一项新任务。",
-                color = palette.textSecondary,
-                fontSize = 13.sp,
-                lineHeight = 20.sp,
-            )
-            Spacer(Modifier.height(32.dp))
-            Text(
-                "最近任务",
-                color = palette.textSecondary,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.height(4.dp))
-            if (recent.isEmpty()) {
-                Text(
-                    when {
-                        state.connection != ConnectionPhase.Connected -> "连接 Core 后可读取最近任务。"
-                        state.loading -> "正在读取最近任务…"
-                        else -> "还没有历史任务，从下方开始。"
-                    },
-                    color = palette.textMuted,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(vertical = 10.dp),
-                )
-            } else {
-                recent.forEachIndexed { index, session ->
-                    RecentTaskRow(
-                        session = session,
-                        enabled = canNavigate,
-                        compact = compact,
-                        onClick = { actions.selectSession(session.id) },
+            item("welcome") {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                Column(
+                    Modifier.fillMaxWidth().widthIn(max = ForgeDimens.readingMeasure)
+                        .padding(horizontal = if (compact) 20.dp else 32.dp),
+                ) {
+                    Spacer(Modifier.height(if (compact) 24.dp else 48.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("f.", style = ForgeWordmarkStyle, color = palette.accent)
+                        Spacer(Modifier.width(11.dp))
+                        Text(
+                            "今天，想做点什么？",
+                            color = palette.textPrimary,
+                            fontSize = if (compact) 24.sp else 28.sp,
+                            lineHeight = if (compact) 32.sp else 38.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.6).sp,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "继续之前的工作，或开始一项新任务。",
+                        color = palette.textSecondary,
+                        fontSize = 13.5.sp,
+                        lineHeight = 21.sp,
                     )
-                    if (index != recent.lastIndex) HorizontalDivider(color = palette.borderSubtle)
+                    Spacer(Modifier.height(if (compact) 28.dp else 40.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "最近任务",
+                            modifier = Modifier.weight(1f),
+                            color = palette.textSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        if (recent.isNotEmpty()) {
+                            Text(
+                                "${recent.size}",
+                                color = palette.textMuted,
+                                fontSize = 10.5.sp,
+                                lineHeight = 15.sp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    if (recent.isEmpty()) {
+                        Text(
+                            when {
+                                state.connection != ConnectionPhase.Connected -> "连接 Core 后可读取最近任务。"
+                                state.loading -> "正在读取最近任务…"
+                                else -> "还没有历史任务，从下方开始。"
+                            },
+                            color = palette.textMuted,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.padding(vertical = 10.dp),
+                        )
+                    } else {
+                        recent.forEachIndexed { index, session ->
+                            RecentTaskRow(
+                                session = session,
+                                enabled = canNavigate,
+                                compact = compact,
+                                onClick = { actions.selectSession(session.id) },
+                            )
+                            if (index != recent.lastIndex) HorizontalDivider(color = palette.borderSubtle)
+                        }
+                    }
+                    Spacer(Modifier.height(if (compact) 24.dp else 32.dp))
+                }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+        }
+        Box(
+            Modifier.fillMaxWidth()
+                .padding(horizontal = if (compact) 12.dp else 32.dp, vertical = if (compact) 8.dp else 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             ForgeComposer(
                 state = state,
                 actions = actions,
                 isNew = true,
                 onOpenModelPicker = onOpenModelPicker,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().widthIn(max = ForgeDimens.readingMeasure),
             )
-            Spacer(Modifier.height(if (compact) 16.dp else 24.dp))
         }
     }
 }
@@ -785,27 +801,29 @@ private fun RecentTaskRow(
         enabled = enabled,
         color = Color.Transparent,
         contentColor = palette.textPrimary,
-        modifier = Modifier.fillMaxWidth().heightIn(min = if (compact) 56.dp else 44.dp)
+        shape = RoundedCornerShape(ForgeDimens.radiusMd),
+        modifier = Modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 44.dp)
             .clearAndSetSemantics { contentDescription = "打开任务：${session.title}" },
     ) {
         Row(
-            Modifier.padding(vertical = if (compact) 10.dp else 8.dp, horizontal = 2.dp),
+            Modifier.padding(vertical = if (compact) 9.dp else 7.dp, horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     session.title.ifBlank { "未命名任务" },
                     color = palette.textPrimary,
-                    fontSize = 14.sp,
-                    lineHeight = 21.sp,
+                    fontSize = 13.5.sp,
+                    lineHeight = 20.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     meta,
                     color = palette.textSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 10.5.sp,
+                    lineHeight = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -815,7 +833,7 @@ private fun RecentTaskRow(
                 Icons.AutoMirrored.Filled.ArrowForward,
                 null,
                 tint = palette.textMuted,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(16.dp).rotate(-45f),
             )
         }
     }

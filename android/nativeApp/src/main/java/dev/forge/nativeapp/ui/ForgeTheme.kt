@@ -23,11 +23,13 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.forge.nativeapp.R
 
 /**
  * The warm neutral palette from the current Forge workspace theme.  MaterialTheme
@@ -136,7 +138,48 @@ val ForgeDarkPalette = ForgePalette(
 
 val LocalForgePalette = staticCompositionLocalOf { ForgeLightPalette }
 
+/**
+ * The Web workbench ships Geist for UI and prose plus Geist Mono for code.
+ * Falling back to the platform sans was the biggest reason the native shell
+ * read as a different product.  These static faces cover Latin/Greek/Cyrillic;
+ * CJK still falls back to the platform's Noto/PingFang, exactly like the
+ * desktop font stack.
+ */
+val ForgeSansFamily: FontFamily = FontFamily(
+    Font(R.font.geist_regular, FontWeight.Normal, FontStyle.Normal),
+    Font(R.font.geist_medium, FontWeight.Medium, FontStyle.Normal),
+    Font(R.font.geist_semibold, FontWeight.SemiBold, FontStyle.Normal),
+)
+
+val ForgeMonoFamily: FontFamily = FontFamily(
+    Font(R.font.geist_mono_regular, FontWeight.Normal, FontStyle.Normal),
+)
+
 val ForgeSerifFamily: FontFamily = FontFamily.Serif
+
+/**
+ * Spacing and control metrics shared by every screen.  Values mirror
+ * `styles/tokens.css` and `workbench-header.css`: a row that is 32px on the Web
+ * workbench is 32dp here, not Material's 48dp default.
+ */
+object ForgeDimens {
+    val hairline = 1.dp
+    val controlSm = 28.dp
+    val control = 32.dp
+    val controlLg = 36.dp
+    val touch = 44.dp
+    val headerWide = 44.dp
+    val headerCompact = 56.dp
+    val readingMeasure = 760.dp
+    val settingsMeasure = 820.dp
+    val railWidth = 264.dp
+    val radiusXs = 4.dp
+    val radiusSm = 6.dp
+    val radiusMd = 8.dp
+    val radiusCard = 12.dp
+    val radiusLg = 14.dp
+    val radiusComposer = 18.dp
+}
 
 /** The small serif italic `f.` wordmark used by the home greeting and rail. */
 val ForgeWordmarkStyle = TextStyle(
@@ -144,101 +187,105 @@ val ForgeWordmarkStyle = TextStyle(
     fontStyle = FontStyle.Italic,
     fontWeight = FontWeight.Medium,
     fontSize = 22.sp,
-    lineHeight = 31.sp,
+    lineHeight = 30.sp,
+    letterSpacing = (-0.2).sp,
 )
 
 private val ForgeTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 40.sp,
         lineHeight = 48.sp,
         letterSpacing = (-0.5).sp,
     ),
     displayMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 34.sp,
         lineHeight = 42.sp,
     ),
     displaySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 28.sp,
         lineHeight = 36.sp,
     ),
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
+        fontFamily = ForgeSansFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
         lineHeight = 32.sp,
+        letterSpacing = (-0.35).sp,
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
+        fontFamily = ForgeSansFamily,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
-        lineHeight = 31.sp,
-        letterSpacing = (-0.25).sp,
+        lineHeight = 30.sp,
+        letterSpacing = (-0.3).sp,
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
-        fontSize = 20.sp,
-        lineHeight = 28.sp,
+        fontFamily = ForgeSansFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 19.sp,
+        lineHeight = 26.sp,
+        letterSpacing = (-0.2).sp,
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        lineHeight = 28.sp,
+        fontSize = 18.sp,
+        lineHeight = 26.sp,
+        letterSpacing = (-0.2).sp,
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
+        fontSize = 14.5.sp,
+        lineHeight = 21.sp,
     ),
     titleSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
+        fontFamily = ForgeSansFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
         lineHeight = 20.sp,
     ),
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Normal,
-        fontSize = 17.sp,
-        lineHeight = 30.sp,
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 22.sp,
     ),
-    bodySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+    bodyMedium = TextStyle(
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
+        fontSize = 13.sp,
+        lineHeight = 20.sp,
+    ),
+    bodySmall = TextStyle(
+        fontFamily = ForgeSansFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 11.5.sp,
+        lineHeight = 17.sp,
     ),
     labelLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
+        fontSize = 13.sp,
         lineHeight = 20.sp,
     ),
     labelMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
+        fontSize = 11.5.sp,
+        lineHeight = 16.sp,
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = ForgeSansFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
+        fontSize = 10.5.sp,
+        lineHeight = 15.sp,
     ),
 )
 

@@ -151,7 +151,7 @@ fun ForgeComposer(
     val queuePaused = queueSnapshot?.optBoolean("paused") == true
     val queueLoading = state.workbench.loading.contains("queue")
     val queueError = state.workbench.errors["queue"].orEmpty()
-    val queueVisible = state.run != null || queueSnapshot != null || queueError.isNotBlank()
+    val queueVisible = queueError.isNotBlank() || queuePaused || queueItems.isNotEmpty()
 
     LaunchedEffect(state.selectedId, state.run?.id) {
         if (state.connection == ConnectionPhase.Connected && state.selectedId != null) {
@@ -187,41 +187,36 @@ fun ForgeComposer(
     val steerEnabled = !mutationLocked && state.run != null && hasContent
     val imageEnabled = !mutationLocked && state.draftImages.size < 4
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = palette.elevated,
-        contentColor = palette.textPrimary,
-        border = BorderStroke(1.dp, if (focused) palette.borderHover else palette.borderControl),
-        shadowElevation = 1.dp,
-    ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)) {
-            // Workspace is the top-most, quiet context chip.
-            Box {
+    Column(modifier.fillMaxWidth()) {
+        // Workspace is a quiet context row above the card, matching the Web
+        // workbench's `.composer-project` trigger.  The rail shows a short leaf
+        // name; the full absolute path stays in the semantics.
+        Box {
                 Surface(
                     onClick = {
                         if (workspaceEditable) workspaceMenu = true
                     },
                     enabled = workspaceEditable,
-                    shape = RoundedCornerShape(6.dp),
-                    color = palette.soft,
+                    shape = RoundedCornerShape(ForgeDimens.radiusSm),
+                    color = if (workspaceEditable) palette.soft else androidx.compose.ui.graphics.Color.Transparent,
                     contentColor = palette.textSecondary,
-                    modifier = Modifier.heightIn(min = if (compact) 36.dp else 28.dp),
+                    modifier = Modifier.heightIn(min = if (compact) 32.dp else 28.dp)
+                        .semantics { contentDescription = "工作区：$currentWorkspace" },
                 ) {
                     Row(
-                        Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        FolderGlyph(open = true, modifier = Modifier.size(13.dp), tint = palette.textSecondary)
+                        FolderGlyph(open = true, modifier = Modifier.size(12.dp), tint = palette.textMuted)
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = currentWorkspace.ifBlank { "工作区未读取" },
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp,
-                            fontFamily = FontFamily.Monospace,
+                            text = workspaceLeaf(currentWorkspace).ifBlank { "工作区未读取" },
+                            fontSize = 10.5.sp,
+                            lineHeight = 15.sp,
+                            fontFamily = ForgeMonoFamily,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 250.dp),
+                            modifier = Modifier.widthIn(max = 200.dp),
                         )
                         if (state.restrictWorkspace || !isNew) {
                             Spacer(Modifier.width(5.dp))
@@ -229,50 +224,39 @@ fun ForgeComposer(
                                 Icons.Default.Lock,
                                 contentDescription = if (state.restrictWorkspace) "工作区已限制" else "会话工作区固定",
                                 tint = palette.textMuted,
-                                modifier = Modifier.size(11.dp),
+                                modifier = Modifier.size(10.dp),
                             )
                         }
                         if (workspaceEditable) {
-                            Spacer(Modifier.width(3.dp))
+                            Spacer(Modifier.width(2.dp))
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 null,
                                 tint = palette.textMuted,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(13.dp),
                             )
                         }
                     }
                 }
-                DropdownMenu(expanded = workspaceMenu, onDismissRequest = { workspaceMenu = false }) {
+                ForgeMenu(expanded = workspaceMenu, onDismissRequest = { workspaceMenu = false }) {
                     val workspaces = remember(state.sessions, state.workspace, state.selectedWorkspace) {
                         (listOf(state.workspace, state.selectedWorkspace) + state.sessions.map { it.workspace })
                             .filter { it.isNotBlank() }
                             .distinct()
                     }
                     workspaces.forEach { workspace ->
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(workspaceLeaf(workspace), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        workspace,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = palette.textMuted,
-                                        fontFamily = FontFamily.Monospace,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            },
+                        ForgeMenuItem(
+                            text = workspaceLeaf(workspace),
+                            subtitle = workspace,
                             onClick = {
                                 actions.setWorkspace(workspace)
                                 workspaceMenu = false
                             },
                         )
                     }
-                    if (workspaces.isNotEmpty()) HorizontalDivider(color = palette.borderSubtle)
-                    DropdownMenuItem(
-                        text = { Text("手动输入路径…") },
+                    if (workspaces.isNotEmpty()) ForgeMenuDivider()
+                    ForgeMenuItem(
+                        text = "手动输入路径…",
                         onClick = {
                             workspaceMenu = false
                             workspaceDialog = true
@@ -280,7 +264,16 @@ fun ForgeComposer(
                     )
                 }
             }
-
+        Spacer(Modifier.height(6.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(ForgeDimens.radiusComposer),
+            color = palette.elevated,
+            contentColor = palette.textPrimary,
+            border = BorderStroke(1.dp, if (focused) palette.borderHover else palette.borderControl),
+            shadowElevation = 2.dp,
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
             if (state.draftImages.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -354,14 +347,14 @@ fun ForgeComposer(
                     textStyle = TextStyle(
                         color = palette.textPrimary,
                         fontSize = fieldFont,
-                        lineHeight = 24.sp,
-                        fontFamily = FontFamily.SansSerif,
+                        lineHeight = 22.sp,
+                        fontFamily = ForgeSansFamily,
                     ),
                     cursorBrush = SolidColor(palette.accent),
                     minLines = 1,
                     maxLines = 6,
                     modifier = Modifier.weight(1f)
-                        .heightIn(min = 44.dp)
+                        .heightIn(min = 40.dp)
                         .onFocusChanged { focused = it.isFocused }
                         .testTag("composer"),
                     decorationBox = { innerTextField ->
@@ -378,7 +371,7 @@ fun ForgeComposer(
                                     },
                                     color = palette.textMuted,
                                     fontSize = fieldFont,
-                                    lineHeight = 24.sp,
+                                    lineHeight = 22.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -392,7 +385,7 @@ fun ForgeComposer(
                     FilledIconButton(
                         onClick = actions::stop,
                         enabled = stopEnabled,
-                        modifier = Modifier.size(44.dp).testTag("stop"),
+                        modifier = Modifier.size(38.dp).testTag("stop"),
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = palette.soft,
@@ -407,7 +400,7 @@ fun ForgeComposer(
                     FilledIconButton(
                         onClick = actions::send,
                         enabled = sendEnabled,
-                        modifier = Modifier.size(44.dp).testTag("send"),
+                        modifier = Modifier.size(38.dp).testTag("send"),
                         shape = CircleShape,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = palette.runBackground,
@@ -460,18 +453,19 @@ fun ForgeComposer(
                             modifier = Modifier.size(13.dp),
                         )
                     }
-                    DropdownMenu(expanded = modeMenu, onDismissRequest = { modeMenu = false }) {
+                    ForgeMenu(expanded = modeMenu, onDismissRequest = { modeMenu = false }) {
                         listOf("build" to "Build · 直接执行", "plan" to "Plan · 先计划").forEach { (value, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                trailingIcon = {
-                                    if (state.mode == value) {
-                                        Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(17.dp))
-                                    }
-                                },
+                            ForgeMenuItem(
+                                text = label,
+                                selected = state.mode == value,
                                 onClick = {
                                     actions.setMode(value)
                                     modeMenu = false
+                                },
+                                trailing = if (state.mode == value) {
+                                    { Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(15.dp)) }
+                                } else {
+                                    null
                                 },
                             )
                         }
@@ -500,7 +494,7 @@ fun ForgeComposer(
                             modifier = Modifier.size(13.dp),
                         )
                     }
-                    DropdownMenu(expanded = permissionMenu, onDismissRequest = { permissionMenu = false }) {
+                    ForgeMenu(expanded = permissionMenu, onDismissRequest = { permissionMenu = false }) {
                         PermissionItem(
                             title = "只读",
                             subtitle = "不修改文件，不执行命令",
@@ -529,8 +523,8 @@ fun ForgeComposer(
                     }
                 }
                 Box(
-                    Modifier.size(if (compact) 44.dp else 32.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                    Modifier.size(if (compact) 34.dp else 30.dp)
+                        .clip(RoundedCornerShape(ForgeDimens.radiusSm))
                         .clickable(enabled = imageEnabled) {
                             imageLauncher.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -548,9 +542,9 @@ fun ForgeComposer(
                 Spacer(Modifier.weight(1f))
                 Surface(
                     onClick = onOpenModelPicker,
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(ForgeDimens.radiusSm),
                     color = androidx.compose.ui.graphics.Color.Transparent,
-                    modifier = Modifier.heightIn(min = if (compact) 44.dp else 32.dp)
+                    modifier = Modifier.heightIn(min = if (compact) 34.dp else 28.dp)
                         .widthIn(max = 230.dp)
                         .testTag("model-picker")
                         .semantics { contentDescription = modelDescription },
@@ -562,8 +556,8 @@ fun ForgeComposer(
                     ) {
                         Text(
                             modelLabel,
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
+                            fontSize = 11.5.sp,
+                            lineHeight = 16.sp,
                             color = palette.textSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -573,6 +567,7 @@ fun ForgeComposer(
                     }
                 }
             }
+        }
         }
     }
 
@@ -587,29 +582,30 @@ fun ForgeComposer(
         )
     }
     if (unrestrictedConfirm) {
-        AlertDialog(
+        ForgeDialog(
             onDismissRequest = { unrestrictedConfirm = false },
-            icon = { Icon(Icons.Default.Lock, null, tint = palette.warning) },
-            title = { Text("完全访问权限") },
-            text = {
-                Text(
-                    "完全访问会让代理在你的工作区和系统可见范围内执行文件与命令操作，不再逐次请求你的允许。" +
-                        "它仍受服务器策略和子代理权限上限约束，但不是操作系统沙箱。确认只影响之后的操作，不会自动重跑已拒绝的请求。",
-                )
-            },
-            confirmButton = {
-                TextButton(
+            title = "完全访问权限",
+            actions = {
+                ForgeTextAction("保持当前权限", { unrestrictedConfirm = false })
+                ForgePrimaryButton(
+                    label = "仍要使用完全访问",
                     onClick = {
                         actions.setPermission("unrestricted")
                         unrestrictedConfirm = false
                     },
                     enabled = !mutationLocked,
-                ) { Text("仍要使用完全访问", color = palette.error) }
+                    danger = true,
+                )
             },
-            dismissButton = {
-                TextButton(onClick = { unrestrictedConfirm = false }) { Text("保持当前权限") }
-            },
-        )
+        ) {
+            Text(
+                "完全访问会让代理在你的工作区和系统可见范围内执行文件与命令操作，不再逐次请求你的允许。" +
+                    "它仍受服务器策略和子代理权限上限约束，但不是操作系统沙箱。确认只影响之后的操作，不会自动重跑已拒绝的请求。",
+                color = palette.textSecondary,
+                fontSize = 12.5.sp,
+                lineHeight = 19.sp,
+            )
+        }
     }
 }
 
@@ -629,11 +625,11 @@ private fun ComposerControl(
         shape = RoundedCornerShape(6.dp),
         color = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = if (warn) palette.warning else palette.textSecondary,
-        modifier = Modifier.heightIn(min = if (compact) 44.dp else 32.dp)
+        modifier = Modifier.heightIn(min = if (compact) 34.dp else 28.dp)
             .semantics { contentDescription = description },
     ) {
         Row(
-            Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+            Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content,
         )
@@ -649,23 +645,16 @@ private fun PermissionItem(
     onClick: () -> Unit,
 ) {
     val palette = LocalForgePalette.current
-    DropdownMenuItem(
-        text = {
-            Column {
-                Text(title, color = if (danger) palette.error else palette.textPrimary)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = palette.textMuted,
-                )
-            }
-        },
-        trailingIcon = if (selected) {
-            { Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(17.dp)) }
+    ForgeMenuItem(
+        text = title,
+        subtitle = subtitle,
+        danger = danger,
+        onClick = onClick,
+        trailing = if (selected) {
+            { Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(15.dp)) }
         } else {
             null
         },
-        onClick = onClick,
     )
 }
 
@@ -707,26 +696,20 @@ private fun RunActivityRow(
             )
         }
         Spacer(Modifier.weight(1f))
-        TextButton(
+        ForgeTextAction(
+            label = "排队",
             onClick = onQueue,
             enabled = canQueue,
-            contentPadding = PaddingValues(horizontal = 7.dp),
-            modifier = Modifier.heightIn(min = 36.dp).testTag("queue-input"),
-        ) {
-            QueueGlyph(Modifier.size(13.dp), palette.textSecondary)
-            Spacer(Modifier.width(4.dp))
-            Text("排队", fontSize = 12.sp)
-        }
-        TextButton(
+            modifier = Modifier.testTag("queue-input"),
+            leading = { QueueGlyph(Modifier.size(12.dp), palette.textSecondary) },
+        )
+        ForgeTextAction(
+            label = "插话",
             onClick = onSteer,
             enabled = canSteer,
-            contentPadding = PaddingValues(horizontal = 7.dp),
-            modifier = Modifier.heightIn(min = 36.dp).testTag("steer-input"),
-        ) {
-            SteerGlyph(Modifier.size(13.dp), palette.textSecondary)
-            Spacer(Modifier.width(4.dp))
-            Text("插话", fontSize = 12.sp)
-        }
+            modifier = Modifier.testTag("steer-input"),
+            leading = { SteerGlyph(Modifier.size(12.dp), palette.textSecondary) },
+        )
     }
 }
 
@@ -749,8 +732,8 @@ private fun QueueSection(
     val palette = LocalForgePalette.current
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = if (compact) 44.dp else 34.dp)
-                .clip(RoundedCornerShape(6.dp))
+            Modifier.fillMaxWidth().heightIn(min = if (compact) 36.dp else 30.dp)
+                .clip(RoundedCornerShape(ForgeDimens.radiusSm))
                 .clickable(onClick = onToggle)
                 .testTag("queue")
                 .padding(horizontal = 4.dp, vertical = 5.dp),
@@ -793,18 +776,16 @@ private fun QueueSection(
                             fontWeight = FontWeight.Medium,
                         )
                         Spacer(Modifier.weight(1f))
-                        TextButton(
+                        ForgeTextAction(
+                            label = if (paused) "恢复" else "暂停",
                             onClick = onPauseResume,
                             enabled = canMutate,
-                            contentPadding = PaddingValues(horizontal = 6.dp),
-                            modifier = Modifier.heightIn(min = 36.dp),
-                        ) { Text(if (paused) "恢复" else "暂停", fontSize = 11.sp) }
-                        TextButton(
+                        )
+                        ForgeTextAction(
+                            label = "刷新",
                             onClick = onRefresh,
                             enabled = canRefresh,
-                            contentPadding = PaddingValues(horizontal = 6.dp),
-                            modifier = Modifier.heightIn(min = 36.dp),
-                        ) { Text("刷新", fontSize = 11.sp) }
+                        )
                     }
                     val pauseReason = snapshot?.optString("reason").orEmpty()
                     if (paused && pauseReason.isNotBlank()) {
@@ -870,11 +851,11 @@ private fun QueueItemRow(item: JSONObject, canMutate: Boolean, onCancel: (String
                 overflow = TextOverflow.Ellipsis,
             )
             if (canMutate && (state == "queued" || state == "bound") && inputId.isNotBlank()) {
-                TextButton(
+                ForgeTextAction(
+                    label = "取消",
                     onClick = { onCancel(inputId) },
-                    contentPadding = PaddingValues(horizontal = 5.dp),
-                    modifier = Modifier.heightIn(min = 36.dp),
-                ) { Text("取消", fontSize = 11.sp, color = palette.error) }
+                    danger = true,
+                )
             }
         }
         Text(
@@ -898,41 +879,47 @@ private fun WorkspaceDialog(
 ) {
     var value by rememberSaveable { mutableStateOf(initial) }
     var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
+    ForgeDialog(
         onDismissRequest = onDismiss,
-        title = { Text("选择工作区") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = {
-                        value = it.take(4096)
-                        error = null
-                    },
-                    singleLine = true,
-                    label = { Text("绝对路径") },
-                    modifier = Modifier.fillMaxWidth().testTag("workspace-path-input"),
-                )
-                Text(
-                    "例如 /home/you/project。工作区在会话创建后固定；服务器仍会校验路径。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (error != null) {
-                    Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
+        title = "选择工作区",
+        actions = {
+            ForgeTextAction("取消", onDismiss)
+            ForgePrimaryButton(
+                label = "使用此工作区",
                 onClick = {
                     val path = value.trim()
                     if (isAbsoluteWorkspace(path)) onConfirm(path) else error = "请输入绝对工作区路径"
                 },
-            ) { Text("使用此工作区") }
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ForgeTextField(
+                value = value,
+                onValueChange = {
+                    value = it.take(4096)
+                    error = null
+                },
+                singleLine = true,
+                placeholder = { Text("/home/you/project") },
+                modifier = Modifier.fillMaxWidth().testTag("workspace-path-input"),
+            )
+            Text(
+                "例如 /home/you/project。工作区在会话创建后固定；服务器仍会校验路径。",
+                color = LocalForgePalette.current.textSecondary,
+                fontSize = 11.sp,
+                lineHeight = 17.sp,
+            )
+            if (error != null) {
+                Text(
+                    error!!,
+                    color = LocalForgePalette.current.error,
+                    fontSize = 11.sp,
+                    lineHeight = 17.sp,
+                )
+            }
+        }
+    }
 }
 
 private fun isAbsoluteWorkspace(value: String): Boolean =

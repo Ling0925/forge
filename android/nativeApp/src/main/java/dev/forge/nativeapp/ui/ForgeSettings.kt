@@ -1,5 +1,6 @@
 package dev.forge.nativeapp.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -34,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -55,6 +58,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
@@ -297,7 +302,7 @@ private fun SettingsSidebar(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Column(modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
         Text("设置分类", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         SettingsSearch(query, onQuery, Modifier.fillMaxWidth().padding(vertical = 8.dp))
         if (categories.isEmpty()) {
@@ -307,23 +312,27 @@ private fun SettingsSidebar(
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             categories.forEach { category ->
                 val selected = category.id == selectedId && query.isBlank()
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                Column(
+                    Modifier.fillMaxWidth().padding(vertical = 1.dp)
+                        .clip(RoundedCornerShape(ForgeDimens.radiusMd))
+                        .background(if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
                         .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(category.id) })
                         .testTag("settings-category-${category.id}")
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(category.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-                        Text(category.description,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (selected) Text("●", color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        category.title,
+                        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    )
+                    Text(
+                        category.description,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
@@ -338,20 +347,13 @@ private fun SettingsSidebar(
 
 @Composable
 private fun SettingsSearch(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
-    OutlinedTextField(
+    ForgeSearchField(
         value = query,
         onValueChange = onQuery,
         modifier = modifier,
-        singleLine = true,
-        placeholder = { Text("搜索设置…") },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-        trailingIcon = if (query.isNotEmpty()) {
-            {
-                IconButton(onClick = { onQuery("") }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "清空搜索")
-                }
-            }
-        } else null,
+        placeholder = "搜索设置…",
+        contentDescription = "搜索设置",
+        onClear = { onQuery("") },
     )
 }
 
@@ -373,7 +375,7 @@ private fun SettingsScrollBody(
 ) {
     Column(
         modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         val notice = state.workbench.notice
@@ -456,45 +458,60 @@ private fun SettingsSaveBar(
     onDiscard: () -> Unit,
     onSave: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            val message = when {
-                localError.isNotBlank() -> localError
-                !settingsError.isNullOrBlank() -> settingsError
-                saving -> "已提交，等待 Core 返回权威设置…"
-                !connected -> "连接 Core 后才能保存设置。"
-                dirty -> "有未保存的修改。保存只提交已改字段。"
-                !settingsLoaded -> "设置尚未加载。"
-                else -> notice?.takeIf { it.isNotBlank() } ?: "所有设置已同步。"
-            }
-            Text(
-                message,
-                style = MaterialTheme.typography.labelMedium,
-                color = when {
-                    localError.isNotBlank() || !settingsError.isNullOrBlank() -> MaterialTheme.colorScheme.error
-                    dirty -> MaterialTheme.colorScheme.tertiary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    onClick = onDiscard,
-                    enabled = dirty && !saving,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) { Text("放弃修改") }
-                Button(
-                    onClick = onSave,
-                    enabled = canSave && settingsLoaded && dirty && !saving,
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("settings-save"),
+    Surface(color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxWidth()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp)) {
+                val message = when {
+                    localError.isNotBlank() -> localError
+                    !settingsError.isNullOrBlank() -> settingsError
+                    saving -> "已提交，等待 Core 返回权威设置…"
+                    !connected -> "连接 Core 后才能保存设置。"
+                    dirty -> "有未保存的修改。保存只提交已改字段。"
+                    !settingsLoaded -> "设置尚未加载。"
+                    else -> notice?.takeIf { it.isNotBlank() } ?: "所有设置已同步。"
+                }
+                val tone = when {
+                    localError.isNotBlank() || !settingsError.isNullOrBlank() -> PanelTone.Danger
+                    dirty -> PanelTone.Warning
+                    saving -> PanelTone.Accent
+                    else -> PanelTone.Success
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val dot = when (tone) {
+                        PanelTone.Danger -> MaterialTheme.colorScheme.error
+                        PanelTone.Warning -> MaterialTheme.colorScheme.tertiary
+                        PanelTone.Accent -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                    }
+                    Box(Modifier.size(6.dp).clip(RoundedCornerShape(999.dp)).background(dot))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        message,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (tone == PanelTone.Danger) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text("保存到 Core")
+                    ForgeTextAction(
+                        label = "放弃修改",
+                        onClick = onDiscard,
+                        enabled = dirty && !saving,
+                    )
+                    ForgePrimaryButton(
+                        label = if (saving) "保存中…" else "保存到 Core",
+                        onClick = onSave,
+                        enabled = canSave && settingsLoaded && dirty && !saving,
+                        modifier = Modifier.testTag("settings-save"),
+                    )
                 }
             }
         }
@@ -574,12 +591,12 @@ private fun AppearanceSection(state: ChatUiState, actions: ChatActions) {
             listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (value, label) ->
                 val selected = state.themeMode == value
                 if (selected) {
-                    Button(
+                    ForgeButton(
                         onClick = { actions.setThemeMode(value) },
                         modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                     ) { Text(label, maxLines = 1) }
                 } else {
-                    OutlinedButton(
+                    ForgeOutlineButton(
                         onClick = { actions.setThemeMode(value) },
                         modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                     ) { Text(label, maxLines = 1) }
@@ -676,7 +693,7 @@ private fun ContextSection(
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    ForgeTextField(
                         value = row.model,
                         onValueChange = { value ->
                             onDraft(draft.copy(modelContextWindows = draft.modelContextWindows
@@ -687,7 +704,7 @@ private fun ContextSection(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    ForgeTextField(
                         value = row.tokens,
                         onValueChange = { value ->
                             onDraft(draft.copy(modelContextWindows = draft.modelContextWindows
@@ -714,7 +731,7 @@ private fun ContextSection(
                 }
             }
         }
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = { onDraft(draft.copy(modelContextWindows = draft.modelContextWindows + ModelWindowDraft())) },
             enabled = enabled,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -743,7 +760,7 @@ private fun BrowserSection(
         title = "网络访问范围",
         subtitle = "空列表不启用浏览器工具。这里配置主机浏览器，不是当前设置页面的连接。",
     ) {
-        OutlinedTextField(
+        ForgeTextField(
             value = draft.browserAllowedOrigins,
             onValueChange = { onDraft(draft.copy(browserAllowedOrigins = it)) },
             enabled = enabled,
@@ -758,7 +775,7 @@ private fun BrowserSection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedTextField(
+        ForgeTextField(
             value = draft.browserExecutablePath,
             onValueChange = { onDraft(draft.copy(browserExecutablePath = it)) },
             enabled = enabled,
@@ -812,7 +829,7 @@ private fun LspSection(
                             Text("移除")
                         }
                     }
-                    OutlinedTextField(
+                    ForgeTextField(
                         value = server.id,
                         onValueChange = { value ->
                             onDraft(draft.copy(lspServers = draft.lspServers.toMutableList()
@@ -824,7 +841,7 @@ private fun LspSection(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    ForgeTextField(
                         value = server.command,
                         onValueChange = { value ->
                             onDraft(draft.copy(lspServers = draft.lspServers.toMutableList()
@@ -836,7 +853,7 @@ private fun LspSection(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    ForgeTextField(
                         value = server.args,
                         onValueChange = { value ->
                             onDraft(draft.copy(lspServers = draft.lspServers.toMutableList()
@@ -846,10 +863,10 @@ private fun LspSection(
                         label = { Text("参数（JSON 字符串数组）") },
                         placeholder = { Text("[\"--stdio\"]") },
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = ForgeMonoFamily),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    ForgeTextField(
                         value = server.extensions,
                         onValueChange = { value ->
                             onDraft(draft.copy(lspServers = draft.lspServers.toMutableList()
@@ -864,7 +881,7 @@ private fun LspSection(
                 }
             }
         }
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = {
                 onDraft(draft.copy(lspServers = draft.lspServers + LspDraft()))
             },
@@ -884,7 +901,7 @@ private fun SettingsDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = { expanded = true },
             enabled = enabled,
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -916,7 +933,7 @@ private fun SettingsNumberField(
     helper: String,
     onValue: (String) -> Unit,
 ) {
-    OutlinedTextField(
+    ForgeTextField(
         value = value,
         onValueChange = { onValue(it.filter { ch -> ch.isDigit() }) },
         enabled = enabled,
@@ -1211,7 +1228,7 @@ private fun ModelSourcesSection(
         title = "模型服务",
         subtitle = if (settings.optBoolean("isConfigured")) "Core 已配置模型服务" else "Core 尚未配置模型服务",
         action = {
-            Button(
+            ForgeButton(
                 onClick = { editingId = null; dialogOpen = true },
                 enabled = sourcesEnabled && canMutate,
                 modifier = Modifier.heightIn(min = 48.dp).testTag("model-source-add"),
@@ -1288,7 +1305,7 @@ private fun ModelSourcesSection(
                             PanelBadge(group.optText("strategy").ifBlank { "order" })
                         }
                         Text(group.optText("id"), style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace)
+                            fontFamily = ForgeMonoFamily)
                         val members = group.optObjects("members")
                         Text(
                             "${members.size} 个成员 · " + members.take(3).joinToString("、") {
@@ -1396,7 +1413,7 @@ private fun ModelSourceCard(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            OutlinedButton(
+            ForgeOutlineButton(
                 onClick = {
                     actions.configureModelSource(
                         JSONObject().put("type", "activate").put("id", sourceId),
@@ -1486,7 +1503,7 @@ private fun ModelCatalogPanel(
                             Text(
                                 model,
                                 Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = ForgeMonoFamily,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -1602,7 +1619,7 @@ private fun ModelSourceDialog(
                 if (!state.error.isNullOrBlank()) {
                     SettingsErrorBanner(state.error.orEmpty(), onDismiss = actions::dismissError)
                 }
-                OutlinedTextField(
+                ForgeTextField(
                     value = label,
                     onValueChange = { label = it },
                     label = { Text("来源名称") },
@@ -1610,7 +1627,7 @@ private fun ModelSourceDialog(
                     enabled = !pending,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                ForgeTextField(
                     value = baseUrl,
                     onValueChange = { baseUrl = it },
                     label = { Text("Base URL") },
@@ -1620,7 +1637,7 @@ private fun ModelSourceDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                ForgeTextField(
                     value = model,
                     onValueChange = { model = it },
                     label = { Text("默认模型 ID") },
@@ -1640,7 +1657,7 @@ private fun ModelSourceDialog(
                     enabled = !pending,
                     onSelect = { apiMode = it },
                 )
-                OutlinedTextField(
+                ForgeTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
                     label = { Text(if (source?.optBoolean("hasApiKey") == true) "API Key（留空不覆盖）" else "API Key（可选）") },
@@ -1741,7 +1758,7 @@ private fun DialogCatalogSuggestions(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp)
                     .clickable { onSelect(model) }
                     .padding(vertical = 8.dp),
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMonoFamily,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -1917,7 +1934,7 @@ private fun McpSection(state: ChatUiState, actions: ChatActions, enabled: Boolea
         title = "注册 stdio MCP",
         subtitle = "注册后由 Core 在主机执行命令。仅支持公开的 stdio 注册 schema；远程 MCP 请用服务器 CLI。",
         action = {
-            OutlinedButton(
+            ForgeOutlineButton(
                 onClick = { showForm = !showForm; formError = "" },
                 enabled = connected && canMutate,
                 modifier = Modifier.heightIn(min = 48.dp),
@@ -1930,12 +1947,12 @@ private fun McpSection(state: ChatUiState, actions: ChatActions, enabled: Boolea
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
+                ForgeOutlineButton(
                     onClick = { jsonMode = false },
                     enabled = !jsonMode && pendingId == null,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) { Text("表单") }
-                OutlinedButton(
+                ForgeOutlineButton(
                     onClick = { jsonMode = true },
                     enabled = jsonMode && pendingId == null,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
@@ -2003,25 +2020,25 @@ private fun McpServerForm(
     var enabled by rememberSaveable { mutableStateOf(true) }
     var localError by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(id, { id = it }, label = { Text("服务器 ID") },
+        ForgeTextField(id, { id = it }, label = { Text("服务器 ID") },
             placeholder = { Text("例如 filesystem") }, singleLine = true,
             enabled = !pending, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(label, { label = it }, label = { Text("显示名称") },
+        ForgeTextField(label, { label = it }, label = { Text("显示名称") },
             singleLine = true, enabled = !pending, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(command, { command = it }, label = { Text("启动命令") },
+        ForgeTextField(command, { command = it }, label = { Text("启动命令") },
             placeholder = { Text("例如 npx") }, singleLine = true,
             enabled = !pending, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(args, { args = it }, label = { Text("参数（JSON 字符串数组）") },
+        ForgeTextField(args, { args = it }, label = { Text("参数（JSON 字符串数组）") },
             placeholder = { Text("[\"-y\", \"@modelcontextprotocol/server-filesystem\"]") },
             singleLine = true, enabled = !pending, modifier = Modifier.fillMaxWidth(),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = ForgeMonoFamily))
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = enabled, onCheckedChange = { enabled = it }, enabled = !pending)
             Text("注册后启用")
         }
         if (localError.isNotBlank()) PanelError(localError)
         if (error.isNotBlank()) PanelError(error)
-        Button(
+        ForgeButton(
             onClick = {
                 try {
                     val input = JSONObject()
@@ -2057,7 +2074,7 @@ private fun McpJsonForm(
     }
     var localError by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
+        ForgeTextField(
             value = text,
             onValueChange = { text = it },
             label = { Text("stdio JSON") },
@@ -2065,11 +2082,11 @@ private fun McpJsonForm(
             maxLines = 12,
             enabled = !pending,
             modifier = Modifier.fillMaxWidth(),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = ForgeMonoFamily),
         )
         if (localError.isNotBlank()) PanelError(localError)
         if (error.isNotBlank()) PanelError(error)
-        Button(
+        ForgeButton(
             onClick = {
                 try {
                     val input = JSONObject(text)
@@ -2192,7 +2209,7 @@ private fun ConnectionSection(state: ChatUiState, actions: ChatActions, onClose:
         if (state.workspace.isNotBlank()) {
             PanelInfoRow("远端工作区", state.workspace, mono = true)
         }
-        OutlinedTextField(
+        ForgeTextField(
             value = url,
             onValueChange = { url = it },
             label = { Text("服务器地址") },
@@ -2202,7 +2219,7 @@ private fun ConnectionSection(state: ChatUiState, actions: ChatActions, onClose:
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth().testTag("connection-url"),
         )
-        OutlinedTextField(
+        ForgeTextField(
             value = credential,
             onValueChange = { credential = it },
             label = { Text(if (pair) "一次性配对码（可选）" else "设备凭据（可选）") },
@@ -2237,7 +2254,7 @@ private fun ConnectionSection(state: ChatUiState, actions: ChatActions, onClose:
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!connected) {
-                Button(
+                ForgeButton(
                     onClick = {
                         awaitingConnect = true
                         actions.connect(url.trim(), credential, pair)
@@ -2248,7 +2265,7 @@ private fun ConnectionSection(state: ChatUiState, actions: ChatActions, onClose:
                 ) { Text(if (awaitingConnect) "正在连接…" else "连接") }
             }
             if (state.connection == ConnectionPhase.Reconnecting || state.connection == ConnectionPhase.Paused) {
-                OutlinedButton(
+                ForgeOutlineButton(
                     onClick = { actions.reconnect() },
                     enabled = !locked,
                     modifier = Modifier.heightIn(min = 48.dp),
@@ -2267,7 +2284,7 @@ private fun ConnectionSection(state: ChatUiState, actions: ChatActions, onClose:
             }
         }
         if (connected) {
-            OutlinedButton(
+            ForgeOutlineButton(
                 onClick = { actions.reconnect() },
                 enabled = !locked,
                 modifier = Modifier.heightIn(min = 48.dp),

@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.forge.nativeapp.ChatActions
 import dev.forge.nativeapp.ChatUiState
 import org.json.JSONArray
@@ -68,15 +71,12 @@ fun ForgeUsage(
             onClose = onClose,
             subtitle = "来自 Core 的真实用量统计；价格未知时不会显示为免费。",
             trailing = {
-                TextButton(
+                ForgeTextAction(
+                    label = "刷新",
                     onClick = { actions.loadPanel("usage") },
                     enabled = connected && !loading,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Icon(Icons.Default.Refresh, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("刷新")
-                }
+                    leading = { Icon(Icons.Default.Refresh, null, modifier = Modifier.size(13.dp)) },
+                )
             },
         )
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
@@ -151,15 +151,19 @@ private fun UsageContent(usage: JSONObject, connected: Boolean) {
                     row.forEach { metric ->
                         Surface(
                             Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.large,
+                            shape = RoundedCornerShape(ForgeDimens.radiusCard),
                             color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 1.dp,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp, MaterialTheme.colorScheme.outlineVariant,
+                            ),
                         ) {
-                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(metric.label, style = MaterialTheme.typography.labelMedium,
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(metric.label, style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(metric.value, style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.SemiBold)
+                                    fontFamily = ForgeSansFamily,
+                                    fontSize = 20.sp,
+                                    letterSpacing = (-0.3).sp)
                                 Text(metric.caption, style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -349,7 +353,7 @@ private fun ModelRow(model: JSONObject) {
         Text(
             model.optText("model").ifBlank { "未知模型" },
             style = MaterialTheme.typography.titleSmall,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMonoFamily,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -397,7 +401,7 @@ private fun SessionUsageRow(session: JSONObject, rank: Int) {
             session.optText("model").ifBlank { "模型未知" },
             Modifier.padding(start = 26.dp),
             style = MaterialTheme.typography.labelSmall,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = ForgeMonoFamily,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -414,7 +418,7 @@ private fun SessionUsageRow(session: JSONObject, rank: Int) {
                 session.optText("workspace"),
                 Modifier.padding(start = 26.dp),
                 style = MaterialTheme.typography.labelSmall,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = ForgeMonoFamily,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

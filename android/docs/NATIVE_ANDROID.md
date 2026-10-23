@@ -13,6 +13,14 @@
 
 界面不再沿用首版的简化聊天布局。视觉与页面结构直接对照 `src/renderer/components/workbench/`、`styles/workspace-theme.css` 和 `styles/sidebar-compact.css`：原版最终生效的是暖白 / 石墨黑 / 赤陶强调色，而不是 `tokens.css` 的早期绿色基础色。保持 Kotlin + Compose，不嵌入 React 或 WebView。
 
+**0.3 视觉重构** 把 Web 工作台的排版密度真正搬进 Compose，而不是只抄颜色：
+
+- 打包 Geist / Geist Mono 字体（SIL OFL，见 `nativeApp/src/main/assets/fonts/OFL.txt`）；中文仍回退系统 Noto/PingFang，`f.` 字标保留 Georgia 风格的 serif italic。
+- 统一 `ForgeDimens`：44dp 宽屏 / 56dp 手机标题栏、28–36dp 控件、264dp 侧栏、760dp 阅读宽度、4/6/8/12/14/18dp 圆角；不再默认使用 Material 的 48dp 按钮和 56dp 输入框。
+- 首页欢迎内容在可用高度内居中，输入舱固定在底部；输入舱的 workspace 触发器移到卡片外，只显示叶子名，完整路径放在语义里；队列为空时不再占用一行。
+- 对话流改为底部对齐，用户回合使用 16dp 内边距的 soft 气泡，助手为无边框正文；作者/复制行 26dp，思考/工具折叠行 32dp，代码块使用 Geist Mono 与 1px 暖灰边框。
+- 设置、详情和用量共用扁平 `ForgeSectionCard`（soft 标题条 + hairline 边框）、32dp 分类切换、38dp 字段和紧凑保存栏；旧的材料风格 AlertDialog 仍用于确认类流程。
+
 - **工作台**：`f.` 欢迎标识、原版欢迎文案、最近四项任务、紧凑标题栏；手机侧抽屉与详情切换，宽屏 264dp 常驻侧栏和可收起的详情面板。
 - **会话导航**：按工作区分组、搜索任务/工作区、归档筛选、状态标记、重命名、归档/恢复与分叉。
 - **输入舱**：一体化无内框文本区；独立 Build/Plan 和权限选择；来源/路由/模型选择，全局思考强度；发送、停止、显式排队与插话，队列取消/暂停/恢复。`unrestricted` 需要用户明确选择并确认；不自动升级权限或审批。
@@ -25,7 +33,7 @@
 - **不自动重放**：发送、创建、设置、来源、队列、检查点、审批等副作用不自动重试。结果不确定时保留输入并锁住写操作，用户刷新检查后才能显式解锁。各分区读请求按连接/会话/请求版本丢弃过期响应。
 - **草稿**：文本按服务器地址 + 会话 ID 存入应用私有 SharedPreferences，旋转保留 ViewModel；图片不是离线持久化附件。
 
-这次迁移包含页面和对应 Core 操作，但不是桌面全部高级功能的逐项等价实现。字体使用 Android 原生 sans/mono/serif，未打包桌面 Geist；桌面 OAuth、复杂路由编辑等剩余项见文末。
+这次迁移包含页面和对应 Core 操作，但不是桌面全部高级功能的逐项等价实现。字体已打包 Geist / Geist Mono（OFL），CJK 字形由系统字体回退；桌面 OAuth、复杂路由编辑等剩余项见文末。
 
 ## 接入现有 forge-core
 

@@ -164,7 +164,7 @@ fun ForgeModelPicker(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("模型与思考", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Text("模型与思考", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
                             Text(
                                 when {
                                     activeRoute != null -> "路由组：${activeRoute.label}"
@@ -177,8 +177,8 @@ fun ForgeModelPicker(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(44.dp)) {
-                            Icon(Icons.Default.Close, "关闭模型与思考", tint = palette.textSecondary)
+                        ForgeIconButton(onClick = onDismiss, contentDescription = "关闭模型与思考", size = 36.dp) {
+                            Icon(Icons.Default.Close, null, tint = palette.textSecondary, modifier = Modifier.size(18.dp))
                         }
                     }
                     HorizontalDivider(color = palette.borderSubtle)
@@ -287,26 +287,23 @@ fun ForgeModelPicker(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("模型", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                     Spacer(Modifier.weight(1f))
-                                    TextButton(
+                                    ForgeTextAction(
+                                        label = "重新读取",
                                         onClick = { actions.loadModelCatalog(state.providerSourceId, refresh = true) },
                                         enabled = connected && !state.busy && !state.sending && !routeSelected && !modelsLoading,
-                                        contentPadding = PaddingValues(horizontal = 6.dp),
-                                        modifier = Modifier.heightIn(min = 44.dp),
-                                    ) {
-                                        if (modelsLoading) {
-                                            CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.5.dp)
-                                            Spacer(Modifier.width(5.dp))
-                                        } else {
-                                            Icon(
-                                                Icons.Default.Refresh,
-                                                null,
-                                                modifier = Modifier.size(14.dp),
-                                                tint = palette.textSecondary,
-                                            )
-                                            Spacer(Modifier.width(4.dp))
-                                        }
-                                        Text("重新读取", fontSize = 11.sp)
-                                    }
+                                        leading = {
+                                            if (modelsLoading) {
+                                                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.4.dp)
+                                            } else {
+                                                Icon(
+                                                    Icons.Default.Refresh,
+                                                    null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = palette.textSecondary,
+                                                )
+                                            }
+                                        },
+                                    )
                                 }
                                 Text(
                                     if (routeSelected) "模型由路由组决定。" else "仅显示服务器返回的模型目录；可搜索完整 ID。",
@@ -464,17 +461,17 @@ private fun ChoiceChip(
         },
         contentColor = if (selected) palette.textPrimary else palette.textSecondary,
         border = if (selected) BorderStroke(1.dp, palette.accent.copy(alpha = 0.45f)) else null,
-        modifier = Modifier.heightIn(min = 44.dp),
+        modifier = Modifier.heightIn(min = 32.dp),
     ) {
         Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (selected) {
-                Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(13.dp))
+                Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(12.dp))
             }
-            Text(label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -490,32 +487,32 @@ private fun SearchField(
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = palette.soft,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
     ) {
         Row(
             Modifier.padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Default.Search, null, tint = palette.textMuted, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.Search, null, tint = palette.textMuted, modifier = Modifier.size(15.dp))
             Spacer(Modifier.width(7.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty()) {
-                    Text("搜索模型", color = palette.textMuted, fontSize = 13.sp)
+                    Text("搜索模型", color = palette.textMuted, fontSize = 12.sp)
                 }
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     enabled = enabled,
                     singleLine = true,
-                    textStyle = TextStyle(fontSize = 13.sp, color = palette.textPrimary),
+                    textStyle = TextStyle(fontSize = 12.5.sp, color = palette.textPrimary, fontFamily = ForgeSansFamily),
                     cursorBrush = SolidColor(palette.accent),
                     modifier = Modifier.fillMaxWidth().testTag("model-search")
                         .semantics { contentDescription = "搜索模型" },
                 )
             }
             if (value.isNotEmpty()) {
-                IconButton(onClick = onClear, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Default.Close, "清空模型搜索", tint = palette.textMuted, modifier = Modifier.size(15.dp))
+                ForgeIconButton(onClick = onClear, contentDescription = "清空模型搜索", size = 26.dp) {
+                    Icon(Icons.Default.Close, null, tint = palette.textMuted, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -538,18 +535,18 @@ private fun ModelRow(
         shape = RoundedCornerShape(8.dp),
         color = if (selected) palette.selected else Color.Transparent,
         contentColor = palette.textPrimary,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
     ) {
         Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     title,
-                    fontFamily = if (model.isNotEmpty()) FontFamily.Monospace else FontFamily.SansSerif,
-                    fontSize = if (model.isNotEmpty()) 12.sp else 13.sp,
-                    lineHeight = 18.sp,
+                    fontFamily = if (model.isNotEmpty()) ForgeMonoFamily else ForgeSansFamily,
+                    fontSize = if (model.isNotEmpty()) 11.5.sp else 12.5.sp,
+                    lineHeight = 17.sp,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )

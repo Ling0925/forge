@@ -305,7 +305,7 @@ private fun InspectorApprovalCard(
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) { Text("拒绝") }
                 } else {
-                    OutlinedButton(
+                    ForgeOutlineButton(
                         onClick = onOpenSession,
                         enabled = canSwitch && connected && !selectedSession,
                         modifier = Modifier.heightIn(min = 48.dp),
@@ -402,7 +402,7 @@ private fun ProgressTab(
         subtitle = "压缩只改变模型使用的上下文，不会删除聊天或累计用量。",
     ) {
         val running = isRunning(snapshot, state)
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = { actions.compactSession() },
             enabled = canMutate && !running,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -618,7 +618,7 @@ private fun WorkspaceBrowser(snapshot: JSONObject, state: ChatUiState, actions: 
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Breadcrumbs(currentPath, onNavigate = { currentPath = it; previewPath = null })
-        OutlinedTextField(
+        ForgeTextField(
             value = filter,
             onValueChange = { filter = it },
             modifier = Modifier.fillMaxWidth(),
@@ -1108,26 +1108,26 @@ private fun SessionOverview(
         title = "会话操作",
         subtitle = "所有副作用都要求连接 Core，并在 busy/sending/uncertain 时禁用。",
     ) {
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = { renameOpen = true },
             enabled = canMutate,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(8.dp)); Text("重命名会话") }
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = { confirmArchive = true },
             enabled = canMutate,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             Text(if (snapshot.optBoolean("archived")) "取消归档" else "归档会话")
         }
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = { confirmFork = true },
             enabled = canMutate,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("分叉会话")
         }
-        OutlinedButton(
+        ForgeOutlineButton(
             onClick = { confirmCompact = true },
             enabled = canMutate && !running,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -1136,35 +1136,29 @@ private fun SessionOverview(
 
     if (renameOpen) {
         var title by remember(sessionId) { mutableStateOf(snapshot.optText("title")) }
-        AlertDialog(
+        ForgeDialog(
             onDismissRequest = { renameOpen = false },
-            title = { Text("重命名会话") },
-            text = {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("标题") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = {
-                TextButton(
+            title = "重命名会话",
+            actions = {
+                ForgeTextAction("取消", { renameOpen = false })
+                ForgePrimaryButton(
+                    label = "保存",
                     onClick = {
                         val value = title.trim()
                         if (value.isNotEmpty()) actions.renameSession(sessionId, value)
                         renameOpen = false
                     },
                     enabled = canMutate && title.trim().isNotEmpty(),
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) { Text("保存") }
+                )
             },
-            dismissButton = {
-                TextButton(onClick = { renameOpen = false }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text("取消")
-                }
-            },
-        )
+        ) {
+            ForgeTextField(
+                value = title,
+                onValueChange = { title = it },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
     if (confirmArchive) {
         val archived = snapshot.optBoolean("archived")

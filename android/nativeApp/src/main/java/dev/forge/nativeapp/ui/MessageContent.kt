@@ -147,7 +147,7 @@ fun MessageContent(
                                     color = palette.textSecondary,
                                     fontSize = proseSize,
                                     lineHeight = proseLine,
-                                    fontFamily = if (block.ordered) FontFamily.Monospace else FontFamily.Default,
+                                    fontFamily = if (block.ordered) ForgeMonoFamily else ForgeSansFamily,
                                 )
                                 TextSelectionContainer(Modifier.weight(1f)) {
                                     Text(
@@ -303,8 +303,8 @@ private fun MarkdownTable(table: MdBlock.Table, palette: ForgePalette) {
     Column(
         Modifier.horizontalScroll(rememberScrollState())
             .width(totalWidth)
-            .border(1.dp, palette.borderSubtle, RoundedCornerShape(6.dp))
-            .clip(RoundedCornerShape(6.dp)),
+            .border(1.dp, palette.borderSubtle, RoundedCornerShape(ForgeDimens.radiusMd))
+            .clip(RoundedCornerShape(ForgeDimens.radiusMd)),
     ) {
         Row(Modifier.fillMaxWidth().background(palette.soft)) {
             repeat(columns) { column ->
@@ -347,37 +347,32 @@ private fun CodeBlock(language: String, code: String) {
         }
     }
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(10.dp),
         color = palette.soft,
         border = androidx.compose.foundation.BorderStroke(1.dp, palette.borderSubtle),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column {
             Row(
-                Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 2.dp),
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 6.dp, top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = language.ifBlank { "代码" },
                     modifier = Modifier.weight(1f),
-                    color = palette.textSecondary,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
+                    color = palette.textMuted,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    fontFamily = ForgeMonoFamily,
                 )
-                TextButton(
+                ForgeTextAction(
+                    label = if (copied) "已复制" else "复制代码",
                     onClick = {
                         clipboard.setText(AnnotatedString(code))
                         copied = true
                     },
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    modifier = Modifier.heightIn(min = 40.dp),
-                ) {
-                    Text(
-                        if (copied) "已复制" else "复制代码",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (copied) palette.success else palette.textSecondary,
-                    )
-                }
+                    tint = if (copied) palette.success else palette.textMuted,
+                )
             }
             TextSelectionContainer {
                 Text(
@@ -385,9 +380,9 @@ private fun CodeBlock(language: String, code: String) {
                     modifier = Modifier.horizontalScroll(rememberScrollState())
                         .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 12.dp),
                     color = palette.textPrimary,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
+                    fontFamily = ForgeMonoFamily,
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
                 )
             }
         }
@@ -408,7 +403,7 @@ private fun inlineMarkdown(text: String, palette: ForgePalette): AnnotatedString
                 append(bold.removePrefix("**").removeSuffix("**"))
             }
             code.isNotEmpty() -> withStyle(
-                SpanStyle(fontFamily = FontFamily.Monospace, background = palette.soft),
+                SpanStyle(fontFamily = ForgeMonoFamily, background = palette.soft),
             ) {
                 append(code.removePrefix("`").removeSuffix("`"))
             }

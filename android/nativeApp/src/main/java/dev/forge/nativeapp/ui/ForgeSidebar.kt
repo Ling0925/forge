@@ -107,8 +107,8 @@ fun ForgeSidebar(
     val connected = state.connection == ConnectionPhase.Connected
     val canNavigate = !state.sending && !state.busy
     val canMutate = connected && !state.sending && !state.busy && !state.uncertain
-    val rowHeight = if (compact) 44.dp else 32.dp
-    val actionSize = if (compact) 44.dp else 32.dp
+    val rowHeight = if (compact) 40.dp else 32.dp
+    val actionSize = if (compact) 40.dp else 30.dp
 
     var query by rememberSaveable { mutableStateOf("") }
     var showArchived by rememberSaveable { mutableStateOf(false) }
@@ -135,9 +135,10 @@ fun ForgeSidebar(
                     Column(Modifier.weight(1f)) {
                         Text(
                             "Forge",
-                            fontSize = 15.sp,
-                            lineHeight = 20.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 17.sp,
+                            lineHeight = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.4).sp,
                             color = palette.textPrimary,
                         )
                         Text(
@@ -179,9 +180,10 @@ fun ForgeSidebar(
                     }
                 }
             }
+            HorizontalDivider(color = palette.borderSubtle)
 
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
@@ -201,7 +203,7 @@ fun ForgeSidebar(
                                 Text(
                                     "搜索任务 / 工作区...",
                                     color = palette.textMuted,
-                                    fontSize = 13.sp,
+                                    fontSize = 12.5.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -210,7 +212,7 @@ fun ForgeSidebar(
                                 value = query,
                                 onValueChange = { query = it },
                                 singleLine = true,
-                                textStyle = TextStyle(fontSize = 13.sp, color = palette.textPrimary),
+                                textStyle = TextStyle(fontSize = 12.5.sp, color = palette.textPrimary, fontFamily = ForgeSansFamily),
                                 cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
                                 modifier = Modifier.fillMaxWidth().testTag("sidebar-search")
                                     .focusRequester(searchFocus)
@@ -404,74 +406,82 @@ fun ForgeSidebar(
 
     renameTarget?.let { target ->
         var title by remember(target.id) { mutableStateOf(target.title) }
-        AlertDialog(
+        ForgeDialog(
             onDismissRequest = { renameTarget = null },
-            title = { Text("重命名会话") },
-            text = {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it.take(200) },
-                    singleLine = true,
-                    label = { Text("标题") },
-                    modifier = Modifier.fillMaxWidth().testTag("rename-session-input"),
-                )
-            },
-            confirmButton = {
-                TextButton(
+            title = "重命名会话",
+            actions = {
+                ForgeTextAction("取消", { renameTarget = null })
+                ForgePrimaryButton(
+                    label = "保存",
                     onClick = {
                         val next = title.trim()
                         if (next.isNotEmpty()) actions.renameSession(target.id, next)
                         renameTarget = null
                     },
                     enabled = canMutate && title.trim().isNotEmpty(),
-                ) { Text("保存") }
-            },
-            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("取消") } },
-        )
-    }
-    archiveTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { archiveTarget = null },
-            title = { Text(if (target.archived) "恢复这个任务？" else "归档这个任务？") },
-            text = {
-                Text(
-                    if (target.archived) {
-                        "恢复后它会重新出现在工作区列表中，不会自动运行。"
-                    } else {
-                        "归档只会从默认列表隐藏它，历史仍可在归档筛选中找回。"
-                    },
                 )
             },
-            confirmButton = {
-                TextButton(
+        ) {
+            ForgeTextField(
+                value = title,
+                onValueChange = { title = it.take(200) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("rename-session-input"),
+            )
+        }
+    }
+    archiveTarget?.let { target ->
+        ForgeDialog(
+            onDismissRequest = { archiveTarget = null },
+            title = if (target.archived) "恢复这个任务？" else "归档这个任务？",
+            actions = {
+                ForgeTextAction("取消", { archiveTarget = null })
+                ForgePrimaryButton(
+                    label = if (target.archived) "恢复" else "归档",
                     onClick = {
                         actions.archiveSession(target.id, !target.archived)
                         archiveTarget = null
                     },
                     enabled = canMutate,
-                ) { Text(if (target.archived) "恢复" else "归档") }
+                )
             },
-            dismissButton = { TextButton(onClick = { archiveTarget = null }) { Text("取消") } },
-        )
+        ) {
+            Text(
+                if (target.archived) {
+                    "恢复后它会重新出现在工作区列表中，不会自动运行。"
+                } else {
+                    "归档只会从默认列表隐藏它，历史仍可在归档筛选中找回。"
+                },
+                color = LocalForgePalette.current.textSecondary,
+                fontSize = 12.5.sp,
+                lineHeight = 19.sp,
+            )
+        }
     }
     forkTarget?.let { target ->
-        AlertDialog(
+        val palette = LocalForgePalette.current
+        ForgeDialog(
             onDismissRequest = { forkTarget = null },
-            title = { Text("从这里分叉？") },
-            text = {
-                Text("将基于「${target.title}」创建一个子会话。原会话和远端运行不会被修改；分叉结果以服务器返回为准。")
-            },
-            confirmButton = {
-                TextButton(
+            title = "从这里分叉？",
+            actions = {
+                ForgeTextAction("取消", { forkTarget = null })
+                ForgePrimaryButton(
+                    label = "创建分叉",
                     onClick = {
                         actions.forkSession(target.id)
                         forkTarget = null
                     },
                     enabled = canMutate,
-                ) { Text("创建分叉") }
+                )
             },
-            dismissButton = { TextButton(onClick = { forkTarget = null }) { Text("取消") } },
-        )
+        ) {
+            Text(
+                "将基于「${target.title}」创建一个子会话。原会话和远端运行不会被修改；分叉结果以服务器返回为准。",
+                color = palette.textSecondary,
+                fontSize = 12.5.sp,
+                lineHeight = 19.sp,
+            )
+        }
     }
 }
 
@@ -536,21 +546,18 @@ private fun SessionRow(
                     modifier = Modifier.size(17.dp),
                 )
             }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(
-                    text = { Text("重命名") },
-                    enabled = canMutate,
+            ForgeMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                ForgeMenuItem(
+                    text = "重命名",
                     onClick = { menu = false; onRename() },
                 )
-                DropdownMenuItem(
-                    text = { Text(if (session.archived) "恢复归档" else "归档") },
-                    enabled = canMutate,
+                ForgeMenuItem(
+                    text = if (session.archived) "恢复归档" else "归档",
                     onClick = { menu = false; onArchive() },
                 )
-                HorizontalDivider(color = palette.borderSubtle)
-                DropdownMenuItem(
-                    text = { Text("分叉会话") },
-                    enabled = canMutate,
+                ForgeMenuDivider()
+                ForgeMenuItem(
+                    text = "分叉会话",
                     onClick = { menu = false; onFork() },
                 )
             }
@@ -571,7 +578,7 @@ private fun SidebarFooterAction(
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = Color.Transparent,
-        modifier = modifier.heightIn(min = if (compact) 44.dp else 32.dp)
+        modifier = modifier.heightIn(min = if (compact) 38.dp else 32.dp)
             .testTag(tag)
             .clickable(onClick = onClick)
             .semantics { contentDescription = description },
