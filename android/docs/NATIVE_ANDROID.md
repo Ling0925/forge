@@ -135,6 +135,25 @@ adb reverse tcp:18765 tcp:18765
 
 设备测试使用真实 Android Activity/Compose、HTTP/WebSocket 和 Core controller，但 provider/tool 是隔离 fake。它不读取真实 Forge 配置、不使用真实模型额度，不等于公网或真实模型端到端验收。测试截图保存在模拟器 `/sdcard/Download/native-*.png`，可用 adb pull 取出。
 
+### 安装包体积预算
+
+Debug 和 Release **应用 APK 必须严格小于 10,000,000 字节（10 MB，不是 10 MiB）**。`:nativeApp:assembleDebug` / `assembleRelease` 自动执行对应的 `checkDebugApkSize` / `checkReleaseApkSize`，检查刚生成的 APK；达到或超过上限就让构建失败，不再把超限包当作成功交付。单独的 instrumentation 测试 APK 不属于应用安装包预算。
+
+- **Debug**：启用 R8 未使用代码裁剪与资源裁剪，仍保持 `debuggable=true`、原包名后缀、debug 签名、应用类/成员名称及调试信息；不优化或混淆代码。`proguard-debug.pro` 保留应用代码，以及独立测试 APK 会调用的共享运行库 API，避免测试所需方法被误裁掉。
+- **Release**：启用代码优化、混淆和资源裁剪。仓库不配置正式签名材料，当前输出仍是 `nativeApp-release-unsigned.apk`，不能直接安装，也不作为正式分发包。
+- 移除当前源码没有使用的 `ui-tooling` / `ui-tooling-preview`；没有删减聊天功能、语言或 CPU 架构。若以后引入 Compose Preview，应明确恢复所需依赖并重新检查体积。
+- `proguard-android-test.pro` 只忽略 AndroidX Test 引用的两种可选静态分析注解；不对应用运行库做全局 missing-class 忽略。
+- 构建提示 Debug 同时启用 minify、不会进行优化/混淆，是保留调试能力的预期行为；未使用代码/资源裁剪仍会执行。
+
+本机验证中，切换裁剪配置后的旧增量 APK 曾留下明显 ZIP 空洞。首次切换配置或交付紧凑包时使用模块级 clean；日常构建无需每次清理：
+
+```sh
+./gradlew :nativeApp:clean :nativeApp:assembleDebug
+# 也可单独构建并检查对应变体；检查任务依赖实际 APK 产物
+./gradlew :nativeApp:checkDebugApkSize
+./gradlew :nativeApp:checkReleaseApkSize
+```
+
 ### 首版验证记录（2026-10-22）
 
 - `:nativeApp:assembleDebug` 成功生成 APK。
@@ -167,6 +186,15 @@ adb shell wm density 160
 adb shell wm size reset
 adb shell wm density reset
 ```
+
+### 10 MB 体积优化验证记录（2026-10-23）
+
+- 最终干净构建的 Debug APK：**6,745,046 字节（6.75 MB / 6.43 MiB）**，相对之前的 11,666,424 字节缩小约 **42.2%**。这是保留调试与设备测试能力后的交付包，不是最激进裁剪的中间产物。
+- Release 未签名 APK：**1,585,643 字节（1.59 MB）**；本轮只验证构建与体积，不声称 Release 已经过设备交互验收。
+- 上限检查实际拒绝过超限产物；另以临时文件验证 **10,000,000 字节拒绝、9,999,999 字节接受**，验证后移除临时文件并确认正式 Debug APK 哈希未变。
+- **25 项 JVM 测试、5 项 Android 11 手机设备交互测试通过**。最终精简 Debug 包覆盖流式聊天、审批允许/拒绝、停止、草稿/重连、分类设置/文件/模型/队列/图片和实际深浅色渲染；使用隔离离线 Core fixture。
+- 最终 Debug 包通过 ZIP CRC、APK v2 签名检查，`adb install -r` 成功；清单包含 `application-debuggable`，冷启动成功，运行进程出现在 JDWP 列表且 `run-as` 成功。4 种原有 ABI 均保留。
+- 本轮未重跑宽屏矩阵，也未做真实供应商、公网或真机验收；此前的宽屏记录不等于新裁剪包的宽屏验收。
 
 ## 尚未覆盖的产品范围
 
