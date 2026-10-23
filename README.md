@@ -46,16 +46,15 @@ pnpm dev:web -- --host 127.0.0.1 --port 5173 --core-url http://127.0.0.1:5175
 
 改 `repos/forge-web-ui/src/renderer` 会热更新。静态页面用 `pnpm build:web` 构建，
 再用 `pnpm serve:web -- --core-url http://127.0.0.1:5175` 启动。
-本机现有 Core/Web 服务仍直接使用子模块入口，本次不重启它们。
+Web 重启不终止 Core 任务；Core 更新需要单独重启，操作前先结束其活动任务。
 
-## 旧代码归档
+## 文档入口
 
-旧单体代码、Electron 壳、旧测试和文档保存在
-`codex/archive-monolith-20261023` 分支，基线
-`a568d4568ebe73057e8ef002c29117179b05bbef`。
+- [模块更新、命令边界与旧代码恢复](docs/REPOSITORY_SPLIT.md)
+- [开发代理约定](AGENTS.md)
+- [Core 架构](repos/forge-core/docs/ARCHITECTURE.md) · [Core 专题导航](repos/forge-core/README.md#深入阅读)
+- [CLI 使用指南](repos/forge-cli/docs/README.md)
+- [Web 开发](repos/forge-web-ui/docs/WEB_DEV.md) · [界面约定](repos/forge-web-ui/docs/WEB_UI_LAYOUT_SPEC.md)
+- [Android 构建](android/docs/BUILD.md) · [离线联调](android/docs/NATIVE_FIXTURE.md)
 
-本机旧工作副本在已忽略的 `.archive/legacy-20261023/worktree/`。
-两处原有未提交 Web 修改仍在那里，另有 `local-renderer.patch`；没有自动迁入 Web 子仓。
-归档不参与构建、测试或日常源码搜索。现有桌面安装包、会话、配置和附件保留。
-
-[模块更新、命令边界与恢复方法](docs/REPOSITORY_SPLIT.md)
+旧单体和 Electron 壳只作归档恢复，不参与当前构建。当前用法以各模块 README 和专题文档为准。
