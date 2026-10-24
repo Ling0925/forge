@@ -4,6 +4,7 @@ release/
 .build/
 .archive/
 .omo/
+/.forge/tmp/
 coverage/
 .vite/
 *.tsbuildinfo
