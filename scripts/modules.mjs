@@ -8,6 +8,7 @@ export const modules = {
   core: join(root, "repos/forge-core"),
   cli: join(root, "repos/forge-cli"),
   web: join(root, "repos/forge-web-ui"),
+  desktop: join(root, "repos/forge-desktop"),
 };
 
 export function run(module, program, args) {

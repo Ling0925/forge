@@ -2,7 +2,7 @@
 
 ## 仓库边界
 
-- 主仓只维护子模块指针、装配脚本和导航。应用源码只在四个独立子仓中修改：Core 在 `repos/forge-core`，CLI 在 `repos/forge-cli`，Web UI 在 `repos/forge-web-ui`，Android 在 `android`。进入模块前先读其 `AGENTS.md`。
+- 主仓只维护子模块指针、装配脚本和导航。应用源码只在五个独立子仓中修改：Core 在 `repos/forge-core`，CLI 在 `repos/forge-cli`，Web UI 在 `repos/forge-web-ui`，Android 在 `android`，Electron 桌面壳在 `repos/forge-desktop`。进入模块前先读其 `AGENTS.md`。
 - 不在根目录创建 `src/`，不复制子模块源码，不自动将子模块更新到远端最新版本。保留 `android/` 路径，避免打断 Gradle、模拟器和 fixture 入口。
 - 主仓与子仓分别审阅、分别提交；更新子模块指针时，只纳入本任务需要的提交，不夹带其他任务的改动。
 - 旧单体与本机旧工作副本只供恢复，不参与开发、构建或默认搜索。归档位置和恢复方法见 [模块与归档说明](docs/REPOSITORY_SPLIT.md)。

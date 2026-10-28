@@ -1,4 +1,4 @@
-# 四个模块，一个装配主仓
+# 五个模块，一个装配主仓
 
 Forge 主仓只记录模块版本、提供开发入口和归档导航。应用实现不再保留在根目录。
 
@@ -8,9 +8,10 @@ Forge 主仓只记录模块版本、提供开发入口和归档导航。应用�
 | CLI / TUI | `repos/forge-cli` | [forge-cli](https://github.com/Ling0925/forge-cli) |
 | Web UI | `repos/forge-web-ui` | [forge-web-ui](https://github.com/Ling0925/forge-web-ui) |
 | Android 原生 / WebView | `android` | [forge-android](https://github.com/Ling0925/forge-android) |
+| Electron Desktop | `repos/forge-desktop` | [forge-desktop](https://github.com/Ling0925/forge-desktop) |
 
 Android 保留原路径，Gradle、SDK 配置、构建产物、模拟器及离线 fixture 不需搬家。
-它与另外三个模块一样由 gitlink 引用，源码和历史属于自己的仓库。
+它与其他模块一样由 gitlink 引用，源码和历史属于自己的仓库。
 
 ## 初始化和日常修改
 
@@ -28,7 +29,7 @@ node scripts/build-core.mjs
 回到主仓只暂存本次需要更新的 gitlink。默认只本地提交；要推送主仓时，先确认它引用
 的子仓提交已经可从远端取得，再用 `git push --recurse-submodules=check`。
 
-四个子仓各自管理依赖、测试与构建。主仓不安装 Electron、React 或 Provider SDK，
+五个子仓各自管理依赖、测试与构建。主仓不安装 Electron、React 或 Provider SDK，
 也不再提供单体的 typecheck/lint/test/package。旧跨客户端测试完整留在归档中；
 主仓的 `pnpm test` 只验证装配入口，不代表子模块全量测试。
 
@@ -68,6 +69,17 @@ Web 的 `--core-url` 必填。旧参数会报错，不会偷偷回退到旧实�
 React/CSS 在 Web 子仓热更新；重启 Web 不终止 Core 任务。
 Core 更新后只有显式重启才加载新产物，重启前须结束其活动任务。
 
+## 独立桌面壳与 macOS 构建
+
+`pnpm setup:desktop` 只安装 Core/Web/Desktop 的依赖；普通 `pnpm setup` 不安装 Electron。
+`pnpm build:desktop` 按 Core → Web → Desktop 装配，不重写 CLI 启动器。
+在 Apple Silicon Mac 上 `pnpm package:mac` 生成 arm64 DMG；默认不发布、不安装、
+不覆盖旧桌面入口。当前包是 ad-hoc 签名、未经 Apple 公证的本地测试版。
+
+Desktop 内只有窗口/进程生命周期和打包：隔离 utilityProcess 运行当前 Core，
+渲染器用当前 Web 的 HTTP/WebSocket 桥。依赖版本与验证方法见
+[Desktop README](../repos/forge-desktop/README.md)。
+
 ## 旧代码和未提交修改在哪里
 
 - 归档分支：`codex/archive-monolith-20261023`。
@@ -77,9 +89,9 @@ Core 更新后只有显式重启才加载新产物，重启前须结束其活动
   `.archive/legacy-20261023/local-renderer.patch`。它们没有混入归档提交或 Web 子仓。
 
 根目录旧 `src`、应用测试、设计文档、示例、品牌原稿、参考 checkout、旧构建/发布
-脚本和依赖配置均已移入本机归档。Electron 壳没有独立迁移，源码在归档分支，现有
-桌面发布包与启动器保留；当前主仓不再构建 Electron。Android 则仍在第四个子模块
-继续维护，不属于停用的旧代码。
+脚本和依赖配置均已移入本机归档。旧 Electron 实现留在归档，已有发布包与启动器保留。
+现行桌面壳单独维护于第五个子模块 `repos/forge-desktop`，通过当前 Core/Web 构建，
+不恢复旧单体。Android 继续维护，不属于停用的旧代码。
 
 查看旧文件用 `git show codex/archive-monolith-20261023:src/...`。需要完整恢复旧
 单体源码时导出到另一个目录，不要把第二套实现恢复到当前开发根目录：

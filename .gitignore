@@ -38,9 +38,10 @@ org.chromium.Chromium.*/
 /references/CometixCode/
 /references/magpie/
 
-# The superproject tracks only these three child repositories as submodules.
+# The superproject tracks only these Node child repositories as submodules.
 # Other local checkouts under repos/ remain ignored.
 /repos/*
 !/repos/forge-core/
 !/repos/forge-cli/
 !/repos/forge-web-ui/
+!/repos/forge-desktop/

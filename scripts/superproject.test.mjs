@@ -69,6 +69,19 @@ test("a missing module fails without falling back to archived sources", async t 
   assert.equal(await readFile(join(directory, "dist/cli.mjs"), "utf8"), "previous launcher\n");
 });
 
+test("Desktop module is opt-in and does not change the CLI launcher", async t => {
+  const directory = await fixture(t);
+  const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  assert.equal(manifest.scripts["setup:desktop"], "node scripts/setup-desktop.mjs");
+  assert.equal(manifest.scripts["build:desktop"], "node scripts/build-desktop.mjs");
+  assert.match(manifest.scripts["package:mac"], /build:desktop/);
+  const setup = await readFile(join(root, "scripts/setup.mjs"), "utf8");
+  assert.doesNotMatch(setup, /"desktop"/);
+  const script = await readFile(join(root, "scripts/build-desktop.mjs"), "utf8");
+  assert.doesNotMatch(script, /run\("cli"/);
+  assert.equal(await readFile(join(directory, "dist/cli.mjs"), "utf8"), "previous launcher\n");
+});
+
 test("Web entrypoints delegate arguments to the Web module", async t => {
   const directory = await fixture(t);
   await mkdir(join(directory, "repos/forge-web-ui/scripts"), { recursive: true });

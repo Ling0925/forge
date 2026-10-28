@@ -2,7 +2,7 @@
   "name": "forge",
   "version": "0.1.0",
   "private": true,
-  "description": "Forge superproject: pinned Core, CLI, Web UI and Android modules",
+  "description": "Forge superproject: pinned Core, CLI, Web UI, Android and Desktop modules",
   "type": "module",
   "engines": {
     "node": ">=22.23.1 <23"
@@ -10,6 +10,10 @@
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "setup": "node scripts/setup.mjs",
+    "setup:desktop": "node scripts/setup-desktop.mjs",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "desktop": "pnpm --dir repos/forge-desktop --config.verify-deps-before-run=false start",
+    "package:mac": "pnpm build:desktop && pnpm --dir repos/forge-desktop --config.verify-deps-before-run=false package:mac",
     "build": "node scripts/build-core.mjs",
     "build:cli": "node scripts/build-core.mjs",
     "cli": "node dist/cli.mjs",

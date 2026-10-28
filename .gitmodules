@@ -10,3 +10,6 @@
 [submodule "forge-android"]
 	path = android
 	url = https://github.com/Ling0925/forge-android.git
+[submodule "forge-desktop"]
+	path = repos/forge-desktop
+	url = https://github.com/Ling0925/forge-desktop.git
