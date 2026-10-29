@@ -74,7 +74,8 @@ Core 更新后只有显式重启才加载新产物，重启前须结束其活动
 `pnpm setup:desktop` 只安装 Core/Web/Desktop 的依赖；普通 `pnpm setup` 不安装 Electron。
 `pnpm build:desktop` 按 Core → Web → Desktop 装配，不重写 CLI 启动器。
 在 Apple Silicon Mac 上 `pnpm package:mac` 生成 arm64 DMG；默认不发布、不安装、
-不覆盖旧桌面入口。当前包是 ad-hoc 签名、未经 Apple 公证的本地测试版。
+不覆盖旧桌面入口。当前包使用固定本地证书，构建机须持有对应专用钥匙串；
+证书或组件身份不匹配时打包失败，不回退到 ad-hoc。此本地自签名包未经 Apple 公证。
 
 Desktop 内只有窗口/进程生命周期和打包：隔离 utilityProcess 运行当前 Core，
 渲染器用当前 Web 的 HTTP/WebSocket 桥。依赖版本与验证方法见

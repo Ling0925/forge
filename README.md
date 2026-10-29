@@ -58,8 +58,9 @@ pnpm setup:desktop
 pnpm package:mac
 ```
 
-产物在 `repos/forge-desktop/release/`。当前为 arm64、ad-hoc 签名的本地测试版，
-未做 Apple 公证；构建、启动与真实应用验收步骤见 [Desktop README](repos/forge-desktop/README.md)。
+产物在 `repos/forge-desktop/release/`。当前为 arm64、固定本地证书签名的自用版，
+构建机须持有对应签名钥匙串；不会退回 ad-hoc，未做 Apple 公证。
+签名准备、构建、启动与真实应用验收步骤见 [Desktop README](repos/forge-desktop/README.md)。
 
 ## 文档入口
 
